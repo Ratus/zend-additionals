@@ -60,3 +60,4 @@ class LockingPatternOptions extends \Zend\Cache\Pattern\PatternOptions
         return $this->ttlBuffer;
     }
 }
+
