@@ -1,0 +1,18 @@
+{
+    "name": "ratus/Rts",
+    "description": "Rts Libraries",
+    "type": "library",
+    "keywords": [
+        "framework",
+        "Rts"
+    ],
+    "homepage": "http://www.ratus.nl/",
+    "require": {
+        "php": ">=5.3.3"
+    },
+    "autoload": {
+        "psr-0": {
+            "Rts\\": "library/",
+        }
+    }
+}
