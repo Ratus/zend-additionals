@@ -4,11 +4,11 @@ namespace Rts\Cache\Pattern;
 
 class LockingPatternOptions extends \Zend\Cache\Pattern\PatternOptions
 {
-    protected $retryCount = 0;
-    protected $retrySleep = 0;
-    protected $lockTime   = 0;
+    protected $retryCount = 30;
+    protected $retrySleep = 150;
+    protected $lockTime   = 5;
     protected $lockPrefix = 'lock_';
-    protected $ttlBuffer  = 0;
+    protected $ttlBuffer  = 30;
 
     public function setRetryCount($count)
     {

@@ -9,58 +9,15 @@ use Zend\Cache\Pattern\PatternOptions;
 class LockingCache extends AbstractPattern
 {
     /**
+     * Keep track of this instances locks
+     * @var type 
+     */
+    private $locks = array();
+    
+    /**
      * @var Zend\Cache\Storage
      */
     protected $storage;
-
-    /**
-     * Set options
-     *
-     * @param  PatternOptions $options
-     * @return CallbackCache
-     * @throws Exception\InvalidArgumentException if missing storage option
-     */
-    public function setOptions(PatternOptions $options)
-    {
-        parent::setOptions($options);
-        if (!($this->storage = $options->getStorage())) {
-            throw new Exception\InvalidArgumentException("Missing option 'storage'");
-        }
-        if (
-            !($this->storage instanceof \Zend\Cache\Storage\Adapter\Memcached) &&
-            !($this->storage instanceof \Zend\Cache\Storage\Adapter\Apc)
-        ) {
-            throw new Exception\InvalidArgumentException("LockingCache requires storage to be a MemCached/Apc storage.");
-        }
-        return $this;
-    }
-
-    protected function isLocked($key)
-    {
-        return $this->storage->hasItem($this->getPrepareLockKey($key)) !== false;
-    }
-
-    protected function isValid(array $rawValue)
-    {
-        return (
-            is_array($rawValue) &&
-            isset($rawValue['timestamp']) &&
-            isset($rawValue['expiration']) &&
-            array_key_exists('value', $rawValue)
-        );
-    }
-
-    protected function isExpired(array $rawValue)
-    {
-        $age = (int) (time() - (int)$rawValue['timestamp']);
-        $ttl = (int) $rawValue['expiration'];
-        return $age >= $ttl;
-    }
-
-    protected function getValue(array $rawValue)
-    {
-        return $rawValue['value'];
-    }
 
     /**
      * Get a value or a list of values from memcached, false will be returned
@@ -76,7 +33,6 @@ class LockingCache extends AbstractPattern
      */
     public function get($key, $callback = null, $ttl = null)
     {
-        echo "Getting key: $key\n";
         $options = $this->getOptions();
         $ttl = $ttl ?: $this->storage->getOptions()->getTtl();
 
@@ -85,52 +41,110 @@ class LockingCache extends AbstractPattern
 
         while ($retryCount < $options->getRetryCount()) {
             if ($success && $this->isValid($result)) {
-                var_dump($result);
                 // Raw data exists in cache
                 if (!$this->isExpired($result) || $this->isLocked($key)) {
-                    return $this->getValue($result);
+                    return $result['value'];
                 } else {
-                    echo "Available, expired and not locked! \n";
                     // If data is available but expired and not locked, break the retry loop
                     break;
                 }
             } else {
                 // Raw data not available in cache
                 if (!$this->isLocked($key)) {
-                    echo "Not available and not locked! \n";
                     // If the data is not available and not locked, break the retry loop
                     break;
                 }
             }
-            echo "Not available or expired and locked. \n";
             usleep(($options->getRetrySleep() * 1000));
             $result = $this->storage->getItem($key, $success);
             $retryCount++;
         }
         if (is_callable($callback)) {
-            $this->lock($key);
+            $locked = $this->getLock($key);
             $data = call_user_func($callback);
-            $this->set($key, $data, $ttl);
+            if ($locked) {
+                $this->set($key, $data, $ttl);
+            }
             return $data;
         }
         return false;
     }
 
-    public function lock($key, $ttl = null)
+    /**
+     * Get a lock for a specific key
+     * 
+     * @param string $key
+     * @param int $ttl
+     * @return boolean
+     */
+    public function getLock($key, $ttl = null)
     {
-        $key = $this->getPrepareLockKey($key);
-        $originalTtl = $this->storage->getOptions()->getTtl();
+        $lockKey = $this->getPreparedLockKey($key);
         $ttl = $ttl ?: $this->getOptions()->getLockTime();
-
-        $this->storage->getOptions()->setTtl($ttl);
-        $success = $this->storage->setItem($key, true);
-        $this->storage->getOptions()->setTtl($ttl);
-        return $success;
+        $currentlyLocked = $this->isLocked($key, $lockValue);
+        if (
+            !$currentlyLocked || 
+            (
+                isset($this->locks[$lockKey]) && 
+                $this->locks[$lockKey] === $lockValue
+            )
+        ) {
+            $originalTtl = $this->storage->getOptions()->getTtl();
+            $this->storage->getOptions()->setTtl($ttl);
+            $lockValue = mt_rand(0, mt_getrandmax());
+            $success = $this->storage->setItem($lockKey, $lockValue);
+            $this->storage->getOptions()->setTtl($originalTtl);
+            $this->locks[$lockKey] = $lockValue;
+            return $success;
+        }
+        return false;
     }
-
-    protected function getPrepareLockKey($key)
+    
+    /**
+     * Check if we have a lock on this key
+     * 
+     * @param string $key
+     * @return boolean
+     */
+    public function hasLock($key)
     {
-        return $this->getOptions()->getLockPrefix() . $key;
+        $lockKey = $this->getPreparedLockKey($key);
+        if (!isset($this->locks[$lockKey])) {
+            return false;
+        }
+        $currentlyLocked = $this->isLocked($key, $lockValue);
+        if (!$currentlyLocked || $lockValue !== $this->locks[$lockKey]) {
+            unset($this->locks[$lockKey]);
+            return false;
+        }
+        return true;
+    }
+    
+    /**
+     * Release a lock on a key
+     * 
+     * @param string $key
+     * @param boolean $force Release the lock even if it does not belong to this instance
+     * @return boolean
+     */
+    public function releaseLock($key, $force = false)
+    {
+        $lockKey = $this->getPreparedLockKey($key);
+        $currentlyLocked = $this->isLocked($key, $lockValue);
+        if (!$this->hasLock($key) && !$force) {
+            return !$currentlyLocked;
+        }
+        if ($currentlyLocked && !$force && $this->locks[$lockKey] !== $lockValue ) {
+            unset($this->locks[$lockKey]); // We don't own this lock anymore
+            return false;
+        }
+        if ($currentlyLocked && !$this->storage->removeItem($lockKey)) {
+            return false; // Releasing of the lock failed, lock remains
+        }
+        if (isset($this->locks[$lockKey])) {
+            unset($this->locks[$lockKey]);
+        }
+        return true;
     }
 
     /**
@@ -146,20 +160,97 @@ class LockingCache extends AbstractPattern
     {
         $originalTtl = $this->storage->getOptions()->getTtl();
         $ttl = $ttl ?: $originalTtl;
-        if ($this->lock($key)) {
+        if ($this->hasLock($key)) {
             $preparedValue = array(
-                'expiration' => $ttl,
-                'timestamp'  => time(),
-                'value'      => $value,
+                'ttl'       => $ttl,
+                'timestamp' => time(),
+                'value'     => $value,
             );
             $extraTtl = ($ttl + $this->getOptions()->getTtlBuffer());
             $this->storage->getOptions()->setTtl($extraTtl);
             $success = $this->storage->setItem($key, $preparedValue);
             $this->storage->getOptions()->setTtl($originalTtl);
             return $success;
-        } else {
-            die('did not get lock!');
         }
+        return false;
+    }
+
+    /**
+     * Set options
+     *
+     * @param  PatternOptions $options
+     * @return CallbackCache
+     * @throws Exception\InvalidArgumentException if missing storage option
+     */
+    public function setOptions(PatternOptions $options)
+    {
+        parent::setOptions($options);
+        if (!($this->storage = $options->getStorage())) {
+            throw new Exception\InvalidArgumentException('Missing option \'storage\'');
+        }
+        if (
+            !($this->storage instanceof \Zend\Cache\Storage\Adapter\Memcached) &&
+            !($this->storage instanceof \Zend\Cache\Storage\Adapter\Apc)
+        ) {
+            throw new Exception\InvalidArgumentException(
+                'LockingCache requires storage to be a MemCached/Apc storage.'
+            );
+        }
+        return $this;
+    }
+
+    /**
+     * Check if a lock exists for the given key
+     * 
+     * @param string $key
+     * @param int $lockValue
+     * @return boolean
+     */
+    protected function isLocked($key, & $lockValue)
+    {
+        $lockKey = $this->getPreparedLockKey($key);
+        $lockValue = $this->storage->getItem($lockKey, $success);
+        return $success;
+    }
+
+    /**
+     * Check if an item is valid
+     * 
+     * @param array $rawValue
+     * @return boolean
+     */
+    protected function isValid(array $rawValue)
+    {
+        return (
+            is_array($rawValue) &&
+            isset($rawValue['timestamp']) &&
+            isset($rawValue['ttl']) &&
+            array_key_exists('value', $rawValue)
+        );
+    }
+
+    /**
+     * Check if an item is expired
+     * 
+     * @param array $rawValue A valid rawValue array
+     * @return boolean
+     */
+    protected function isExpired(array $rawValue)
+    {
+        $age = (int) (time() - (int)$rawValue['timestamp']);
+        $ttl = (int) $rawValue['ttl'];
+        return $age >= $ttl;
+    }
+
+    /**
+     * Prepare a key to use for locking
+     * 
+     * @param string $key
+     * @return string
+     */
+    protected function getPreparedLockKey($key)
+    {
+        return $this->getOptions()->getLockPrefix() . $key;
     }
 }
 
