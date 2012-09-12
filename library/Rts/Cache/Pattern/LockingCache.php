@@ -92,7 +92,8 @@ class LockingCache extends AbstractPattern
             $originalTtl = $this->storage->getOptions()->getTtl();
             $this->storage->getOptions()->setTtl($ttl);
             $lockValue = mt_rand(0, mt_getrandmax());
-            $success = $this->storage->setItem($lockKey, $lockValue);
+            $preparedValue = $this->prepareValue($lockValue, $ttl);
+            $success = $this->storage->setItem($lockKey, $preparedValue);
             $this->storage->getOptions()->setTtl($originalTtl);
             $this->locks[$lockKey] = $lockValue;
             return $success;
@@ -161,11 +162,7 @@ class LockingCache extends AbstractPattern
         $originalTtl = $this->storage->getOptions()->getTtl();
         $ttl = $ttl ?: $originalTtl;
         if ($this->hasLock($key)) {
-            $preparedValue = array(
-                'ttl'       => $ttl,
-                'timestamp' => time(),
-                'value'     => $value,
-            );
+            $preparedValue = $this->prepareValue($value, $ttl);
             $extraTtl = ($ttl + $this->getOptions()->getTtlBuffer());
             $this->storage->getOptions()->setTtl($extraTtl);
             $success = $this->storage->setItem($key, $preparedValue);
@@ -200,16 +197,37 @@ class LockingCache extends AbstractPattern
     }
 
     /**
+     * Prepare a value to be stored within cache
+     *
+     * @param mixed $value
+     * @param int $ttl
+     * @return array
+     */
+    protected function prepareValue($value, $ttl = null)
+    {
+        $ttl = $ttl ?: $this->storage->getOptions()->getTtl();
+        return array(
+            'ttl'       => $ttl,
+            'timestamp' => time(),
+            'value'     => $value,
+        );
+    }
+
+    /**
      * Check if a lock exists for the given key
      *
      * @param string $key
      * @param int $lockValue
      * @return boolean
      */
-    protected function isLocked($key, & $lockValue)
+    protected function isLocked($key, & $lockValue = null)
     {
         $lockKey = $this->getPreparedLockKey($key);
-        $lockValue = $this->storage->getItem($lockKey, $success);
+        $rawValue = $this->storage->getItem($lockKey, $success);
+        $success = $success && $this->isValid($rawValue) && !$this->isExpired($rawValue);
+        if ($success) {
+            $lockValue = $rawValue['value'];
+        }
         return $success;
     }
 
