@@ -10,10 +10,10 @@ class LockingCache extends AbstractPattern
 {
     /**
      * Keep track of this instances locks
-     * @var type 
+     * @var type
      */
     private $locks = array();
-    
+
     /**
      * @var Zend\Cache\Storage
      */
@@ -72,7 +72,7 @@ class LockingCache extends AbstractPattern
 
     /**
      * Get a lock for a specific key
-     * 
+     *
      * @param string $key
      * @param int $ttl
      * @return boolean
@@ -83,9 +83,9 @@ class LockingCache extends AbstractPattern
         $ttl = $ttl ?: $this->getOptions()->getLockTime();
         $currentlyLocked = $this->isLocked($key, $lockValue);
         if (
-            !$currentlyLocked || 
+            !$currentlyLocked ||
             (
-                isset($this->locks[$lockKey]) && 
+                isset($this->locks[$lockKey]) &&
                 $this->locks[$lockKey] === $lockValue
             )
         ) {
@@ -99,10 +99,10 @@ class LockingCache extends AbstractPattern
         }
         return false;
     }
-    
+
     /**
      * Check if we have a lock on this key
-     * 
+     *
      * @param string $key
      * @return boolean
      */
@@ -119,10 +119,10 @@ class LockingCache extends AbstractPattern
         }
         return true;
     }
-    
+
     /**
      * Release a lock on a key
-     * 
+     *
      * @param string $key
      * @param boolean $force Release the lock even if it does not belong to this instance
      * @return boolean
@@ -201,7 +201,7 @@ class LockingCache extends AbstractPattern
 
     /**
      * Check if a lock exists for the given key
-     * 
+     *
      * @param string $key
      * @param int $lockValue
      * @return boolean
@@ -215,7 +215,7 @@ class LockingCache extends AbstractPattern
 
     /**
      * Check if an item is valid
-     * 
+     *
      * @param array $rawValue
      * @return boolean
      */
@@ -231,7 +231,7 @@ class LockingCache extends AbstractPattern
 
     /**
      * Check if an item is expired
-     * 
+     *
      * @param array $rawValue A valid rawValue array
      * @return boolean
      */
@@ -244,7 +244,7 @@ class LockingCache extends AbstractPattern
 
     /**
      * Prepare a key to use for locking
-     * 
+     *
      * @param string $key
      * @return string
      */
