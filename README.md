@@ -3,8 +3,10 @@ Rts Libraries.
 
 Introduction
 ------------
-Rts will have specific Ratus packages not common within Zf2.
-All packages added here should be very abstract and explanatory!
+The Rts libraries will mainly contain packages not commin within zf2 or packages that add functionality to zf2 packages.
+
+Every package will have it's own composer.json file to make the installations very flexible. The whole set of packages
+also has a composer.json to be able to just install everything.
 
 Installation
 ------------
