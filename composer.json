@@ -15,5 +15,8 @@
         "psr-0": {
             "Rts\\": "library/"
         }
+    },
+    "replace": {
+        "ratus/rts-cache": "self.version"
     }
 }
