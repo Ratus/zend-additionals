@@ -1,6 +1,6 @@
 <?php
 
-namespace Rts\Cache\Pattern;
+namespace ZendAdditionals\Cache\Pattern;
 
 use Zend\Cache\Exception;
 use Zend\Cache\Pattern\AbstractPattern;

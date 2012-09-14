@@ -1,6 +1,6 @@
 <?php
 
-namespace Rts\Cache\Pattern;
+namespace ZendAdditionals\Cache\Pattern;
 
 class LockingPatternOptions extends \Zend\Cache\Pattern\PatternOptions
 {

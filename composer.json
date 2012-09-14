@@ -1,22 +1,26 @@
 {
-    "name": "ratus/Rts",
-    "description": "Rts Libraries",
+    "name": "ratus/zend-additionals",
+    "description": "Ratus Zend (ZF2) Additionals",
     "type": "library",
     "keywords": [
         "framework",
-        "Rts"
+        "ratus",
+        "zend",
+        "additionals",
+        "zf2"
     ],
     "homepage": "http://www.ratus.nl/",
+    "target-dir": "ZendAdditionals",
     "require": {
         "php": ">=5.3.3",
         "zendframework/zend-cache": "2.*"
     },
     "autoload": {
         "psr-0": {
-            "Rts\\": "library/"
+            "ZendAdditionals\\": "library/"
         }
     },
     "replace": {
-        "ratus/rts-cache": "self.version"
+        "ratus/ratus-cache": "self.version"
     }
 }

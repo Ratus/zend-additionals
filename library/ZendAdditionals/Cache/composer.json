@@ -1,5 +1,5 @@
 {
-    "name": "ratus/rts-cache",
+    "name": "ratus/ratus-cache",
     "description": "provides extensions to the zend-cache",
     "keywords": [
         "ratus",
@@ -7,10 +7,10 @@
     ],
     "autoload": {
         "psr-0": {
-            "Rts\\Cache": ""
+            "ZendAdditionals\\Cache": ""
         }
     },
-    "target-dir": "Rts/Cache",
+    "target-dir": "ZendAdditionals/Cache",
     "require": {
         "php": ">=5.3.3",
         "zendframework/zend-cache": "2.*"
