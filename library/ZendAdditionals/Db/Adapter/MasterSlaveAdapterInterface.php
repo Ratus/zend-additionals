@@ -9,3 +9,4 @@ interface MasterSlaveAdapterInterface
      */
     public function getSlaveAdapter();
 }
+

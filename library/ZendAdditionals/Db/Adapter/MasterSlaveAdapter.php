@@ -39,3 +39,4 @@ class MasterSlaveAdapter extends Adapter implements MasterSlaveAdapterInterface
         return $this->slaveAdapter;
     }
 }
+
