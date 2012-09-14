@@ -10,7 +10,6 @@
         "zf2"
     ],
     "homepage": "http://www.ratus.nl/",
-    "target-dir": "ZendAdditionals",
     "require": {
         "php": ">=5.3.3",
         "zendframework/zend-cache": "2.*"
