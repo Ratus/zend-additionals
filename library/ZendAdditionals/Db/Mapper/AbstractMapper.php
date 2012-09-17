@@ -432,8 +432,12 @@ class AbstractMapper extends \Application\EventProvider
      * @param object $entity
      * @return array
      */
-    protected function entityToArray($entity, HydratorInterface $hydrator = null, $changesOnly = false, & $originalData = null)
-    {
+    protected function entityToArray(
+        $entity,
+        HydratorInterface $hydrator = null,
+        $changesOnly = false,
+        & $originalData = null
+    ) {
         if (is_array($entity)) {
             return $entity; // cut down on duplicate code
         } elseif (is_object($entity)) {
