@@ -451,3 +451,4 @@ class AbstractMapper extends \Application\EventProvider
         throw new Exception\InvalidArgumentException('Entity passed to db mapper should be an array or object.');
     }
 }
+

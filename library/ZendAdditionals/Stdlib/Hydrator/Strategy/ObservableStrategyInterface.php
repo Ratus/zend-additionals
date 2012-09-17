@@ -49,3 +49,4 @@ interface ObservableStrategyInterface
      */
     public function setChangesCommitted($value);
 }
+

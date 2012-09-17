@@ -92,7 +92,7 @@ class ObservableClassMethods extends ClassMethods implements ObservableStrategyI
 
     /**
      * Hydrates the given data and makes sure the internal object storage makes a snapshot
-     * 
+     *
      * @see \Zend\Stdlib\Hydrator\ClassMethods::hydrate
      */
     public function hydrate(array $data, $object)
@@ -103,3 +103,4 @@ class ObservableClassMethods extends ClassMethods implements ObservableStrategyI
     }
 
 }
+
