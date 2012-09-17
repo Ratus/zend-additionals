@@ -1,0 +1,19 @@
+{
+    "name": "ratus/ratus-stdlib",
+    "description": "provides extensions to the zend-stdlib",
+    "keywords": [
+        "ratus",
+        "stdlib"
+    ],
+    "autoload": {
+        "psr-0": {
+            "ZendAdditionals\\Stdlib": ""
+        }
+    },
+    "target-dir": "ZendAdditionals/Stdlib",
+    "require": {
+        "php": ">=5.3.3",
+        "zendframework/zend-stdlib": "2.*"
+    }
+}
+

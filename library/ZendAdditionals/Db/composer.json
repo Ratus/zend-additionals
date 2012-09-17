@@ -1,0 +1,20 @@
+{
+    "name": "ratus/ratus-db",
+    "description": "provides extensions to the zend-db",
+    "keywords": [
+        "ratus",
+        "db"
+    ],
+    "autoload": {
+        "psr-0": {
+            "ZendAdditionals\\Db": ""
+        }
+    },
+    "target-dir": "ZendAdditionals/Db",
+    "require": {
+        "php": ">=5.3.3",
+        "zendframework/zend-db": "2.*",
+        "ratus/ratus-stdlib": "self.version"
+    }
+}
+

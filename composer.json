@@ -12,7 +12,9 @@
     "homepage": "http://www.ratus.nl/",
     "require": {
         "php": ">=5.3.3",
-        "zendframework/zend-cache": "2.*"
+        "zendframework/zend-cache": "2.*",
+        "zendframework/zend-db": "2.*",
+        "zendframework/zend-stdlib": "2.*"
     },
     "autoload": {
         "psr-0": {
@@ -20,6 +22,9 @@
         }
     },
     "replace": {
-        "ratus/ratus-cache": "self.version"
+        "ratus/ratus-cache": "self.version",
+        "ratus/ratus-db": "self.version",
+        "ratus/ratus-stdlib": "self.version"
     }
 }
+
