@@ -10,7 +10,7 @@ abstract class AbstractPostProcessor
 	/**
 	 * @var array
 	 */
-	protected $vars;
+	protected $variables;
 
 	/**
 	 * @var \Zend\Http\Response
@@ -31,15 +31,15 @@ abstract class AbstractPostProcessor
         return $this->response;
     }
 
-    public function setVars($vars)
+    public function setVariables($variables)
     {
-		$this->vars = $vars;
+		$this->variables = $variables;
         return $this;
     }
 
-    public function getVars()
+    public function getVariables()
     {
-        return $this->vars;
+        return $this->variables;
     }
 
 	/**
