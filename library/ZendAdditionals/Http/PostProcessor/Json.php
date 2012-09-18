@@ -9,7 +9,7 @@ class Json extends AbstractPostProcessor
 {
 	public function process()
 	{
-		$result = \Zend\Json\Encoder::encode($this->getVars());
+		$result = \Zend\Json\Encoder::encode($this->getVariables());
 
 		$this->getResponse()->setContent($result);
 
