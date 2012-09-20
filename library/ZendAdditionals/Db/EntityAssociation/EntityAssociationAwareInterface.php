@@ -1,6 +1,6 @@
 <?php
 
-namespace ZendAdditionals\Db\Mapper;
+namespace ZendAdditionals\Db\EntityAssociation;
 
 interface EntityAssociationAwareInterface
 {

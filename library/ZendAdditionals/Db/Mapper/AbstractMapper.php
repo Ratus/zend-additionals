@@ -12,8 +12,11 @@ use Zend\Stdlib\Hydrator\ClassMethods;
 use ZendAdditionals\Stdlib\Hydrator\ObservableClassMethods;
 use ZendAdditionals\Stdlib\Hydrator\Strategy\ObservableStrategyInterface;
 use ZendAdditionals\Db\Adapter\MasterSlaveAdapterInterface;
-use ZendAdditionals\Db\EntityHelper\EntityAssociation;
+use ZendAdditionals\Db\EntityAssociation\EntityAssociation;
+use ZendAdditionals\Db\EntityAssociation\EntityAssociationAwareInterface;
 use ZendAdditionals\Db\ResultSet\JoinedHydratingResultSet;
+use Zend\Db\Adapter\AdapterAwareInterface;
+use Zend\ServiceManager\ServiceManagerAwareInterface;
 
 class AbstractMapper extends \Application\EventProvider implements
     ServiceManagerAwareInterface,
