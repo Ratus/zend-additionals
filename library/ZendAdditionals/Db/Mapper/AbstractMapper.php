@@ -17,6 +17,7 @@ use ZendAdditionals\Db\EntityAssociation\EntityAssociationAwareInterface;
 use ZendAdditionals\Db\ResultSet\JoinedHydratingResultSet;
 use Zend\Db\Adapter\AdapterAwareInterface;
 use Zend\ServiceManager\ServiceManagerAwareInterface;
+use Zend\ServiceManager\ServiceManager;
 
 class AbstractMapper extends \Application\EventProvider implements
     ServiceManagerAwareInterface,
@@ -122,17 +123,16 @@ class AbstractMapper extends \Application\EventProvider implements
     }
 
     /**
-     *
-     * @param type $serviceManager
+     * @param ServiceManager $serviceManager
      * @return AbstractMapper
      */
-    public function setServiceManager($serviceManager)
+    public function setServiceManager(ServiceManager $serviceManager)
     {
         $this->serviceManager = $serviceManager;
         return $this;
     }
 
-    public function getServiceManager()
+        public function getServiceManager()
     {
         return $this->serviceManager;
     }

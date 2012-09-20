@@ -2,7 +2,7 @@
 
 namespace ZendAdditionals\Db\EntityAssociation;
 
-use DatingProfile\Mapper\AbstractMapper;
+use ZendAdditionals\Db\Mapper\AbstractMapper;
 use ZendAdditionals\Stdlib\Hydrator\ObservableClassMethods;
 
 class EntityAssociation
