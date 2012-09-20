@@ -132,7 +132,7 @@ class AbstractMapper extends \Application\EventProvider implements
         return $this;
     }
 
-        public function getServiceManager()
+    public function getServiceManager()
     {
         return $this->serviceManager;
     }
