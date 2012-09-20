@@ -15,7 +15,10 @@ use ZendAdditionals\Db\Adapter\MasterSlaveAdapterInterface;
 use ZendAdditionals\Db\EntityHelper\EntityAssociation;
 use ZendAdditionals\Db\ResultSet\JoinedHydratingResultSet;
 
-class AbstractMapper extends \Application\EventProvider
+class AbstractMapper extends \Application\EventProvider implements
+    ServiceManagerAwareInterface,
+    EntityAssociationAwareInterface,
+    AdapterAwareInterface
 {
     /**
      * @var Adapter
