@@ -54,6 +54,9 @@ class ObservableClassMethods extends ClassMethods implements ObservableStrategyI
      */
     public function extractOriginal($object)
     {
+        if (!is_object($object)) {
+            return false;
+        }
         if ($this->objectStorage->contains($object)) {
             return $this->objectStorage[$object];
         }
@@ -74,9 +77,22 @@ class ObservableClassMethods extends ClassMethods implements ObservableStrategyI
     {
         $extracted = parent::extract($object);
         if ($this->objectStorage->contains($object)) {
-            return array_diff($extracted, $this->objectStorage[$object]);
+            return array_udiff_assoc($extracted, $this->objectStorage[$object], array($this, 'isDataChanged'));
         }
         return $extracted;
+    }
+
+    /**
+     * Compare mixed data in a strict way
+     *
+     * @param mixed $a
+     * @param mixed $b
+     *
+     * @return boolean
+     */
+    public function isDataChanged($a, $b)
+    {
+        return $a !== $b;
     }
 
     /**
