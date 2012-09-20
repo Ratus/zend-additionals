@@ -1,6 +1,6 @@
 <?php
 
-namespace ZendAdditionals\Db\EntityHelper;
+namespace ZendAdditionals\Db\EntityAssociation;
 
 use DatingProfile\Mapper\AbstractMapper;
 use ZendAdditionals\Stdlib\Hydrator\ObservableClassMethods;
