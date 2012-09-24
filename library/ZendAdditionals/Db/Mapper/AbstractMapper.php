@@ -7,12 +7,15 @@ use Zend\Db\Adapter\Driver\ResultInterface;
 use Zend\Db\Sql\Select;
 use Zend\Db\Sql\Sql;
 use Zend\Db\Sql\TableIdentifier;
+use Zend\Db\Sql\Predicate\Predicate;
 use Zend\Stdlib\Hydrator\HydratorInterface;
 use Zend\Stdlib\Hydrator\ClassMethods;
 use ZendAdditionals\Stdlib\Hydrator\ObservableClassMethods;
 use ZendAdditionals\Stdlib\Hydrator\Strategy\ObservableStrategyInterface;
 use ZendAdditionals\Db\Adapter\MasterSlaveAdapterInterface;
+use ZendAdditionals\Db\Entity;
 use ZendAdditionals\Db\EntityAssociation\EntityAssociation;
+use ZendAdditionals\Db\EntityAssociation\AttributeEntityAssociation;
 use ZendAdditionals\Db\EntityAssociation\EntityAssociationAwareInterface;
 use ZendAdditionals\Db\ResultSet\JoinedHydratingResultSet;
 use Zend\Db\Adapter\AdapterAwareInterface;
@@ -185,11 +188,13 @@ class AbstractMapper extends \Application\EventProvider implements
     protected function select(Select $select)
     {
         $this->initialize();
-
         $stmt = $this->getSlaveSql()->prepareStatementForSqlObject($select);
+        echo $stmt->getSql().'<br />';
 
         $resultSet = new JoinedHydratingResultSet($this->getHydrator(), $this->getEntityPrototype());
         $resultSet->setObjectPrototypes($this->getJoinObjectProtoTypes());
+
+
 
         $resultSet->initialize($stmt->execute());
 
@@ -235,10 +240,15 @@ class AbstractMapper extends \Application\EventProvider implements
                     );
                     continue;
                 }
+
+                $isEmpty = $this->isEntityEmpty($associatedEntity, $hydrator);
+
                 /*@var $association EntityAssociation*/
-                if ($association->getRequiredByAssociation()) {
+                if ($isEmpty === false && $association->getRequiredByAssociation()) {
                     $association->applyBaseEntityId($entity, $associatedEntity);
                 }
+
+
                 $association->saveAssociatedEntity($associatedEntity);
             }
             $association->applyAssociatedEntityId($entity, $associatedEntity);
@@ -309,6 +319,9 @@ class AbstractMapper extends \Application\EventProvider implements
         $insert->values($rowData);
 
         $statement = $sql->prepareStatementForSqlObject($insert);
+//        echo $statement->getSql();
+//        exit;
+
         /*@var $statement \Zend\Db\Adapter\Driver\Pdo\Statement*/
         $result = $statement->execute();
         /*@var $result \Zend\Db\Adapter\Driver\Pdo\Result*/
@@ -341,6 +354,7 @@ class AbstractMapper extends \Application\EventProvider implements
         $update = $sql->update();
 
         $originalData = array();
+
         $changedData = $this->entityToArray($entity, $hydrator, true, $originalData);
 
         // Put in better function
@@ -590,7 +604,7 @@ class AbstractMapper extends \Application\EventProvider implements
      * @param object $entity
      * @return array
      */
-    protected function entityToArray(
+    public function entityToArray(
         $entity,
         HydratorInterface $hydrator = null,
         $changesOnly = false,
@@ -611,6 +625,80 @@ class AbstractMapper extends \Application\EventProvider implements
             return $entityArray;
         }
         throw new Exception\InvalidArgumentException('Entity passed to db mapper should be an array or object.');
+    }
+
+    protected function addAttributeJoinToSelect(Select $select, $attributeName, $required = false)
+    {
+        $attributeId = $this->getAttributeIdByLabel($attributeName);
+
+        $joinPredicate = new Predicate();
+        $joinPredicate->equalTo($attributeName . '.attribute_id', $attributeId);
+        $joinPredicate->equalTo(
+            $attributeName . '.' . $this->attributeDataRelation[1],
+            $this->tableName . '.' . $this->attributeDataRelation[0],
+            Predicate::TYPE_IDENTIFIER,
+            Predicate::TYPE_IDENTIFIER
+        );
+
+        $this->addEntityAssociation(
+            new AttributeEntityAssociation(
+                $attributeName,
+                $this->attributePrefix . '_attribute_data',
+                new Entity\AttributeData(),
+                'attribute_data_mapper',
+                $joinPredicate,
+                true,
+                array($this->attributeDataRelation[0] => $this->attributeDataRelation[1])
+            )
+        );
+
+        $association = $this->entityAssociations[$attributeName];
+
+        if ($attributeId === false) {
+            return;
+        }
+
+        $select->join(
+            $association->getjoinTable(),
+            $association->getJoinCondition(),
+            $association->getJoinColumns(),
+            $required ? Select::JOIN_INNER : Select::JOIN_LEFT
+        );
+
+    }
+
+    protected function getAttributeIdByLabel($label)
+    {
+        $idMapping = $this->getAttributeIds();
+        return isset($idMapping[$label]) ? $idMapping[$label] : false;
+    }
+
+    protected function getAttributeIds()
+    {
+        $select = $this->getSelect()->from('profile_attributes')->columns(array('id', 'label'));
+        $stmt = $this->getSql()->prepareStatementForSqlObject($select);
+        $resultSet = $stmt->execute();
+        /*@var $resultSet \Zend\Db\Adapter\Driver\Pdo\Result*/
+        $return = array();
+        while ($data = $resultSet->next()) {
+            $return[$data['label']] = $data['id'];
+        }
+        return $return;
+    }
+
+    protected function isEntityEmpty($entity, HydratorInterface $hydrator)
+    {
+        $rowData = $this->entityToArray($entity, $hydrator);
+        $isEmpty = true;
+
+        foreach($rowData as $data) {
+            if ($data !== NULL) {
+                $isEmpty = false;
+                break;
+            }
+        }
+
+        return $isEmpty;
     }
 }
 
