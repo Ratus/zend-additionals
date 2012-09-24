@@ -189,6 +189,38 @@ class EntityAssociation
         return $mapper->save($associatedEntity, false);
     }
 
+    public function applyBaseEntityId($baseEntity, $associatedEntity)
+    {
+        $formatter = new \Zend\Filter\Word\UnderscoreToCamelCase;
+        if (!is_object($baseEntity)) {
+            throw new \InvalidArgumentException('Look me line!');
+        }
+        if (!is_object($associatedEntity)) {
+            throw new \InvalidArgumentException('Look me line!');
+        }
+
+        $relation           = $this->getAssociationRequiredRelation();
+        $keys               = array_keys($relation);
+        $baseColumn         = current($keys);
+        $associatedColumn   = current($relation);
+
+        $mapping            = $this->getMapper()->getEntityColumnMapping();
+
+        $baseColumn         = array_search($baseColumn, $mapping)?: $baseColumn;
+        $associatedColumn   = array_search($associatedColumn, $mapping)?: $associatedColumn;
+
+        $getBaseEntityId = 'get' . $formatter($baseColumn);
+        $setAssociatedEntityId = 'set' . $formatter($associatedColumn);
+
+        if (!method_exists($associatedEntity, $setAssociatedEntityId)) {
+            throw new \UnexpectedValueException('Very very unexpected 1!');
+        }
+        if (!method_exists($baseEntity, $getBaseEntityId)) {
+            throw new \UnexpectedValueException('Very very unexpected 2!');
+        }
+        $associatedEntity->$setAssociatedEntityId($baseEntity->$getBaseEntityId());
+    }
+
     public function applyAssociatedEntityId($baseEntity, $associatedEntity)
     {
         $formatter = new \Zend\Filter\Word\UnderscoreToCamelCase;
@@ -215,7 +247,24 @@ class EntityAssociation
         if (!is_object($mapper) || !($mapper instanceof AbstractMapper)) {
             throw new \InvalidArgumentException('Mapper must be an instance of AbstractMapper');
         }
+        $hydrator = $this->getHydrator();
+        if (!empty($hydrator)) {
+            $mapper->setHydrator($this->getHydrator());
+        }
+        $mapper->setTableName($this->getTable());
+
         return $mapper;
+    }
+
+    public function setHydrator(ObservableClassMethods $hydrator)
+    {
+        $this->hydrator = $hydrator;
+        return $this;
+    }
+
+    public function getHydrator()
+    {
+        return $this->hydrator;
     }
 }
 
