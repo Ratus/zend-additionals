@@ -215,6 +215,10 @@ class AbstractMapper extends \Application\EventProvider implements
         $hydrator = $this->getHydrator();
         $skipped  = array();
 
+        if ($this->isEntityEmpty($entity, $hydrator)) {
+            return true;
+        }
+
         foreach ($this->entityAssociations as $association) {
             $associatedEntity = $association->getAssociatedEntity($entity);
             $currentAssociatedEntityId = $association->getCurrentAssociatedEntityId($entity);
@@ -241,10 +245,12 @@ class AbstractMapper extends \Application\EventProvider implements
                     continue;
                 }
 
-                $isEmpty = $this->isEntityEmpty($associatedEntity, $hydrator);
+                if ($this->isEntityEmpty($associatedEntity, $hydrator)) {
+                   continue;
+                }
 
                 /*@var $association EntityAssociation*/
-                if ($isEmpty === false && $association->getRequiredByAssociation()) {
+                if ($association->getRequiredByAssociation()) {
                     $association->applyBaseEntityId($entity, $associatedEntity);
                 }
 
@@ -255,8 +261,7 @@ class AbstractMapper extends \Application\EventProvider implements
         }
 
         $result = false;
-
-        if ($hydrator->hasOriginal($entity)) {
+        if ($hydrator->hasOriginal($entity) && !$this->isOriginalEmpty($entity, $hydrator)) {
             $result = $this->update($entity, null, $hydrator);
         } else {
             $result = $this->insert($entity, $hydrator);
@@ -629,7 +634,12 @@ class AbstractMapper extends \Application\EventProvider implements
 
     protected function addAttributeJoinToSelect(Select $select, $attributeName, $required = false)
     {
-        $attributeId = $this->getAttributeIdByLabel($attributeName);
+        if (!isset($this->attributePrefix)) {
+            throw new \Exception('fout');
+        }
+        $attributeMapper = $this->getServiceManager()->get('attribute_mapper');
+
+        $attributeId = $attributeMapper->getAttributeIdByLabel($this->attributePrefix, $attributeName);
 
         $joinPredicate = new Predicate();
         $joinPredicate->equalTo($attributeName . '.attribute_id', $attributeId);
@@ -643,6 +653,7 @@ class AbstractMapper extends \Application\EventProvider implements
         $this->addEntityAssociation(
             new AttributeEntityAssociation(
                 $attributeName,
+                $this->attributePrefix,
                 $this->attributePrefix . '_attribute_data',
                 new Entity\AttributeData(),
                 'attribute_data_mapper',
@@ -667,28 +678,24 @@ class AbstractMapper extends \Application\EventProvider implements
 
     }
 
-    protected function getAttributeIdByLabel($label)
-    {
-        $idMapping = $this->getAttributeIds();
-        return isset($idMapping[$label]) ? $idMapping[$label] : false;
-    }
-
-    protected function getAttributeIds()
-    {
-        $select = $this->getSelect()->from('profile_attributes')->columns(array('id', 'label'));
-        $stmt = $this->getSql()->prepareStatementForSqlObject($select);
-        $resultSet = $stmt->execute();
-        /*@var $resultSet \Zend\Db\Adapter\Driver\Pdo\Result*/
-        $return = array();
-        while ($data = $resultSet->next()) {
-            $return[$data['label']] = $data['id'];
-        }
-        return $return;
-    }
-
     protected function isEntityEmpty($entity, HydratorInterface $hydrator)
     {
         $rowData = $this->entityToArray($entity, $hydrator);
+        $isEmpty = true;
+
+        foreach($rowData as $data) {
+            if ($data !== NULL) {
+                $isEmpty = false;
+                break;
+            }
+        }
+
+        return $isEmpty;
+    }
+
+    protected function isOriginalEmpty($entity, ObservableClassMethods $hydrator)
+    {
+        $rowData = $hydrator->extractOriginal($entity);
         $isEmpty = true;
 
         foreach($rowData as $data) {

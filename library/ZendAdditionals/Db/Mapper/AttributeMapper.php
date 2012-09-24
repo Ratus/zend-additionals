@@ -1,11 +1,10 @@
 <?php
 
-namespace DatingProfile\Mapper;
+namespace ZendAdditionals\Db\Mapper;
 
 use ZendAdditionals\Db\Mapper\AbstractMapper;
-use DatingProfile\Db\Adapter\AdapterAwareInterface;
 
-class AttributeMapper extends AbstractMapper implements AdapterAwareInterface
+class AttributeMapper extends AbstractMapper
 {
     protected $tableName = 'attributes';
 
@@ -14,7 +13,38 @@ class AttributeMapper extends AbstractMapper implements AdapterAwareInterface
     protected $primaries = array(
         array('id'),
     );
+
     protected $uniques = array(
         array('label'),
     );
+
+    public function getAttributeIdByLabel($tablePrefix, $label)
+    {
+        $idMapping = $this->getAttributeIds($tablePrefix);
+        return isset($idMapping[$label]) ? $idMapping[$label] : false;
+    }
+
+    public function getAttributeIds($tablePrefix)
+    {
+        $select = $this->getSelect()->from($tablePrefix . '_attributes')->columns(array('id', 'label'));
+        $stmt = $this->getSql()->prepareStatementForSqlObject($select);
+        $resultSet = $stmt->execute();
+        /*@var $resultSet \Zend\Db\Adapter\Driver\Pdo\Result*/
+        $return = array();
+        while ($data = $resultSet->next()) {
+            $return[$data['label']] = $data['id'];
+        }
+        return $return;
+    }
+
+    public function getOrSetAttributeIdByLabel($tablePrefix, $label)
+    {
+        if (empty($tablePrefix) || empty($label)) {
+            throw new \InvalidArgumentException('Did not expect tablePrefix or label to be empty!');
+        }
+         $this->getAttributeIdByLabel($tablePrefix, $label);
+        if (empty($id)) {
+
+        }
+    }
 }

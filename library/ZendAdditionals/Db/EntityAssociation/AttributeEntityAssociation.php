@@ -4,11 +4,14 @@ namespace ZendAdditionals\Db\EntityAssociation;
 
 class AttributeEntityAssociation extends EntityAssociation
 {
+    protected $attributePrefix;
+
     /**
      * @see EntityAssociation::__construct
      */
     public function __construct(
         $alias,
+        $attributePrefix,
         $table,
         $prototype,
         $mapperServiceName,
@@ -16,8 +19,14 @@ class AttributeEntityAssociation extends EntityAssociation
         $requiredByAssociation = false,
         array $associationRequiredRelation = null
     ) {
+        $this->attributePrefix = $attributePrefix;
         parent::__construct($alias, $table, $prototype, $mapperServiceName, $joinCondition, null,
             null, false, $requiredByAssociation, $associationRequiredRelation);
+    }
+
+    public function getAttributePrefix()
+    {
+        return $this->attributePrefix;
     }
 
     public function getJoinColumns()
@@ -63,6 +72,15 @@ class AttributeEntityAssociation extends EntityAssociation
 
     public function saveAssociatedEntity($associatedEntity)
     {
+        if (null === $associatedEntity->getAttributeId()) {
+            $attributeMapper = $this->getServiceManager()->get('attribute_mapper');
+            $attributeId = $attributeMapper->getAttributeIdByLabel($this->getAttributePrefix(), $this->getAlias());
+            if (false === $attributeId) {
+                throw new \UnexpectedValueException('Did not expect attribute id to be empty.');
+            }
+            $associatedEntity->setAttributeId($attributeId);
+        }
+        
         return parent::saveAssociatedEntity($associatedEntity);
     }
 
