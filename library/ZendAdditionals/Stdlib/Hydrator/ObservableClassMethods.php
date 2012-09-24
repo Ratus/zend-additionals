@@ -114,7 +114,9 @@ class ObservableClassMethods extends ClassMethods implements ObservableStrategyI
     public function hydrate(array $data, $object)
     {
         $object = parent::hydrate($data, $object);
-        $this->objectStorage->attach($object, $data); // store object relative to data
+        if (!empty($data)) {
+            $this->objectStorage->attach($object, $data); // store object relative to data
+        }
         return $object;
     }
 
