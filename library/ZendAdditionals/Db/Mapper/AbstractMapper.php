@@ -245,6 +245,7 @@ class AbstractMapper extends \Application\EventProvider implements
                     continue;
                 }
 
+                // If the associated entity is empty we shouldn't save it
                 if ($this->isEntityEmpty($associatedEntity, $hydrator)) {
                    continue;
                 }
@@ -324,8 +325,6 @@ class AbstractMapper extends \Application\EventProvider implements
         $insert->values($rowData);
 
         $statement = $sql->prepareStatementForSqlObject($insert);
-//        echo $statement->getSql();
-//        exit;
 
         /*@var $statement \Zend\Db\Adapter\Driver\Pdo\Statement*/
         $result = $statement->execute();
