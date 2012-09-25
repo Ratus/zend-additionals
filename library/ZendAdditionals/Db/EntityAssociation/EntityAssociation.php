@@ -134,6 +134,7 @@ class EntityAssociation
             }
             $column = "{$this->alias}.{$key}";
         }
+
         return array_flip($columns);
     }
 
@@ -152,6 +153,7 @@ class EntityAssociation
         if (!method_exists($baseEntity, $getAssociatedEntityMethod)) {
             // throw
         }
+
         return $baseEntity->$getAssociatedEntityMethod();
     }
 

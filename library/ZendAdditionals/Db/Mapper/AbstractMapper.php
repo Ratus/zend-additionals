@@ -168,6 +168,7 @@ class AbstractMapper extends \Application\EventProvider implements
             }
             $prototypes[$identifier] = $association->getPrototype();
         }
+
         return $prototypes;
     }
 
@@ -189,12 +190,8 @@ class AbstractMapper extends \Application\EventProvider implements
     {
         $this->initialize();
         $stmt = $this->getSlaveSql()->prepareStatementForSqlObject($select);
-        echo $stmt->getSql().'<br />';
-
         $resultSet = new JoinedHydratingResultSet($this->getHydrator(), $this->getEntityPrototype());
         $resultSet->setObjectPrototypes($this->getJoinObjectProtoTypes());
-
-
 
         $resultSet->initialize($stmt->execute());
 
@@ -396,8 +393,6 @@ class AbstractMapper extends \Application\EventProvider implements
             ->where($where);
 
         $statement = $sql->prepareStatementForSqlObject($update);
-
-        echo $statement->getSql();
         /*@var $statement \Zend\Db\Adapter\Driver\Pdo\Statement*/
 
         $result = $statement->execute();
@@ -438,7 +433,7 @@ class AbstractMapper extends \Application\EventProvider implements
         foreach ($this->primaries as $primary) {
             foreach ($primary as $key) {
                 if (isset($data[$key])) {
-                    $return[$key] = $data[$key];
+                    $return[$this->mapEntityColumnToDbColumn($key)] = $data[$key];
                 }
             }
         }
@@ -705,6 +700,15 @@ class AbstractMapper extends \Application\EventProvider implements
         }
 
         return $isEmpty;
+    }
+
+    protected function mapEntityColumnToDbColumn($column)
+    {
+        if (array_key_exists($column, $this->entityColumnMapping)) {
+            return $this->entityColumnMapping[$column];
+        }
+
+        return $column;
     }
 }
 

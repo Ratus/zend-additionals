@@ -7,6 +7,7 @@ class AttributeProperty
     protected $id;
     protected $attributeId;
     protected $label;
+
     protected $sortOrder;
 
     public function getId()
