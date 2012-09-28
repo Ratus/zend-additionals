@@ -1,10 +1,11 @@
 <?php
-
 namespace ZendAdditionals\Db\ResultSet;
+
+use ZendAdditionals\Db\EntityAssociation\EntityAssociation;
 
 class JoinedHydratingResultSet extends \Zend\Db\ResultSet\HydratingResultSet
 {
-    protected $objectProtoTypes = array();
+    protected $associations = array();
 
     /**
      * Set a list of object prototypes to be able to hydrate the joined
@@ -13,9 +14,9 @@ class JoinedHydratingResultSet extends \Zend\Db\ResultSet\HydratingResultSet
      * @param array<object> $protoTypes
      * @return \DatingProfile\JoinedHydratingResultSet
      */
-    public function setObjectPrototypes(array $protoTypes)
+    public function setAssociations(array $associations)
     {
-        $this->objectProtoTypes = $protoTypes;
+        $this->associations = $associations;
         return $this;
     }
 
@@ -30,22 +31,29 @@ class JoinedHydratingResultSet extends \Zend\Db\ResultSet\HydratingResultSet
 
         $transform = new \Zend\Filter\Word\UnderscoreToCamelCase();
 
-        if (!empty($this->objectProtoTypes)) {
-            foreach($this->objectProtoTypes as $key => $protoType) {
-                $dataJoin = $this->pregGrepKeys('/^'.preg_quote($key).'\./', $data);
-                $data = array_diff_key($data, $dataJoin);
+        $entities = array();
+
+        if (!empty($this->associations)) {
+            foreach($this->associations as $association) { /* @var $association EntityAssociation */
+                $dataJoin = $this->pregGrepKeys('/^'.preg_quote($association->getAlias()).'__/', $data);
                 $entityData = array();
                 foreach ($dataJoin as $dataKey => $dataValue) {
-                    $entityData[substr($dataKey, strpos($dataKey, '.') + 1)] = $dataValue;
+                    $entityData[substr($dataKey, strrpos($dataKey, '__') + 1)] = $dataValue;
                 }
-                $setCall = $transform('set_' . $key);
-                $entitiesToInject[$setCall] =$this->hydrator->hydrate($entityData, $protoType);
+                $setCall = 'set' . $transform($association->getEntityIdentifier());
+                $prototype = clone $association->getPrototype();
+                $entities[$association->getAlias()] = $this->hydrator->hydrate($entityData, $prototype);
+
+                $entitiesToInject[] = array(
+                    'set_call' => $setCall,
+                    'parent_alias' => $association->getParentAlias() ?: 'base',
+                    'alias' => $association->getAlias(),
+                );
             }
         }
-        $entity = $this->hydrator->hydrate($data, $object);
-
-        foreach ($entitiesToInject as $methodCall => $entityToInject) {
-            $entity->$methodCall($entityToInject);
+        $entities['base'] = $this->hydrator->hydrate($data, $object);
+        foreach ($entitiesToInject as $aliasInfo) {
+            $entities[$aliasInfo['parent_alias']]->$aliasInfo['set_call']($entities[$aliasInfo['alias']]);
         }
 
         return $this->hydrator->hydrate($data, $object);

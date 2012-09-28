@@ -6,6 +6,7 @@ class AttributeData
 {
     protected $entityId;
     protected $attributeId;
+    protected $attribute;
     protected $attributePropertyId;
     protected $value;
     protected $valueTmp;
@@ -30,6 +31,16 @@ class AttributeData
     {
         $this->attributeId = $attributeId;
         return $this;
+    }
+
+    public function getAttribute()
+    {
+        return $this->attribute;
+    }
+
+    public function setAttribute(Attribute $attribute)
+    {
+        $this->attribute = $attribute;
     }
 
     public function getAttributePropertyId()

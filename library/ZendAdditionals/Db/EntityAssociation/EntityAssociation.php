@@ -7,61 +7,73 @@ use ZendAdditionals\Stdlib\Hydrator\ObservableClassMethods;
 
 class EntityAssociation
 {
-    protected $alias;
-    protected $table;
-    protected $prototype;
-    protected $mapperServiceName;
-    protected $joinCondition;
-    protected $identifierColumn;
-    protected $foreignColumn;
-    protected $required;
-    protected $requiredByAssociation;
-    protected $associationRequiredRelation;
+    /**
+     * @var string
+     */
+    protected $entityIdentifier;
 
+    /**
+     * @var string
+     */
+    protected $parentMapperServiceName;
+
+    /**
+     * @var string
+     */
+    protected $mapperServiceName;
+
+    /**
+     * @var \Zend\ServiceManager\ServiceManager
+     */
     protected $serviceManager;
 
     /**
-     * Instantiate a new EntityAssociation, entity associations are used in mappers for entities that contain
-     * associated entities.
+     * @var string
+     */
+    protected $generatedAlias;
+
+    /**
+     * @var int
+     */
+    protected static $aliasSuffixCount = 0;
+
+    protected $parentAlias;
+
+    protected $required;
+
+    /**
      *
-     * @param string $alias The alias name for this entity in the base entity
-     * @param string $table In which table does this associated entity reside?
-     * @param object $prototype Entity prototype used by hydration
-     * @param string $mapperServiceName Mapper to use for loading this entity
-     * @param string $joinCondition
-     * @param string $identifierColumn The column that will be updated with the value of foreignColumn
-     * @param string $foreignColumn The entity column which value will be used to store in identifierColumn
-     * @param boolean $required Is this entity required?
-     * @param boolean $requiredByAssociation Does the associated entity require the base entity?
-     * @param array $associationRequiredRelation If the associated entity requires the base entity define
-     * the relationship pointing back in an array like:
-     * array('id' => 'profile_id') (base->id related with associated->profile_id)
+     * @param type $entityIdentifier
+     * @param string $parentMapperServiceName
+     * @param string $mapperServiceName
      */
     public function __construct(
-        $alias,
-        $table,
-        $prototype,
-        $mapperServiceName,
-        $joinCondition,
-        $identifierColumn,
-        $foreignColumn,
-        $required = false,
-        $requiredByAssociation = false,
-        array $associationRequiredRelation = null
+        $entityIdentifier,
+        $parentMapperServiceName,
+        $mapperServiceName
     ) {
-        if (!is_object($prototype)) {
-            throw new \InvalidArgumentException('Prototype must be an instance of an Entity');
-        }
-        $this->alias                       = $alias;
-        $this->table                       = $table;
-        $this->prototype                   = $prototype;
-        $this->mapperServiceName           = $mapperServiceName;
-        $this->joinCondition               = $joinCondition;
-        $this->identifierColumn            = $identifierColumn;
-        $this->foreignColumn               = $foreignColumn;
-        $this->required                    = $required;
-        $this->requiredByAssociation       = $requiredByAssociation;
-        $this->associationRequiredRelation = $associationRequiredRelation;
+        static::$aliasSuffixCount++;
+        $this->entityIdentifier        = $entityIdentifier;
+        $this->parentMapperServiceName = $parentMapperServiceName;
+        $this->mapperServiceName       = $mapperServiceName;
+        $this->generatedAlias          = $entityIdentifier . '_' . static::$aliasSuffixCount;
+    }
+
+    public function getParentAlias()
+    {
+        return $this->parentAlias;
+    }
+
+    public function setParentAlias($parentAlias)
+    {
+        $this->parentAlias = $parentAlias;
+        return $this;
+    }
+
+
+    public function getEntityIdentifier()
+    {
+        return $this->entityIdentifier;
     }
 
     public function setServiceManager($serviceManager)
@@ -74,34 +86,6 @@ class EntityAssociation
         return $this->serviceManager;
     }
 
-    public function getAlias()
-    {
-        return $this->alias;
-    }
-
-    public function getTable()
-    {
-        return $this->table;
-    }
-
-    /**
-     * @return array (alias => table)
-     */
-    public function getjoinTable()
-    {
-        return array($this->getAlias() => $this->getTable());
-    }
-
-    public function getJoinCondition()
-    {
-        return $this->joinCondition;
-    }
-
-    public function getRequired()
-    {
-        return $this->required;
-    }
-
     public function getRequiredByAssociation()
     {
         return $this->requiredByAssociation;
@@ -112,19 +96,92 @@ class EntityAssociation
         return $this->associationRequiredRelation;
     }
 
+    public function getAlias()
+    {
+        return $this->generatedAlias;
+    }
+
+    public function getTableName()
+    {
+        return $this->getMapper()->getTableName();
+    }
+
+    public function getJoinTable()
+    {
+        return array($this->getAlias() => $this->getTableName());
+    }
+
+    public function getJoinCondition()
+    {
+
+        $relation =  $this->getParentMapper()->getRelation($this->mapperServiceName, $this->entityIdentifier);
+        return array(
+            array(
+                $this->getAlias() . '.' . $relation['foreign_id'],
+                $relation['my_id'],
+            )
+        );
+        // TODO add additional
+    }
+
+    public function getRelation()
+    {
+        return $this->getParentMapper()->getRelation($this->mapperServiceName, $this->entityIdentifier);
+    }
+
+    public function isBiDirectionalEntityReference($entityIdentifier)
+    {
+        $relation =  $this->getRelation();
+        $subAssociations =  $this->getMapper()->getEntityAssociations();
+
+        if (isset($subAssociations[$entityIdentifier])) {
+            $subAssociation = $subAssociations[$entityIdentifier];
+            $subRelation = $subAssociation->getRelation();
+            if ($subRelation['my_id'] === $relation['foreign_id'] && $subRelation['foreign_id'] === $relation['my_id'] ) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * @return Select::JOIN_INNER or Select::JOIN_LEFT
+     */
+    public function getJoinType()
+    {
+        if ($this->getRequired()) {
+            return \Zend\Db\Sql\Select::JOIN_INNER;
+        }
+        return \Zend\Db\Sql\Select::JOIN_LEFT;
+    }
+
+    public function setRequired($required)
+    {
+        $this->required = $required;
+    }
+
+    public function getRequired()
+    {
+        $relation =  $this->getParentMapper()->getRelation($this->mapperServiceName, $this->entityIdentifier);
+        if (!is_null($this->required)) {
+            return $this->required;
+        }
+        return $relation['required'];
+    }
+
     /**
      *
      * @return array
      * @throws \UnexpectedValueException
      */
-    public function getJoinColumns()
+    public function getJoinColumns($aliasPrefix = null)
     {
         $hydrator = $this->getMapper()->getHydrator();
         if (!($hydrator instanceof ObservableClassMethods)) {
             throw new \UnexpectedValueException('EntityAssociation expects the mapper to have an ObservableClassMethods hydrator.');
         }
         $excludedColumns = $this->getMapper()->getEntityAssociationColumns();
-        $columns = $hydrator->extract($this->prototype);
+        $columns = $hydrator->extract($this->getMapper()->getEntityPrototype());
         foreach ($columns as $key => & $column) {
             if (
                 array_search($key, $excludedColumns) !== false
@@ -132,7 +189,7 @@ class EntityAssociation
                 unset($columns[$key]);
                 continue;
             }
-            $column = "{$this->alias}.{$key}";
+            $column = $this->getAlias($aliasPrefix) . '__' . $key;
         }
 
         return array_flip($columns);
@@ -140,7 +197,7 @@ class EntityAssociation
 
     public function getPrototype()
     {
-        return $this->prototype;
+        return $this->getMapper()->getEntityPrototype();
     }
 
     public function getAssociatedEntity($baseEntity)
@@ -243,22 +300,38 @@ class EntityAssociation
         $baseEntity->$setAssociacedEntityId($associatedEntity->$getId());
     }
 
+    /**
+     * @return AbstractMapper
+     * @throws \InvalidArgumentException
+     */
+    public function getParentMapper()
+    {
+        $mapper = $this->getServiceManager()->get($this->parentMapperServiceName);
+        if (!is_object($mapper) || !($mapper instanceof AbstractMapper)) {
+            throw new \InvalidArgumentException('Mapper must be an instance of AbstractMapper');
+        }
+        return $mapper;
+    }
+
+    /**
+     * @return AbstractMapper
+     * @throws \InvalidArgumentException
+     */
     public function getMapper()
     {
         $mapper = $this->getServiceManager()->get($this->mapperServiceName);
         if (!is_object($mapper) || !($mapper instanceof AbstractMapper)) {
             throw new \InvalidArgumentException('Mapper must be an instance of AbstractMapper');
         }
-        $hydrator = $this->getHydrator();
+        /*$hydrator = $this->getHydrator();
         if (!empty($hydrator)) {
             $mapper->setHydrator($this->getHydrator());
-        }
-        $mapper->setTableName($this->getTable());
+        }*/
 
         return $mapper;
     }
 
-    public function setHydrator(ObservableClassMethods $hydrator)
+    /*public function setHydrator(ObservableClassMethods $hydrator)
     {
         $this->hydrator = $hydrator;
         return $this;
@@ -267,6 +340,6 @@ class EntityAssociation
     public function getHydrator()
     {
         return $this->hydrator;
-    }
+    }*/
 }
 
