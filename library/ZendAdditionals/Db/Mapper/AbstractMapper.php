@@ -23,6 +23,19 @@ class AbstractMapper extends \Application\EventProvider implements
     AdapterAwareInterface
 {
 
+    const RELATION_TYPE_FOREIGN  = 'foreign';
+    const RELATION_TYPE_MY       = 'my';
+    const RELATION_TYPE_VALUE    = 'value';
+    const RELATION_TYPE_CALLBACK = 'callback';
+    const OPERAND_EQUALS         = 'eq';
+    const OPERAND_NOT_EQUALS     = '!eq';
+    const OPERAND_IN             = 'in';
+    const OPERAND_NOT_IN         = '!in';
+    const OPERAND_LESS           = 'le';
+    const OPERAND_LESS_OR_EQUALS = 'lq';
+    const OPERAND_MORE           = 'mo';
+    const OPERAND_MORE_OR_EQUALS = 'mq';
+
     /**
      * @var Adapter
      */
