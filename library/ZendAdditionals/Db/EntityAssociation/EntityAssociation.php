@@ -5,6 +5,8 @@ namespace ZendAdditionals\Db\EntityAssociation;
 use ZendAdditionals\Db\Mapper\AbstractMapper;
 use ZendAdditionals\Stdlib\Hydrator\ObservableClassMethods;
 
+use Zend\Db\Sql\Predicate\Predicate;
+
 class EntityAssociation
 {
     /**
@@ -41,6 +43,9 @@ class EntityAssociation
 
     protected $required;
 
+    /** @var Predicate */
+    protected $predicate;
+
     /**
      *
      * @param type $entityIdentifier
@@ -57,6 +62,7 @@ class EntityAssociation
         $this->parentMapperServiceName = $parentMapperServiceName;
         $this->mapperServiceName       = $mapperServiceName;
         $this->generatedAlias          = $entityIdentifier . '_' . static::$aliasSuffixCount;
+        $this->predicate               = new Predicate();
     }
 
     public function getParentAlias()
@@ -122,6 +128,14 @@ class EntityAssociation
             )
         );
         // TODO add additional
+    }
+
+    /**
+    * @var Predicate
+    */
+    public function getPredicate()
+    {
+        return $this->predicate;
     }
 
     public function getRelation()

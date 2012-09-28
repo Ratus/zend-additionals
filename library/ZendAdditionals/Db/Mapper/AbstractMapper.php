@@ -18,6 +18,9 @@ use Zend\Db\Adapter\AdapterAwareInterface;
 use Zend\ServiceManager\ServiceManagerAwareInterface;
 use Zend\ServiceManager\ServiceManager;
 
+use Zend\Db\Sql\Predicate\Predicate;
+use Zend\Db\Sql\Predicate\Operator;
+
 class AbstractMapper extends \Application\EventProvider implements
     ServiceManagerAwareInterface,
     AdapterAwareInterface
@@ -27,14 +30,14 @@ class AbstractMapper extends \Application\EventProvider implements
     const RELATION_TYPE_MY       = 'my';
     const RELATION_TYPE_VALUE    = 'value';
     const RELATION_TYPE_CALLBACK = 'callback';
-    const OPERAND_EQUALS         = 'eq';
-    const OPERAND_NOT_EQUALS     = '!eq';
+
+    const OPERAND_EQUALS         = Operator::OPERATOR_EQUAL_TO;
+    const OPERAND_NOT_EQUALS     = Operator::OPERATOR_NOT_EQUAL_TO;
     const OPERAND_IN             = 'in';
-    const OPERAND_NOT_IN         = '!in';
-    const OPERAND_LESS           = 'le';
-    const OPERAND_LESS_OR_EQUALS = 'lq';
-    const OPERAND_MORE           = 'mo';
-    const OPERAND_MORE_OR_EQUALS = 'mq';
+    const OPERAND_LESS           = Operator::OPERATOR_LESS_THAN;
+    const OPERAND_LESS_OR_EQUALS = Operator::OPERATOR_LESS_THAN_OR_EQUAL_TO;
+    const OPERAND_MORE           = Operator::OPERATOR_GREATER_THAN;
+    const OPERAND_MORE_OR_EQUALS = Operator::OPERATOR_GREATER_THAN_OR_EQUAL_TO;
 
     /**
      * @var Adapter
@@ -108,6 +111,12 @@ class AbstractMapper extends \Application\EventProvider implements
      * @var \SplObjectStorage
      */
     protected $entityAssociationStorage;
+
+    /** @var array */
+    protected $extraJoinRequiredKeys        = array('operand', 'left', 'right');
+
+    /** @var array */
+    protected $extraJoinColumnRequiredKeys  = array('value', 'type');
 
     /**
      * @param string $mapperServiceName
@@ -207,7 +216,7 @@ class AbstractMapper extends \Application\EventProvider implements
 
         $resultSet->setAssociations($associations);
 
-        echo $stmt->getSql();
+        echo $this->debugSql($stmt->getSql());
 
         $resultSet->initialize($stmt->execute());
 
@@ -219,6 +228,35 @@ class AbstractMapper extends \Application\EventProvider implements
     protected function getCurrent(Select $select)
     {
         return $this->getResult($select)->current();
+    }
+
+   protected function debugSql($sql) {
+        $sql = preg_replace('/[\r\n]/', '', $sql);
+        $sql = preg_replace('/\s+/', ' ', $sql);
+
+        if (preg_match_all('/SELECT(.+?)FROM/si', $sql, $matches, PREG_SET_ORDER)) {
+            foreach($matches as $match) {
+                $sql = str_replace($match[0], 'SELECT'.str_replace(',', ",\n    ", $match[1]).'FROM', $sql);
+            }
+        }
+
+        $needles = array(
+            '/\s+(FROM|LEFT JOIN|INNER JOIN|RIGHT JOIN|JOIN|UNION ALL|WHERE|LIMIT|VALUES|GROUP BY)\s+/',
+            '/\s(SELECT)\s+/',
+            '/\s+(INSERT INTO|UPDATE INTO|UPDATE|`,)\s+/',
+            '/\s+(AND|OR |ORDER)\s+/',
+            '/;/',
+        );
+
+        $replaces = array(
+            "\n$1 \n    ",
+            "$1 \n  ",
+            "$1 \n  ",
+            "\n  $1 ",
+            ";\n",
+        );
+
+        return preg_replace($needles, $replaces, $sql);;
     }
 
     /**
@@ -249,11 +287,7 @@ class AbstractMapper extends \Application\EventProvider implements
      *
      * @throws \UnexpectedValueException
      */
-    protected function addJoin(
-        Select $select,
-        $entityIdentifier,
-        EntityAssociation $parentAssociation = null
-    ) {
+    protected function addJoin(Select $select, $entityIdentifier, EntityAssociation $parentAssociation = null ) {
         $entityAssociation = null;
 
         $mapper = $this;
@@ -265,15 +299,19 @@ class AbstractMapper extends \Application\EventProvider implements
             if (!isset($relations[$entityIdentifier])) {
                 continue;
             }
+
+            $relation = $relations[$entityIdentifier];
+
             $entityAssociation = new EntityAssociation(
                 $entityIdentifier,
                 $mapper::SERVICE_NAME,
                 $mapperServiceName
             );
-            $entityAssociation->setServiceManager($this->getServiceManager());
+
             if ($parentAssociation instanceof EntityAssociation) {
                 $entityAssociation->setParentAlias($parentAssociation->getAlias());
             }
+
             break;
         }
         if (!($entityAssociation instanceof EntityAssociation)) {
@@ -287,12 +325,24 @@ class AbstractMapper extends \Application\EventProvider implements
                 $entityAssociation->setRequired(false);
             }
         }
-        /* @var $entityAssociation EntityAssociation */
-        $joinConditions = $this->processJoinConditions($entityAssociation->getJoinCondition(), $joinTableAlias);
+
+        $entityAssociation->setServiceManager($this->getServiceManager());
+        $predicate = $entityAssociation->getPredicate()
+            ->equalTo($entityAssociation->getAlias().'.'.$relation['foreign_id'], $joinTableAlias.'.'.$relation['my_id'], Predicate::TYPE_IDENTIFIER, Predicate::TYPE_IDENTIFIER);
+
+        if(isset($relation['extra_conditions'])) {
+            if (!is_array($relation['extra_conditions'])) {
+                throw new \UnexpectedValueException('extra_conditions should be an array for '.$entityIdentifier);
+            }
+
+            foreach($relation['extra_conditions'] as $relation) {
+                $this->addExtraJoin($relation, $predicate, $entityAssociation, $joinTableAlias);
+            }
+        }
 
         $select->join(
             $entityAssociation->getjoinTable(),
-            $joinConditions,
+            $entityAssociation->getPredicate(),
             $entityAssociation->getJoinColumns(),
             $entityAssociation->getJoinType()
         );
@@ -300,6 +350,104 @@ class AbstractMapper extends \Application\EventProvider implements
         $this->storeEntityAssociationToSelect($select, $entityAssociation);
 
         return $entityAssociation;
+    }
+
+    /**
+    * Generates extra joins based on the information provider in the relations extra_conditions
+    *
+    * @param array $extraJoin This is the array defined in the relations section of the mapper
+    * @param Predicate $predicate   The predicate that will be used for the joins
+    * @param EntityAssociation $entityAssociation   The entityAssociation that controls the join
+    *
+    * @return void
+    * @throws \UnexpectedValueException
+    */
+    protected function addExtraJoin($extraJoin, Predicate $predicate, EntityAssociation $entityAssociation, $myJoinAlias)
+    {
+        $diff = array_diff_key(array_flip($this->extraJoinRequiredKeys), $extraJoin);
+        if (count($diff) > 0) {
+            throw new \UnexpectedValueException(
+                'Following keys should be set for extra join: '.implode(', ', array_keys($diff))
+            );
+        }
+
+        list($leftValue, $leftType) = $this->normalizeValueTypeForPredicate(
+            $extraJoin['left'],
+            $entityAssociation->getAlias(),
+            $myJoinAlias
+        );
+
+        list($rightValue, $rightType) = $this->normalizeValueTypeForPredicate(
+            $extraJoin['right'],
+            $entityAssociation->getAlias(),
+            $myJoinAlias
+        );
+
+        switch($extraJoin['operand']) { // Call the correct predicate function based operand provided
+            case self::OPERAND_EQUALS:
+            case self::OPERAND_NOT_EQUALS:
+            case self::OPERAND_LESS:
+            case self::OPERAND_LESS_OR_EQUALS:
+            case self::OPERAND_MORE:
+            case self::OPERAND_MORE_OR_EQUALS:
+                $predicate->addPredicate(
+                    new Operator($leftValue, $extraJoin['operand'], $rightValue, $leftType, $rightType)
+                );
+                break;
+            default:
+                throw new \UnexpectedValueException('operand `'.$extraJoin['operand'].'` not implemented');
+                break;
+        }
+    }
+
+
+    /**
+    * This will normalize the value and type parameters to the predicate format
+    *
+    * @param array $extraJoin  This is the array defined in the relations section of the mapper
+    * @param mixed $foreignAlias The alias that will be used if the type is foreign
+    * @param mixed $myAlias
+    */
+    protected function normalizeValueTypeForPredicate($extraJoin, $foreignAlias, $myAlias)
+    {
+        $diff = array_diff_key(array_flip($this->extraJoinColumnRequiredKeys), $extraJoin);
+        if (count($diff) > 0) {
+            throw new \UnexpectedValueException(
+                'Following keys should be set for extraJoin: '.implode(', ', array_keys($diff))
+            );
+        }
+
+        $type       = $extraJoin['type'];
+        $value      = $extraJoin['value'];
+        $callback   = isset($extraJoin['callback']) ? $extraJoin['callback'] : null;
+
+        switch ($type) {
+            case self::RELATION_TYPE_FOREIGN:
+                $type = Predicate::TYPE_IDENTIFIER;
+                $value = $foreignAlias.'.'.$value;
+                break;
+            case self::RELATION_TYPE_MY:
+                $type = Predicate::TYPE_IDENTIFIER;
+                $value = $myAlias.'.'.$value;
+                break;
+            case self::RELATION_TYPE_VALUE:
+                $type = Predicate::TYPE_VALUE;
+                break;
+            case self::RELATION_TYPE_CALLBACK:
+                $type = Predicate::TYPE_VALUE;
+
+                if (!is_callable($callback)) {
+                    throw new \UnexpectedValueException($callback.' is not callable');
+                }
+
+                $value = call_user_func_array($callback, $value);
+                break;
+            default:
+                throw new \UnexpectedValueException($type.' extra_condition type is not implemented');
+                break;
+        }
+
+        return array($value, $type);
     }
 
     private function storeEntityAssociationToSelect(Select $select, EntityAssociation $entityAssociation)
@@ -727,4 +875,7 @@ class AbstractMapper extends \Application\EventProvider implements
         return $isEmpty;
     }
 }
+
+
+
 
