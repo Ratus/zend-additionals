@@ -130,19 +130,6 @@ class EntityAssociation
 		return array($this->getAlias() => $this->getTableName());
 	}
 
-	public function getJoinCondition()
-	{
-
-		$relation =  $this->getParentMapper()->getRelation($this->mapperServiceName, $this->entityIdentifier);
-		return array(
-			array(
-				$this->getAlias() . '.' . $relation['foreign_id'],
-				$relation['my_id'],
-			)
-		);
-		// TODO add additional
-	}
-
 	/**
 	* @var Predicate
 	*/
@@ -154,21 +141,6 @@ class EntityAssociation
 	public function getRelation()
 	{
 		return $this->getParentMapper()->getRelation($this->mapperServiceName, $this->entityIdentifier);
-	}
-
-	public function isBiDirectionalEntityReference($entityIdentifier)
-	{
-		$relation =  $this->getRelation();
-		$subAssociations =  $this->getMapper()->getEntityAssociations();
-
-		if (isset($subAssociations[$entityIdentifier])) {
-			$subAssociation = $subAssociations[$entityIdentifier];
-			$subRelation = $subAssociation->getRelation();
-			if ($subRelation['my_id'] === $relation['foreign_id'] && $subRelation['foreign_id'] === $relation['my_id'] ) {
-				return true;
-			}
-		}
-		return false;
 	}
 
 	/**
@@ -241,92 +213,6 @@ class EntityAssociation
 		return $baseEntity->$getAssociatedEntityMethod();
 	}
 
-	public function getCurrentAssociatedEntityId($baseEntity)
-	{
-		$formatter = new \Zend\Filter\Word\UnderscoreToCamelCase;
-		if (!is_object($baseEntity)) {
-			// throw
-		}
-		$getAssociacedEntityId = 'get' . $formatter($this->identifierColumn);
-		if (!method_exists($baseEntity, $getAssociacedEntityId)) {
-			// throw
-		}
-		return $baseEntity->$getAssociacedEntityId();
-	}
-
-	public function hasBaseEntity($associatedEntity)
-	{
-		$formatter = new \Zend\Filter\Word\UnderscoreToCamelCase;
-		if (!is_object($associatedEntity)) {
-			// throw
-		}
-		$relation = $this->getAssociationRequiredRelation();
-		$associatedGetPointer = 'get' . $formatter(array_pop($relation));
-		if (!method_exists($associatedEntity, $associatedGetPointer)) {
-			// throw
-		}
-		$value = $associatedEntity->$associatedGetPointer();
-		return !empty($value);
-	}
-
-	public function saveAssociatedEntity($associatedEntity)
-	{
-		$mapper = $this->getMapper();
-		return $mapper->save($associatedEntity, false);
-	}
-
-	public function applyBaseEntityId($baseEntity, $associatedEntity)
-	{
-		$formatter = new \Zend\Filter\Word\UnderscoreToCamelCase;
-		if (!is_object($baseEntity)) {
-			throw new \InvalidArgumentException('Look me line!');
-		}
-		if (!is_object($associatedEntity)) {
-			throw new \InvalidArgumentException('Look me line!');
-		}
-
-		$relation           = $this->getAssociationRequiredRelation();
-		$keys               = array_keys($relation);
-		$baseColumn         = current($keys);
-		$associatedColumn   = current($relation);
-
-		$mapping            = $this->getMapper()->getEntityColumnMapping();
-
-		$baseColumn         = array_search($baseColumn, $mapping)?: $baseColumn;
-		$associatedColumn   = array_search($associatedColumn, $mapping)?: $associatedColumn;
-
-		$getBaseEntityId = 'get' . $formatter($baseColumn);
-		$setAssociatedEntityId = 'set' . $formatter($associatedColumn);
-
-		if (!method_exists($associatedEntity, $setAssociatedEntityId)) {
-			throw new \UnexpectedValueException('Very very unexpected 1!');
-		}
-		if (!method_exists($baseEntity, $getBaseEntityId)) {
-			throw new \UnexpectedValueException('Very very unexpected 2!');
-		}
-		$associatedEntity->$setAssociatedEntityId($baseEntity->$getBaseEntityId());
-	}
-
-	public function applyAssociatedEntityId($baseEntity, $associatedEntity)
-	{
-		$formatter = new \Zend\Filter\Word\UnderscoreToCamelCase;
-		if (!is_object($baseEntity)) {
-			// throw
-		}
-		if (!is_object($associatedEntity)) {
-			// throw
-		}
-		$setAssociacedEntityId = 'set' . $formatter($this->identifierColumn);
-		$getId = 'get' . $formatter($this->foreignColumn);
-		if (!method_exists($associatedEntity, $getId)) {
-			// throw
-		}
-		if (!method_exists($baseEntity, $setAssociacedEntityId)) {
-			// throw
-		}
-		$baseEntity->$setAssociacedEntityId($associatedEntity->$getId());
-	}
-
 	/**
 	 * @return AbstractMapper
 	 * @throws \InvalidArgumentException
@@ -350,23 +236,7 @@ class EntityAssociation
 		if (!is_object($mapper) || !($mapper instanceof AbstractMapper)) {
 			throw new \InvalidArgumentException('Mapper must be an instance of AbstractMapper');
 		}
-		/*$hydrator = $this->getHydrator();
-		if (!empty($hydrator)) {
-			$mapper->setHydrator($this->getHydrator());
-		}*/
-
 		return $mapper;
 	}
-
-	/*public function setHydrator(ObservableClassMethods $hydrator)
-	{
-		$this->hydrator = $hydrator;
-		return $this;
-	}
-
-	public function getHydrator()
-	{
-		return $this->hydrator;
-	}*/
 }
 

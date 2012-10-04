@@ -38,7 +38,7 @@ class JoinedHydratingResultSet extends \Zend\Db\ResultSet\HydratingResultSet
                 $dataJoin = $this->pregGrepKeys('/^'.preg_quote($association->getAlias()).'__/', $data);
                 $entityData = array();
                 foreach ($dataJoin as $dataKey => $dataValue) {
-                    $entityData[substr($dataKey, strrpos($dataKey, '__') + 1)] = $dataValue;
+                    $entityData[substr($dataKey, strrpos($dataKey, '__') + 2)] = $dataValue;
                 }
                 $setCall = 'set' . $transform($association->getEntityIdentifier());
                 $prototype = clone $association->getPrototype();

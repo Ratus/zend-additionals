@@ -11,25 +11,77 @@ namespace ZendAdditionals\Stdlib\Hydrator;
 
 use ZendAdditionals\Stdlib\Hydrator\Strategy\ObservableStrategyInterface;
 use Zend\Stdlib\Hydrator\ClassMethods;
+use Zend\ServiceManager\ServiceLocatorAwareInterface;
+use Zend\ServiceManager\ServiceLocatorInterface;
 
 /**
  * @category   ZendAdditionals
  * @package    ZendAdditionals_Stdlib
  * @subpackage Hydrator
  */
-class ObservableClassMethods extends ClassMethods implements ObservableStrategyInterface
+class ObservableClassMethods extends ClassMethods implements
+    ObservableStrategyInterface,
+    ServiceLocatorAwareInterface
 {
+    /**
+     * @var ServiceLocatorInterface
+     */
+    protected $serviceLocator;
+
     /**
      * @var \SplObjectStorage
      */
     protected $objectStorage;
 
-    protected $diff = array();
-
-    public function __construct($underscoreSeparatedKeys = true)
+    protected function initializeEntityStorage()
     {
-        $this->objectStorage = new \SplObjectStorage();
-        parent::__construct($underscoreSeparatedKeys);
+        if ($this->objectStorage instanceof \SplObjectStorage) {
+            return;
+        }
+        $serviceLocator = $this->getServiceLocator();
+        if (!($serviceLocator instanceof ServiceLocatorInterface)) {
+            throw new \UnexpectedValueException(
+                'The service locator must be set, actually did not expect this...'
+            );
+        }
+        if (
+            !$serviceLocator->has(
+                'za_entity_storage'
+            )
+        ) {
+            throw new \UnexpectedValueException('A service is required for entity storage!');
+        } else {
+            $this->objectStorage = $serviceLocator->get(
+                'za_entity_storage'
+            );
+        }
+        if (!($this->objectStorage instanceof \SplObjectStorage)) {
+            throw new \UnexpectedValueException(
+                'Did not get an \SplObjectStorage from the service locator.. bad...'
+            );
+        }
+    }
+
+    /**
+     * @return \SplObjectStorage
+     */
+    public function getObjectStorage()
+    {
+        $this->initializeEntityStorage();
+        return $this->objectStorage;
+    }
+
+    /**
+     * Set the object storage
+     *
+     * @param \SplObjectStorage $objectStorage
+     *
+     * @return ObservableClassMethods
+     */
+    public function setObjectStorage(\SplObjectStorage $objectStorage)
+    {
+        $this->objectStorage = $objectStorage;
+        return $this;
     }
 
     /**
@@ -41,7 +93,7 @@ class ObservableClassMethods extends ClassMethods implements ObservableStrategyI
      */
     public function hasOriginal($object)
     {
-        return $this->objectStorage->contains($object);
+        return $this->getObjectStorage()->contains($object);
     }
 
     /**
@@ -57,8 +109,9 @@ class ObservableClassMethods extends ClassMethods implements ObservableStrategyI
         if (!is_object($object)) {
             return false;
         }
-        if ($this->objectStorage->contains($object)) {
-            return $this->objectStorage[$object];
+        if ($this->getObjectStorage()->contains($object)) {
+            $storage = $this->getObjectStorage();
+            return $storage[$object];
         }
         return false;
     }
@@ -76,8 +129,13 @@ class ObservableClassMethods extends ClassMethods implements ObservableStrategyI
     public function extractChanges($object)
     {
         $extracted = parent::extract($object);
-        if ($this->objectStorage->contains($object)) {
-            return array_udiff_assoc($extracted, $this->objectStorage[$object], array($this, 'isDataChanged'));
+        if ($this->getObjectStorage()->contains($object)) {
+            $storage = $this->getObjectStorage();
+            return array_udiff_assoc(
+                $extracted,
+                $storage[$object],
+                array($this, 'isDataChanged')
+            );
         }
         return $extracted;
     }
@@ -102,7 +160,8 @@ class ObservableClassMethods extends ClassMethods implements ObservableStrategyI
      */
     public function setChangesCommitted($object)
     {
-        $this->objectStorage[$object] = parent::extract($object);
+        $storage = $this->getObjectStorage();
+        $storage[$object] = parent::extract($object);
         return true;
     }
 
@@ -115,9 +174,32 @@ class ObservableClassMethods extends ClassMethods implements ObservableStrategyI
     {
         $object = parent::hydrate($data, $object);
         if (!empty($data)) {
-            $this->objectStorage->attach($object, $data); // store object relative to data
+            $this->getObjectStorage()->attach($object, $data); // store object relative to data
         }
         return $object;
+    }
+
+    /**
+     * Get the service locator
+     *
+     * @return ServiceLocatorInterface
+     */
+    public function getServiceLocator()
+    {
+        return $this->serviceLocator;
+    }
+
+    /**
+     * Set the service locator
+     *
+     * @param ServiceLocatorInterface $serviceLocator
+     *
+     * @return ObservableClassMethods
+     */
+    public function setServiceLocator(ServiceLocatorInterface $serviceLocator)
+    {
+        $this->serviceLocator = $serviceLocator;
+        return $this;
     }
 
 }

@@ -25,6 +25,7 @@ class AbstractMapper extends \Application\EventProvider implements
 	ServiceManagerAwareInterface,
 	AdapterAwareInterface
 {
+    const SERVICE_NAME           = '';
 
 	const RELATION_TYPE_FOREIGN  = 'foreign';
 	const RELATION_TYPE_MY       = 'my';
@@ -91,7 +92,8 @@ class AbstractMapper extends \Application\EventProvider implements
 	protected $primaries = array();
 
 	/**
-	 * Identifier of a column that gets an auto generated value, only one is possible'
+	 * Identifier of a column that gets an auto generated value,
+     * only one is possible'
 	 *
 	 * @var string
 	 */
@@ -118,6 +120,25 @@ class AbstractMapper extends \Application\EventProvider implements
 	/** @var array */
 	protected $extraJoinColumnRequiredKeys  = array('value', 'type');
 
+    /**
+     * @var boolean
+     */
+    protected $tablePrefixRequired = false;
+
+    protected $relationsByServiceName = array();
+
+    protected function initializeRelationsByserviceName()
+    {
+        if (empty($this->relations)) {
+            return;
+        }
+        if (empty($this->relationsByServiceName)) {
+            foreach ($this->relations as $identifier => &$relation) {
+                $this->relationsByServiceName[$relation['mapper_service_name']][$identifier] = $relation;
+            }
+        }
+    }
+
 	/**
 	 * @param string $mapperServiceName
 	 * @param string $entityIdentifier
@@ -126,15 +147,18 @@ class AbstractMapper extends \Application\EventProvider implements
 	 */
 	public function getRelation($mapperServiceName, $entityIdentifier)
 	{
-		if (!isset($this->relations[$mapperServiceName][$entityIdentifier])) {
-			throw new \UnexpectedValueException('Dit not expect the requested relation not to exist.');
+        $this->initializeRelationsByserviceName();
+		if (!isset($this->relationsByServiceName[$mapperServiceName][$entityIdentifier])) {
+			throw new \UnexpectedValueException(
+                'Dit not expect the requested relation not to exist.'
+            );
 		}
-
-		return $this->relations[$mapperServiceName][$entityIdentifier];
+		return $this->relationsByServiceName[$mapperServiceName][$entityIdentifier];
 	}
 
 	/**
-	 * Performs some basic initialization setup and checks before running a query
+	 * Performs some basic initialization setup and checks before
+     * running a query
 	 */
 	protected function initialize()
 	{
@@ -182,14 +206,18 @@ class AbstractMapper extends \Application\EventProvider implements
 	 */
 	public function getEntityAssociationColumns()
 	{
-		$return = array();
-
-		foreach ($this->relations as $relation) {
-			$return = array_merge($return, array_keys($relation));
-		}
-
-		return $return;
+        return array_keys($this->relations);
 	}
+
+    /**
+     * Check if this mapper requires a table prefix
+     *
+     * @return boolean
+     */
+    public function getTablePrefixRequired()
+    {
+        return $this->tablePrefixRequired;
+    }
 
 	/**
 	 * @param string|null $table
@@ -210,13 +238,18 @@ class AbstractMapper extends \Application\EventProvider implements
 	{
 		$this->initialize();
 		$stmt = $this->getSlaveSql()->prepareStatementForSqlObject($select);
-		$resultSet = new JoinedHydratingResultSet($this->getHydrator(), $this->getEntityPrototype());
+		$resultSet = new JoinedHydratingResultSet(
+            $this->getHydrator(),
+            $this->getEntityPrototype()
+        );
 
-		$associations = array_reverse($this->getEntityAssociationsForSelect($select), true);
+        $associations = $this->getEntityAssociationsForSelect($select);
+        if(!empty($associations)) {
+            $associations = array_reverse($associations, true);
+            $resultSet->setAssociations($associations);
+        }
 
-		$resultSet->setAssociations($associations);
-
-		echo $this->debugSql($stmt->getSql());
+		//echo $this->debugSql($stmt->getSql());
 
 		$resultSet->initialize($stmt->execute());
 
@@ -234,14 +267,26 @@ class AbstractMapper extends \Application\EventProvider implements
 		$sql = preg_replace('/[\r\n]/', '', $sql);
 		$sql = preg_replace('/\s+/', ' ', $sql);
 
-		if (preg_match_all('/SELECT(.+?)FROM/si', $sql, $matches, PREG_SET_ORDER)) {
+		if (
+            preg_match_all(
+                '/SELECT(.+?)FROM/si',
+                $sql,
+                $matches,
+                PREG_SET_ORDER
+            )
+        ) {
 			foreach($matches as $match) {
-				$sql = str_replace($match[0], 'SELECT'.str_replace(',', ",\n    ", $match[1]).'FROM', $sql);
+				$sql = str_replace(
+                    $match[0],
+                    'SELECT' . str_replace(',', ",\n    ", $match[1]) . 'FROM',
+                    $sql
+                );
 			}
 		}
 
 		$needles = array(
-			'/\s+(FROM|LEFT JOIN|INNER JOIN|RIGHT JOIN|JOIN|UNION ALL|WHERE|LIMIT|VALUES|GROUP BY)\s+/',
+			'/\s+(FROM|LEFT JOIN|INNER JOIN|RIGHT JOIN|JOIN|' .
+                'UNION ALL|WHERE|LIMIT|VALUES|GROUP BY)\s+/',
 			'/\s(SELECT)\s+/',
 			'/\s+(INSERT INTO|UPDATE INTO|UPDATE|`,)\s+/',
 			'/\s+(AND|OR |ORDER)\s+/',
@@ -256,24 +301,9 @@ class AbstractMapper extends \Application\EventProvider implements
 			";\n",
 		);
 
-		return preg_replace($needles, $replaces, $sql);;
-	}
+        $nice = preg_replace($needles, $replaces, $sql) . "\n";
 
-	/**
-	 * Process the join conditions
-	 *
-	 * @param array $joinConditions
-	 * @param string $tableAlias
-	 *
-	 * @return string
-	 */
-	protected function processJoinConditions(array $joinConditions, $tableAlias)
-	{
-		$return = '';
-		foreach ($joinConditions as $condition) {
-			$return .= (empty($return) ? '' : ' AND ') . $condition[0] . ' = ' . $tableAlias . '.' . $condition[1];
-		}
-		return $return;
+		return $nice;
 	}
 
 	/**
@@ -288,36 +318,38 @@ class AbstractMapper extends \Application\EventProvider implements
 	 *
 	 * @throws \UnexpectedValueException
 	 */
-	protected function addJoin(Select $select, $entityIdentifier, EntityAssociation $parentAssociation = null, $tablePrefix = null ) {
-		$entityAssociation = null;
-
+	protected function addJoin(
+        Select $select,
+        $entityIdentifier,
+        EntityAssociation $parentAssociation = null,
+        $tablePrefix = null
+    ) {
+        // First get the correct mapper
 		$mapper = $this;
 		if ($parentAssociation instanceof EntityAssociation) {
 			$mapper = $parentAssociation->getMapper();
 		}
 
-		foreach ($mapper->relations as $mapperServiceName => $relations) {
-			if (!isset($relations[$entityIdentifier])) {
-				continue;
-			}
+        // Check if the relation information has been defined
+        if (!isset($mapper->relations[$entityIdentifier])) {
+            throw new \UnexpectedValueException(
+                'The given associated entity identifier "' .
+                $entityIdentifier . '" is not defined in the relations!'
+            );
+        }
 
-			$relation = $relations[$entityIdentifier];
+        $relation = $mapper->relations[$entityIdentifier];
 
-			$entityAssociation = new EntityAssociation(
-				$entityIdentifier,
-				$mapper::SERVICE_NAME,
-				$mapperServiceName
-			);
+        // Create the entity association based on the relation information
+        $entityAssociation = new EntityAssociation(
+            $entityIdentifier,
+            $mapper::SERVICE_NAME,
+            $relation['mapper_service_name']
+        );
 
-			if ($parentAssociation instanceof EntityAssociation) {
-				$entityAssociation->setParentAlias($parentAssociation->getAlias());
-			}
-
-			break;
-		}
-		if (!($entityAssociation instanceof EntityAssociation)) {
-			throw new \UnexpectedValueException('did not expect this ehh');
-		}
+        if ($parentAssociation instanceof EntityAssociation) {
+            $entityAssociation->setParentAlias($parentAssociation->getAlias());
+        }
 
 		$joinTableAlias = $this->getTableName();
 
@@ -332,16 +364,44 @@ class AbstractMapper extends \Application\EventProvider implements
 
 		$entityAssociation->setTablePrefix($tablePrefix);
 
-		$predicate = $entityAssociation->getPredicate()
-			->equalTo($entityAssociation->getAlias().'.'.$relation['foreign_id'], $joinTableAlias.'.'.$relation['my_id'], Predicate::TYPE_IDENTIFIER, Predicate::TYPE_IDENTIFIER);
+        if (
+            !isset($relation['reference']) &&
+            !isset($relation['back_reference'])
+        ) {
+            throw new \UnexpectedValueException(
+                'When using joins either reference or back reference must be present!'
+            );
+        }
+        $referenceInformation = isset($relation['reference']) ?
+            $relation['reference'] :
+            array_flip($relation['back_reference']);
+
+        $predicate = $entityAssociation->getPredicate();
+
+        foreach ($referenceInformation as $myId => $foreignId) {
+            $predicate->equalTo(
+                $entityAssociation->getAlias() . '.' . $foreignId,
+                $joinTableAlias . '.' . $myId,
+                Predicate::TYPE_IDENTIFIER,
+                Predicate::TYPE_IDENTIFIER
+            );
+        }
 
 		if(isset($relation['extra_conditions'])) {
 			if (!is_array($relation['extra_conditions'])) {
-				throw new \UnexpectedValueException('extra_conditions should be an array for '.$entityIdentifier);
+				throw new \UnexpectedValueException(
+                    'extra_conditions should be an array for ' .
+                    $entityIdentifier
+                );
 			}
 
 			foreach($relation['extra_conditions'] as $relation) {
-				$this->addExtraJoin($relation, $predicate, $entityAssociation, $joinTableAlias);
+				$this->addExtraJoin(
+                    $relation,
+                    $predicate,
+                    $entityAssociation,
+                    $joinTableAlias
+                );
 			}
 		}
 
@@ -358,21 +418,33 @@ class AbstractMapper extends \Application\EventProvider implements
 	}
 
 	/**
-	* Generates extra joins based on the information provider in the relations extra_conditions
-	*
-	* @param array $extraJoin This is the array defined in the relations section of the mapper
-	* @param Predicate $predicate   The predicate that will be used for the joins
-	* @param EntityAssociation $entityAssociation   The entityAssociation that controls the join
-	*
-	* @return void
-	* @throws \UnexpectedValueException
-	*/
-	protected function addExtraJoin($extraJoin, Predicate $predicate, EntityAssociation $entityAssociation, $myJoinAlias)
-	{
-		$diff = array_diff_key(array_flip($this->extraJoinRequiredKeys), $extraJoin);
+	 * Generates extra joins based on the information provider in the
+     * relations extra_conditions
+	 *
+	 * @param array $extraJoin      This is the array defined in the
+     *                              relations section of the mapper
+	 * @param Predicate $predicate  The predicate that will be used for
+     *                              the joins
+	 * @param EntityAssociation $entityAssociation The entityAssociation that
+     *                                             controls the join
+	 *
+	 * @return void
+	 * @throws \UnexpectedValueException
+	 */
+	protected function addExtraJoin(
+        $extraJoin,
+        Predicate $predicate,
+        EntityAssociation $entityAssociation,
+        $myJoinAlias
+    ) {
+		$diff = array_diff_key(
+            array_flip($this->extraJoinRequiredKeys),
+            $extraJoin
+        );
 		if (count($diff) > 0) {
 			throw new \UnexpectedValueException(
-				'Following keys should be set for extra join: '.implode(', ', array_keys($diff))
+				'Following keys should be set for extra join: ' .
+                implode(', ', array_keys($diff))
 			);
 		}
 
@@ -388,7 +460,8 @@ class AbstractMapper extends \Application\EventProvider implements
 			$myJoinAlias
 		);
 
-		switch($extraJoin['operand']) { // Call the correct predicate function based operand provided
+        // Call the correct predicate function based operand provided
+		switch($extraJoin['operand']) {
 			case self::OPERAND_EQUALS:
 			case self::OPERAND_NOT_EQUALS:
 			case self::OPERAND_LESS:
@@ -396,35 +469,54 @@ class AbstractMapper extends \Application\EventProvider implements
 			case self::OPERAND_MORE:
 			case self::OPERAND_MORE_OR_EQUALS:
 				$predicate->addPredicate(
-					new Operator($leftValue, $extraJoin['operand'], $rightValue, $leftType, $rightType)
+					new Operator(
+                        $leftValue,
+                        $extraJoin['operand'],
+                        $rightValue,
+                        $leftType,
+                        $rightType
+                    )
 				);
 				break;
 			default:
-				throw new \UnexpectedValueException('operand `'.$extraJoin['operand'].'` not implemented');
+				throw new \UnexpectedValueException(
+                    'operand `' . $extraJoin['operand'] . '` not implemented'
+                );
 				break;
 		}
 	}
 
 
 	/**
-	* This will normalize the value and type parameters to the predicate format
-	*
-	* @param array $extraJoin  This is the array defined in the relations section of the mapper
-	* @param mixed $foreignAlias The alias that will be used if the type is foreign
-	* @param mixed $myAlias
-	*/
-	protected function normalizeValueTypeForPredicate($extraJoin, $foreignAlias, $myAlias)
-	{
-		$diff = array_diff_key(array_flip($this->extraJoinColumnRequiredKeys), $extraJoin);
+	 * This will normalize the value and type parameters to the predicate format
+	 *
+	 * @param array $extraJoin      This is the array defined in the relations
+     *                              section of the mapper
+	 * @param mixed $foreignAlias   The alias that will be used if the
+     *                              type is foreign
+	 * @param mixed $myAlias
+	 */
+	protected function normalizeValueTypeForPredicate(
+        $extraJoin,
+        $foreignAlias,
+        $myAlias
+    ) {
+		$diff = array_diff_key(
+            array_flip($this->extraJoinColumnRequiredKeys),
+            $extraJoin
+        );
 		if (count($diff) > 0) {
 			throw new \UnexpectedValueException(
-				'Following keys should be set for extraJoin: '.implode(', ', array_keys($diff))
+				'Following keys should be set for extraJoin: ' .
+                implode(', ', array_keys($diff))
 			);
 		}
 
-		$type       = $extraJoin['type'];
-		$value      = $extraJoin['value'];
-		$callback   = isset($extraJoin['callback']) ? $extraJoin['callback'] : null;
+		$type     = $extraJoin['type'];
+		$value    = $extraJoin['value'];
+		$callback = isset($extraJoin['callback']) ?
+            $extraJoin['callback'] :
+            null;
 
 		switch ($type) {
 			case self::RELATION_TYPE_FOREIGN:
@@ -442,21 +534,27 @@ class AbstractMapper extends \Application\EventProvider implements
 				$type = Predicate::TYPE_VALUE;
 
 				if (!is_callable($callback)) {
-					throw new \UnexpectedValueException($callback.' is not callable');
+					throw new \UnexpectedValueException(
+                        $callback . ' is not callable'
+                    );
 				}
 
 				$value = call_user_func_array($callback, $value);
 				break;
 			default:
-				throw new \UnexpectedValueException($type.' extra_condition type is not implemented');
+				throw new \UnexpectedValueException(
+                    $type . ' extra_condition type is not implemented'
+                );
 				break;
 		}
 
 		return array($value, $type);
 	}
 
-	private function storeEntityAssociationToSelect(Select $select, EntityAssociation $entityAssociation)
-	{
+	private function storeEntityAssociationToSelect(
+        Select $select,
+        EntityAssociation $entityAssociation
+    ) {
 		if (!($this->entityAssociationStorage instanceof \SplObjectStorage)) {
 			$this->entityAssociationStorage = new \SplObjectStorage();
 		}
@@ -464,7 +562,7 @@ class AbstractMapper extends \Application\EventProvider implements
 			$this->entityAssociationStorage->attach($select, array());
 		}
 		$data = $this->entityAssociationStorage[$select];
-		$data[$entityAssociation->getAlias()] = $entityAssociation;
+		$data[$entityAssociation->getAlias()]    = $entityAssociation;
 		$this->entityAssociationStorage[$select] = $data;
 	}
 
@@ -490,33 +588,51 @@ class AbstractMapper extends \Application\EventProvider implements
 		$this->entityAssociationStorage->detach($select);
 	}
 
+    protected function underscoreToCamelCase($underscored)
+    {
+        $underscored = strtolower($underscored);
+        return preg_replace('/_(.?)/e',"strtoupper('$1')",$underscored);
+    }
+
 	/**
 	 * Save the given entity
 	 *
 	 * @param object $entity
 	 *
-	 * @return ResultInterface|bool Boolean true gets returned when there is nothing to update
+	 * @return ResultInterface|bool Boolean true gets returned
+     * when there is nothing to update
 	 *
 	 * @throws \Exception
 	 */
-	public function save($entity)
+	public function save($entity, $tablePrefix = null)
 	{
+        if ($this->getTablePrefixRequired() && empty($tablePrefix)) {
+            throw new \UnexpectedValueException(
+                'This mapper requires a table prefix to ' .
+                'be given when calling save.'
+            );
+        }
+
 		$this->initialize();
 
 		if (get_class($entity) !== get_class($this->getEntityPrototype())) {
 			throw new \UnexpectedValueException(
-				'Dit not expect the given entity of type: ' . get_class($entity) .
-				'. The type: ' . get_class($this->getEntityPrototype()) . ' should be given.'
+				'Dit not expect the given entity of type: ' .
+                get_class($entity) . '. The type: ' .
+                get_class($this->getEntityPrototype()) . ' should be given.'
 			);
 		}
 
 		$hydrator = $this->getHydrator();
 
 		$result = false;
-		if ($hydrator->hasOriginal($entity) && !$this->isOriginalEmpty($entity, $hydrator)) {
-			$result = $this->update($entity, null, $hydrator);
+		if (
+            $hydrator->hasOriginal($entity) &&
+            !$this->isEntityEmpty($entity, true)
+        ) {
+			$result = $this->update($entity, null, $hydrator, $tablePrefix);
 		} else {
-			$result = $this->insert($entity, $hydrator);
+			$result = $this->insert($entity, $hydrator, $tablePrefix);
 		}
 
 		return $result;
@@ -528,10 +644,19 @@ class AbstractMapper extends \Application\EventProvider implements
 	 *
 	 * @return ResultInterface
 	 */
-	protected function insert($entity, ObservableStrategyInterface $hydrator = null)
-	{
+	protected function insert(
+        $entity,
+        ObservableStrategyInterface $hydrator = null,
+        $tablePrefix = null
+    ) {
+        $this->storeRelatedEntities($entity, $tablePrefix, true);
+
 		$this->initialize();
 		$tableName = $this->getTableName();
+
+        if (!empty($tablePrefix)) {
+            $tableName = $tablePrefix . $tableName;
+        }
 
 		$sql = $this->getSql()->setTable($tableName);
 		$insert = $sql->insert();
@@ -539,7 +664,10 @@ class AbstractMapper extends \Application\EventProvider implements
 		if (!empty($this->autoGenerated)) {
 			$autoGeneratedGet = 'get' . ucfirst($this->autoGenerated);
 			if (null !== $entity->$autoGeneratedGet()) {
-				throw new \Exception('Can not insert data that already has an auto generated value!');
+				throw new \Exception(
+                    'Can not insert data that already ' .
+                    'has an auto generated value!'
+                );
 			}
 		}
 
@@ -576,8 +704,111 @@ class AbstractMapper extends \Application\EventProvider implements
 
 		$hydrator->setChangesCommitted($entity);
 
-		return $result;
+
+        $this->storeRelatedEntities($entity, $tablePrefix);
+
+        return $this->save($entity, $tablePrefix);
 	}
+
+    protected function unsetRelatedEntityColumns(& $entityArray)
+    {
+        $columns = $this->getEntityAssociationColumns();
+        foreach ($columns as $column) {
+            if (array_key_exists($column, $entityArray)) {
+                unset($entityArray[$column]);
+            }
+        }
+        return $entityArray;
+    }
+
+    protected function storeRelatedEntities(
+        $entity,
+        $tablePrefix = null,
+        $ignoreEntitiesThatRequireBase = false
+    ) {
+        foreach ($this->relations as $entityIdentifier => $relationInfo) {
+            $getAssociatedEntity = $this->underscoreToCamelCase(
+                'get_' . $entityIdentifier
+            );
+            $associatedEntity = $entity->$getAssociatedEntity();
+
+            /*
+             * The associated entity is null when not added to the join when
+             * selecting and the associated entity is empty when it has been
+             * added to the join but does not exist in the database
+             * (left outer join)
+             */
+            if (
+                is_null($associatedEntity) ||
+                $this->isEntityEmpty($associatedEntity)
+            ) {
+                continue;
+            }
+
+            /* @var $relationServiceMapper AbstractMapper */
+            $relationServiceMapper = $this->getServiceManager()->get(
+                $relationInfo['mapper_service_name']
+            );
+
+            // Check if the base entity has a relation to the associated entity
+            $entityHasReferenceToAssociation = isset($relationInfo['reference']);
+
+
+            // Check if the associated entity has a relation back to me
+            $associationHasBackReference = isset($relationInfo['back_reference']);
+
+            /*
+             * When the associated entity relates back check if we want
+             * to ignore this entity
+             */
+            if ($associationHasBackReference && $ignoreEntitiesThatRequireBase) {
+                continue;
+            }
+
+            // Set the relation id's when the association relates back
+            if ($associationHasBackReference) {
+                foreach ($relationInfo['back_reference'] as $myId => $foreignId) {
+                    // Set id from entity into associated entity
+                    $getMyId = $this->underscoreToCamelCase('get_' . $myId);
+                    $setForeignId = $this->underscoreToCamelCase('set_' . $foreignId);
+                    $associatedEntity->$setForeignId($entity->$getMyId());
+                }
+            }
+
+            /*
+             * Set the table prefix to null when a recursive
+             * prefix is not required
+             */
+            if (
+                !isset($relationInfo['recursive_table_prefix']) ||
+                !$relationInfo['recursive_table_prefix']
+            ) {
+                $tablePrefix = null;
+            }
+
+            // When the association requires a prefix we will set this
+            // (this has nothing to do with recursion)
+            if (isset($relationInfo['foreign_table_prefix'])) {
+                $tablePrefix = $relationInfo['foreign_table_prefix'];
+            }
+
+            // Save the associated entity
+            $relationServiceMapper->save($associatedEntity, $tablePrefix);
+
+            // Set id from associated entity into entity (if applicable)
+            if ($entityHasReferenceToAssociation) {
+                foreach ($relationInfo['reference'] as $myId => $foreignId) {
+                    $setMyId = $this->underscoreToCamelCase(
+                        'set_' . $myId
+                    );
+                    $getForeignId = $this->underscoreToCamelCase(
+                        'get_' . $foreignId
+                    );
+                    $entity->$setMyId($associatedEntity->$getForeignId());
+                }
+            }
+        }
+    }
 
 	/**
 	 * @param object|array $entity
@@ -585,10 +816,19 @@ class AbstractMapper extends \Application\EventProvider implements
 	 * @param ObservableStrategyInterface|null $hydrator
 	 * @return ResultInterface
 	 */
-	protected function update($entity, $where = null, ObservableStrategyInterface $hydrator = null)
-	{
+	protected function update(
+        $entity,
+        $where = null,
+        ObservableStrategyInterface $hydrator = null,
+        $tablePrefix = null
+    ) {
+        $this->storeRelatedEntities($entity, $tablePrefix);
+
 		$this->initialize();
 		$tableName = $this->getTableName();
+        if (!empty($tablePrefix)) {
+            $tableName = $tablePrefix . $tableName;
+        }
 
 		$sql = $this->getSql()->setTable($tableName);
 		$update = $sql->update();
@@ -598,13 +838,7 @@ class AbstractMapper extends \Application\EventProvider implements
 		$changedData = $this->entityToArray($entity, $hydrator, true, $originalData);
 
 
-		// Put in better function
-		$associatedColumns = $this->getEntityAssociationColumns();
-		foreach ($associatedColumns as $associatedColumn) {
-			if (array_key_exists($associatedColumn, $changedData)) {
-				unset($changedData[$associatedColumn]);
-			}
-		}
+        $this->unsetRelatedEntityColumns($changedData);
 
 		if (empty($changedData)) {
 			return true;
@@ -614,11 +848,15 @@ class AbstractMapper extends \Application\EventProvider implements
 			if ($this->isPrimaryKeyChanged($changedData)) {
 				$previousPrimaryData = $this->getPrimaryData($originalData);
 				if (empty($previousPrimaryData)) {
-					die('Can not update a non existing entity!');
+                    throw new \LogicException(
+                        'Update called for non existing entity, must be fixed!'
+                    );
 				}
 				$where = $previousPrimaryData;
 			} else {
-				$where = $this->getPrimaryData($this->entityToArray($entity, $hydrator));
+				$where = $this->getPrimaryData(
+                    $this->entityToArray($entity, $hydrator)
+                );
 			}
 		}
 
@@ -653,8 +891,9 @@ class AbstractMapper extends \Application\EventProvider implements
 	}
 
 	/**
-	 * Extract the primary data from an array of data extracted from the entity, this should be
-	 * the original data provided by reference when calling entityToArray
+	 * Extract the primary data from an array of data extracted from the entity,
+     * this should be the original data provided by reference when
+     * calling entityToArray
 	 *
 	 * @param array $data
 	 *
@@ -671,25 +910,6 @@ class AbstractMapper extends \Application\EventProvider implements
 			}
 		}
 		return $return;
-	}
-
-	/**
-	 * @param string|array|closure $where
-	 * @param string|TableIdentifier|null $tableName
-	 * @return ResultInterface
-	 */
-	protected function delete($where, $tableName = null)
-	{
-		$tableName = $tableName ?: $this->getTableName();
-
-		$sql = $this->getSql()->setTable($tableName);
-		$delete = $sql->delete();
-
-		$delete->where($where);
-
-		$statement = $sql->prepareStatementForSqlObject($delete);
-
-		return $statement->execute();
 	}
 
 	/**
@@ -772,7 +992,9 @@ class AbstractMapper extends \Application\EventProvider implements
 	public function setHydrator(ObservableStrategyInterface $hydrator)
 	{
 		if (!($hydrator instanceof ObservableStrategyInterface)) {
-			throw new \InvalidArgumentException('Hydrator must implement ObservableStrategyInterface');
+			throw new \InvalidArgumentException(
+                'Hydrator must implement ObservableStrategyInterface'
+            );
 		}
 		$this->hydrator = $hydrator;
 		return $this;
@@ -856,31 +1078,38 @@ class AbstractMapper extends \Application\EventProvider implements
 			}
 			return $entityArray;
 		}
-		throw new Exception\InvalidArgumentException('Entity passed to db mapper should be an array or object.');
+		throw new \InvalidArgumentException(
+            'Entity passed to db mapper should be an array or object.'
+        );
 	}
 
-	/**
-	 *
-	 * @param type $entity
-	 * @param \ZendAdditionals\Stdlib\Hydrator\ObservableClassMethods $hydrator
-	 * @return boolean
-	 */
-	protected function isOriginalEmpty($entity, ObservableClassMethods $hydrator)
-	{
-		$rowData = $hydrator->extractOriginal($entity);
+    /**
+     * Check if the given entity is empty, it is also possible to check if the
+     * original data for this entity is empty.
+     *
+     * @param object  $entity
+     * @param boolean $checkOriginalData
+     *
+     * @return boolean
+     */
+    protected function isEntityEmpty($entity, $checkOriginalData = false)
+    {
+        $hydrator = $this->getHydrator();
+
+        $rowData = $checkOriginalData ?
+            $hydrator->extractOriginal($entity) :
+            $hydrator->extract($entity);
+
 		$isEmpty = true;
 
 		foreach($rowData as $data) {
-			if ($data !== NULL) {
+			if ($data !== null && !is_object($data)) {
 				$isEmpty = false;
 				break;
 			}
 		}
 
 		return $isEmpty;
-	}
+    }
 }
-
-
-
 
