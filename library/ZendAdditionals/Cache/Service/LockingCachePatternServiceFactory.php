@@ -14,12 +14,12 @@ use ZendAdditionals\Cache\Pattern\LockingPatternOptions;
 class LockingCachePatternServiceFactory implements FactoryInterface
 {
     /**
-    * Creates the Locking Cache service
-    *
-    * @param ServiceLocatorInterface $serviceLocator
-    *
-    * @return LockingCache
-    */
+     * Creates the Locking Cache service
+     *
+     * @param ServiceLocatorInterface $serviceLocator
+     *
+     * @return LockingCache
+     */
     public function createService(ServiceLocatorInterface $serviceLocator)
     {
         $config = $serviceLocator->get('Config');
