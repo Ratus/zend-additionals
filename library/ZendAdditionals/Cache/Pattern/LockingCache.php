@@ -172,6 +172,11 @@ class LockingCache extends AbstractPattern
         return false;
     }
 
+    public function del($key)
+    {
+        return $this->storage->removeItem($key);
+    }
+
     /**
      * Set options
      *
