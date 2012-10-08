@@ -367,10 +367,6 @@ class AbstractMapper implements
             $associations = array_reverse($associations, true);
             $resultSet->setAssociations($associations);
         }
-        /*@var $stmt \Zend\Db\Adapter\Driver\Pdo\Statement*/
-        //var_dump($stmt->getParameterContainer());
-        //echo '<pre>';
-        //echo $this->debugSql($stmt->getSql());
 
         $resultSet->initialize($stmt->execute());
 
@@ -795,6 +791,16 @@ class AbstractMapper implements
                 get_class($this->getEntityPrototype()) . ' should be given.'
             );
         }
+
+        $this->getEventManager()->trigger(
+            'preSave',
+            $this,
+            array(
+                'entity'                => $entity,
+                'table_prefix'          => $tablePrefix,
+                'parent_relation_info'  => $parentRelationInfo,
+            )
+        );
 
         $hydrator = $this->getHydrator();
 

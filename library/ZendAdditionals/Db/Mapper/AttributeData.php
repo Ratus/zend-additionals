@@ -33,35 +33,47 @@ class AttributeData extends AbstractMapper
 
     public function __construct()
     {
-        $this->getEventManager()->attach('postInjectEntity', function(Event $event) {
-            $object = $event->getParam('entity');
-            if ($object instanceOf Entity\AttributeData) {
-                $propertyId = $object->getAttributePropertyId();
-                if (!empty($propertyId)) {
-                    $object->setValue($object->getAttributeProperty()->getLabel());
-                }
-            }
-        });
+        $this->getEventManager()->attach(
+            'postInjectEntity',
+            array($this, 'postInjectEntityListener')
+        );
+
+        $this->getEventManager()->attach(
+            'preSave',
+            array($this, 'preSaveListener')
+        );
     }
 
-    /**
-     *
-     * @param \ZendAdditionals\Db\Entity\AttributeData $entity
-     * @param type $tablePrefix
-     * @param array $parentRelationInfo
-     * @return type
-     * @throws \UnexpectedValueException
-     */
-    public function save($entity, $tablePrefix = null, array $parentRelationInfo = null)
+    public function postInjectEntityListener(Event $event)
     {
-        if (!($entity instanceof Entity\AttributeData)) {
-            throw new \UnexpectedValueException(
-                'The AttributeData mapper can only store AttributeData entities.'
-            );
+        $object = $event->getParam('entity');
+        if ($object instanceOf Entity\AttributeData) {
+            $propertyId = $object->getAttributePropertyId();
+            if (!empty($propertyId)) {
+                $object->setValue($object->getAttributeProperty()->getLabel());
+            }
         }
-        $attribute = $entity->getAttribute();
+    }
+
+    public function preSaveListener(Event $event)
+    {
+        $entity             = $event->getParam('entity');
+        /** @var $entity Entity\AttributeData */
+
+        $tablePrefix        = $event->getParam('table_prefix');
+        $parentRelationInfo = $event->getParam('parent_relation_info');
+
+       if (($entity instanceOf Entity\AttributeData) === false) {
+           return;
+       }
+
+
+       $attribute = $entity->getAttribute();
+       /** @var $attribute Entity\Attribute */
+
         if (
-            empty($parentRelationInfo) && (
+            empty($parentRelationInfo) &&
+            (
                 null === $attribute ||
                 $this->isEntityEmpty($attribute)
             )
@@ -70,6 +82,7 @@ class AttributeData extends AbstractMapper
                 'When storing AttributeData the Attribute MUST be set.'
             );
         }
+
         if (
             !empty($parentRelationInfo) && (
                 null === $attribute ||
@@ -86,28 +99,34 @@ class AttributeData extends AbstractMapper
             $entity->setAttribute($attribute);
         }
 
-        $this->validateValue($entity, $tablePrefix);
-
-
-        return parent::save($entity, $tablePrefix, $parentRelationInfo);
-    }
-
-    /**
-     * Validate the value
-     *
-     * @param Entity\AttributeData $entity
-     * @param string $tablePrefix
-     */
-    protected function validateValue(Entity\AttributeData $entity, $tablePrefix)
-    {
         $changes = $this->getEntityChangesOnly($entity);
         if (empty($changes)) {
             return true;
         }
-        $value = $entity->getValue();
-        $attribute = $entity->getAttribute();
-        if ($attribute->getType() === 'enum') {
 
+        $value = $entity->getValue();
+
+        if ($attribute->getType() === 'enum') {
+            $attributePropertyMapper = $this->getServiceManager()->get(AttributeProperty::SERVICE_NAME);
+            /** @var $attributePropertyMapper AttributeProperty */
+            $properties = $attributePropertyMapper->getPropertiesByAttributeId($attribute->getId(), $tablePrefix);
+
+            $propertyFound = false;
+            foreach($properties as $property) {
+                /** @var $property Entity\AttributeProperty */
+                if ($value === $property->getLabel()) {
+                    $propertyFound = true;
+                    $entity->setAttributeProperty($property);
+                    $entity->setValue(null);
+                    $entity->setValueTmp(null);
+                }
+            }
+
+            if ($propertyFound === false) {
+                throw new \UnexpectedValueException(
+                    "Property '{$value}' does not exists for attribute '{$attribute->getLabel()}'"
+                );
+            }
         } else {
             // TODO: check datetime
             // TODO: check int
@@ -119,10 +138,6 @@ class AttributeData extends AbstractMapper
                 throw new \Exception('au2');
             }
         }
-
-
-        var_dump($changes);
-
     }
 
     protected function getEntityChangesOnly($entity)

@@ -24,5 +24,21 @@ class AttributeProperty extends AbstractMapper
             'back_reference'         => array('id' => 'attribute_id'),
         ),
     );
+
+    public function getPropertiesByAttributeId($id, $tablePrefix)
+    {
+        $select = $this->getSelect($tablePrefix.$this->tableName)
+            ->where(array('attribute_id' => $id));
+
+        $entities = array();
+
+        $res = $this->getResult($select);
+
+        foreach($res as $result) {
+            $entities[] = $result;
+        }
+
+        return $entities;
+    }
 }
 
