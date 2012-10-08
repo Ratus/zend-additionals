@@ -11,8 +11,9 @@ namespace ZendAdditionals\Stdlib\Hydrator;
 
 use ZendAdditionals\Stdlib\Hydrator\Strategy\ObservableStrategyInterface;
 use Zend\Stdlib\Hydrator\ClassMethods;
-use Zend\ServiceManager\ServiceLocatorAwareInterface;
+use Zend\ServiceManager\ServiceManagerAwareInterface;
 use Zend\ServiceManager\ServiceLocatorInterface;
+use Zend\ServiceManager\ServiceManager;
 
 /**
  * @category   ZendAdditionals
@@ -21,12 +22,12 @@ use Zend\ServiceManager\ServiceLocatorInterface;
  */
 class ObservableClassMethods extends ClassMethods implements
     ObservableStrategyInterface,
-    ServiceLocatorAwareInterface
+    ServiceManagerAwareInterface
 {
     /**
-     * @var ServiceLocatorInterface
+     * @var ServiceManager
      */
-    protected $serviceLocator;
+    protected $serviceManager;
 
     /**
      * @var \SplObjectStorage
@@ -38,23 +39,25 @@ class ObservableClassMethods extends ClassMethods implements
         if ($this->objectStorage instanceof \SplObjectStorage) {
             return;
         }
-        $serviceLocator = $this->getServiceLocator();
-        if (!($serviceLocator instanceof ServiceLocatorInterface)) {
+        $serviceManager = $this->getServiceManager();
+        if (!($serviceManager instanceof ServiceManager)) {
             throw new \UnexpectedValueException(
-                'The service locator must be set, actually did not expect this...'
+                'The service manager must be set, actually did not expect this...'
             );
         }
         if (
-            !$serviceLocator->has(
-                'za_entity_storage'
+            !$serviceManager->has(
+                'ZendAdditionals\Db\EntityStorage\Service\EntityStorage'
             )
         ) {
-            throw new \UnexpectedValueException('A service is required for entity storage!');
-        } else {
-            $this->objectStorage = $serviceLocator->get(
-                'za_entity_storage'
+            $serviceManager->setFactory(
+                'ZendAdditionals\Db\EntityStorage\Service\EntityStorage',
+                'ZendAdditionals\Db\EntityStorage\Service\EntityStorageServiceFactory'
             );
         }
+        $this->objectStorage = $serviceManager->get(
+            'ZendAdditionals\Db\EntityStorage\Service\EntityStorage'
+        );
         if (!($this->objectStorage instanceof \SplObjectStorage)) {
             throw new \UnexpectedValueException(
                 'Did not get an \SplObjectStorage from the service locator.. bad...'
@@ -180,25 +183,25 @@ class ObservableClassMethods extends ClassMethods implements
     }
 
     /**
-     * Get the service locator
+     * Get the service manager
      *
-     * @return ServiceLocatorInterface
+     * @return ServiceManager
      */
-    public function getServiceLocator()
+    public function getServiceManager()
     {
-        return $this->serviceLocator;
+        return $this->serviceManager;
     }
 
     /**
-     * Set the service locator
+     * Set the service manager
      *
-     * @param ServiceLocatorInterface $serviceLocator
+     * @param ServiceManager $serviceManager
      *
      * @return ObservableClassMethods
      */
-    public function setServiceLocator(ServiceLocatorInterface $serviceLocator)
+    public function setServiceManager(ServiceManager $serviceManager)
     {
-        $this->serviceLocator = $serviceLocator;
+        $this->serviceManager = $serviceManager;
         return $this;
     }
 

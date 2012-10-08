@@ -1,12 +1,10 @@
 <?php
-
 namespace ZendAdditionals\Db\Mapper;
 
 use Zend\Db\Adapter\Adapter;
 use Zend\Db\Adapter\Driver\ResultInterface;
 use Zend\Db\Sql\Select;
 use Zend\Db\Sql\Sql;
-use Zend\Db\Sql\TableIdentifier;
 use Zend\Stdlib\Hydrator\HydratorInterface;
 use Zend\Stdlib\Hydrator\ClassMethods;
 use ZendAdditionals\Stdlib\Hydrator\ObservableClassMethods;
@@ -127,8 +125,20 @@ class AbstractMapper extends \Application\EventProvider implements
 
     protected $relationsByServiceName = array();
 
-    protected function initializeRelationsByserviceName()
+    protected $attributeRelations = array();
+
+    protected $attributeRelationsGenerated = false;
+
+    protected function initializeRelations()
     {
+        if (!$this->attributeRelationsGenerated) {
+            if (isset($this->attributeRelations['attributes']) && is_array($this->attributeRelations['attributes'])) {
+                foreach ($this->attributeRelations['attributes'] as $attributeLabel) {
+                    $this->generateAttributeRelation($attributeLabel);
+                }
+            }
+            $this->attributeRelationsGenerated = true;
+        }
         if (empty($this->relations)) {
             return;
         }
@@ -147,13 +157,64 @@ class AbstractMapper extends \Application\EventProvider implements
      */
     public function getRelation($mapperServiceName, $entityIdentifier)
     {
-        $this->initializeRelationsByserviceName();
         if (!isset($this->relationsByServiceName[$mapperServiceName][$entityIdentifier])) {
             throw new \UnexpectedValueException(
                 'Dit not expect the requested relation not to exist.'
             );
         }
         return $this->relationsByServiceName[$mapperServiceName][$entityIdentifier];
+    }
+
+    protected function generateAttributeRelation($label)
+    {
+        if (
+            !isset($this->attributeRelations['attributes']) ||
+            ($key = array_search($label, $this->attributeRelations['attributes'])) === false
+        ) {
+            throw new \UnexpectedValueException(
+                'There is no attribute relation defined for label "' . $label . '"!'
+            );
+        }
+
+        $property = is_numeric($key) ? $label : $key;
+
+        if (isset($this->relations[$property])) {
+            return;
+        }
+
+        if (!isset($this->attributeRelations['table_prefix'])) {
+            throw new \UnexpectedValueException(
+                'There is no attribute table prefix defined for label "' . $label . '"!'
+            );
+        }
+        if (!isset($this->attributeRelations['relation_column'])) {
+            throw new \UnexpectedValueException(
+                'There is no attribute relation column defined for label "' . $label . '"!'
+            );
+        }
+
+        $this->relations[$property] = array(
+            'mapper_service_name'  => AttributeData::SERVICE_NAME,
+            'required'             => false,
+            'foreign_table_prefix' => $this->attributeRelations['table_prefix'],
+            'back_reference'       => array(
+                'entity_id' => $this->attributeRelations['relation_column'],
+            ),
+            'extra_conditions'     => array(
+                array(
+                    'left' => array(
+                        'type'    => self::RELATION_TYPE_FOREIGN,
+                        'value'   => 'attribute_id',
+                    ),
+                    'operand' => self::OPERAND_EQUALS,
+                    'right'   => array(
+                        'type'     => self::RELATION_TYPE_CALLBACK,
+                        'value'    => array($label, $this->attributeRelations['table_prefix']),
+                        'callback' => array($this, 'getAttributeIdByLabel'),
+                    ),
+                ),
+            ),
+        );
     }
 
     /**
@@ -178,6 +239,8 @@ class AbstractMapper extends \Application\EventProvider implements
             throw new \Exception('No entity prototype set');
         }
 
+        $this->initializeRelations();
+
         $this->isInitialized = true;
     }
 
@@ -188,6 +251,22 @@ class AbstractMapper extends \Application\EventProvider implements
     public function setServiceManager(ServiceManager $serviceManager)
     {
         $this->serviceManager = $serviceManager;
+
+        if (!$this->serviceManager->has(Attribute::SERVICE_NAME)) {
+            $this->serviceManager->setFactory(
+                Attribute::SERVICE_NAME,
+                'ZendAdditionals\Service\AttributeMapperServiceFactory'
+            );
+            $this->serviceManager->setFactory(
+                AttributeData::SERVICE_NAME,
+                'ZendAdditionals\Service\AttributeDataMapperServiceFactory'
+            );
+            $this->serviceManager->setFactory(
+                AttributeProperty::SERVICE_NAME,
+                'ZendAdditionals\Service\AttributePropertyMapperServiceFactory'
+            );
+        }
+
         return $this;
     }
 
@@ -206,6 +285,7 @@ class AbstractMapper extends \Application\EventProvider implements
      */
     public function getEntityAssociationColumns()
     {
+        $this->initialize();
         return array_keys($this->relations);
     }
 
@@ -248,8 +328,6 @@ class AbstractMapper extends \Application\EventProvider implements
             $associations = array_reverse($associations, true);
             $resultSet->setAssociations($associations);
         }
-
-        //echo $this->debugSql($stmt->getSql());
 
         $resultSet->initialize($stmt->execute());
 
@@ -321,9 +399,9 @@ class AbstractMapper extends \Application\EventProvider implements
     protected function addJoin(
         Select $select,
         $entityIdentifier,
-        EntityAssociation $parentAssociation = null,
-        $tablePrefix = null
+        EntityAssociation $parentAssociation = null
     ) {
+        $this->initialize();
         // First get the correct mapper
         $mapper = $this;
         if ($parentAssociation instanceof EntityAssociation) {
@@ -362,6 +440,17 @@ class AbstractMapper extends \Application\EventProvider implements
 
         $entityAssociation->setServiceManager($this->getServiceManager());
 
+        $tablePrefix = isset($relation['foreign_table_prefix']) ?
+            $relation['foreign_table_prefix'] :
+            null;
+
+        if (
+            $parentAssociation instanceof EntityAssociation &&
+            isset($relation['recursive_table_prefix'])
+        ) {
+            $tablePrefix = $parentAssociation->getTablePrefix();
+        }
+
         $entityAssociation->setTablePrefix($tablePrefix);
 
         if (
@@ -377,6 +466,7 @@ class AbstractMapper extends \Application\EventProvider implements
             array_flip($relation['back_reference']);
 
         $predicate = $entityAssociation->getPredicate();
+
 
         foreach ($referenceInformation as $myId => $foreignId) {
             $predicate->equalTo(
@@ -415,6 +505,37 @@ class AbstractMapper extends \Application\EventProvider implements
         $this->storeEntityAssociationToSelect($select, $entityAssociation);
 
         return $entityAssociation;
+    }
+
+    /**
+     * Create joins for all possible attributes
+     *
+     * @param Select $select
+     */
+    protected function addAttributeJoins(Select $select)
+    {
+        if (
+            isset($this->attributeRelations['attributes']) &&
+            is_array($this->attributeRelations['attributes'])
+        ) {
+            foreach ($this->attributeRelations['attributes'] as $attribute) {
+                $this->addAttributeJoin($select, $attribute);
+            }
+        }
+    }
+
+    /**
+     * Create join for a specific attribute
+     *
+     * @param Select $select
+     * @param type $attribute
+     */
+    protected function addAttributeJoin(Select $select, $attribute)
+    {
+        $ref = $this->addJoin($select, $attribute);
+        $this->addJoin($select, 'attribute', $ref);
+        $this->addJoin($select, 'attribute_property', $ref);
+
     }
 
     /**
@@ -484,6 +605,13 @@ class AbstractMapper extends \Application\EventProvider implements
                 );
                 break;
         }
+    }
+
+    public function getAttributeIdByLabel($label, $tablePrefix)
+    {
+        /*@var $attributeMapper Attribute*/
+        $attributeMapper = $this->getServiceManager()->get(Attribute::SERVICE_NAME);
+        return $attributeMapper->getIdByLabel($label, $tablePrefix);
     }
 
 
@@ -726,6 +854,7 @@ class AbstractMapper extends \Application\EventProvider implements
         $tablePrefix = null,
         $ignoreEntitiesThatRequireBase = false
     ) {
+        $this->initialize();
         foreach ($this->relations as $entityIdentifier => $relationInfo) {
             $getAssociatedEntity = $this->underscoreToCamelCase(
                 'get_' . $entityIdentifier
@@ -767,7 +896,7 @@ class AbstractMapper extends \Application\EventProvider implements
 
             // Set the relation id's when the association relates back
             if ($associationHasBackReference) {
-                foreach ($relationInfo['back_reference'] as $myId => $foreignId) {
+                foreach ($relationInfo['back_reference'] as $foreignId => $myId) {
                     // Set id from entity into associated entity
                     $getMyId = $this->underscoreToCamelCase('get_' . $myId);
                     $setForeignId = $this->underscoreToCamelCase('set_' . $foreignId);
