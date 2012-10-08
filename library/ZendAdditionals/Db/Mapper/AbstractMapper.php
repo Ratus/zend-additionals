@@ -19,7 +19,11 @@ use Zend\ServiceManager\ServiceManager;
 use Zend\Db\Sql\Predicate\Predicate;
 use Zend\Db\Sql\Predicate\Operator;
 
-class AbstractMapper extends \Application\EventProvider implements
+use Zend\EventManager\EventManagerAwareInterface;
+use Zend\EventManager\EventManagerInterface;
+use Zend\EventManager\EventManager;
+
+class AbstractMapper implements
     ServiceManagerAwareInterface,
     AdapterAwareInterface
 {
@@ -118,6 +122,9 @@ class AbstractMapper extends \Application\EventProvider implements
     /** @var array */
     protected $extraJoinColumnRequiredKeys  = array('value', 'type');
 
+    /** @var EventManagerInterface */
+    protected static $eventManager;
+
     /**
      * @var boolean
      */
@@ -129,6 +136,34 @@ class AbstractMapper extends \Application\EventProvider implements
 
     protected $attributeRelationsGenerated = false;
 
+    public function __construct()
+    {
+        if (static::$eventManager === null) {
+            $this->setEventManager(new EventManager());
+        }
+    }
+
+    /**
+     * Set the event manager
+     *
+     * @param EventManagerInterface $eventManager
+     *
+     * @return AbstractMapper
+     */
+    public function setEventManager(EventManagerInterface $eventManager)
+    {
+        static::$eventManager = $eventManager;
+        return $this;
+    }
+
+    /**
+     * @return EventManagerInterface
+     */
+    public function getEventManager()
+    {
+        return static::$eventManager;
+    }
+
     protected function initializeRelations()
     {
         if (!$this->attributeRelationsGenerated) {
@@ -139,9 +174,11 @@ class AbstractMapper extends \Application\EventProvider implements
             }
             $this->attributeRelationsGenerated = true;
         }
+
         if (empty($this->relations)) {
             return;
         }
+
         if (empty($this->relationsByServiceName)) {
             foreach ($this->relations as $identifier => &$relation) {
                 $this->relationsByServiceName[$relation['mapper_service_name']][$identifier] = $relation;
@@ -322,6 +359,8 @@ class AbstractMapper extends \Application\EventProvider implements
             $this->getHydrator(),
             $this->getEntityPrototype()
         );
+
+        $resultSet->setEventManager($this->getEventManager());
 
         $associations = $this->getEntityAssociationsForSelect($select);
         if(!empty($associations)) {

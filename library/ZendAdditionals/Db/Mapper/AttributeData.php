@@ -1,6 +1,8 @@
 <?php
 namespace ZendAdditionals\Db\Mapper;
 
+use Zend\EventManager\Event;
+
 use ZendAdditionals\Db\Entity;
 
 class AttributeData extends AbstractMapper
@@ -28,6 +30,19 @@ class AttributeData extends AbstractMapper
             'reference'              => array('attribute_property_id' => 'id'),
         ),
     );
+
+    public function __construct()
+    {
+        $this->getEventManager()->attach('postInjectEntity', function(Event $event) {
+            $object = $event->getParam('entity');
+            if ($object instanceOf Entity\AttributeData) {
+                $propertyId = $object->getAttributePropertyId();
+                if (!empty($propertyId)) {
+                    $object->setValue($object->getAttributeProperty()->getLabel());
+                }
+            }
+        });
+    }
 
     /**
      *

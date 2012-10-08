@@ -1,9 +1,14 @@
 <?php
 namespace ZendAdditionals\Db\ResultSet;
 
+use Zend\EventManager\EventManagerAwareInterface;
+use Zend\EventManager\EventManagerInterface;
+use Zend\EventManager\EventManager;
+
 use ZendAdditionals\Db\EntityAssociation\EntityAssociation;
 
-class JoinedHydratingResultSet extends \Zend\Db\ResultSet\HydratingResultSet
+class JoinedHydratingResultSet extends \Zend\Db\ResultSet\HydratingResultSet implements
+    EventManagerAwareInterface
 {
     protected $associations = array();
 
@@ -32,7 +37,6 @@ class JoinedHydratingResultSet extends \Zend\Db\ResultSet\HydratingResultSet
         $transform = new \Zend\Filter\Word\UnderscoreToCamelCase();
 
         $entities = array();
-
         if (!empty($this->associations)) {
             foreach($this->associations as $association) {
                 /* @var $association EntityAssociation */
@@ -46,9 +50,19 @@ class JoinedHydratingResultSet extends \Zend\Db\ResultSet\HydratingResultSet
                 }
                 $setCall = 'set' . $transform($association->getEntityIdentifier());
                 $prototype = clone $association->getPrototype();
+
+
+                $this->getEventManager()->trigger('preHydrate', $this, $entityData);
+
                 $entities[$association->getAlias()] = $this->hydrator->hydrate(
                     $entityData,
                     $prototype
+                );
+
+                $this->getEventManager()->trigger(
+                    'postHydrate',
+                    $this,
+                    $entities[$association->getAlias()]
                 );
 
                 $entitiesToInject[] = array(
@@ -58,13 +72,31 @@ class JoinedHydratingResultSet extends \Zend\Db\ResultSet\HydratingResultSet
                 );
             }
         }
+
+        $this->getEventManager()->trigger('preHydrate', $this, $data);
         $entities['base'] = $this->hydrator->hydrate($data, $object);
+        $this->getEventManager()->trigger('postHydrate', $this, $entities['base']);
+
         foreach ($entitiesToInject as $aliasInfo) {
+            $eventParams = array(
+                'entity' => $entities[$aliasInfo['parent_alias']],
+                'value' => $entities[$aliasInfo['alias']],
+                'call' => $aliasInfo['set_call'],
+            );
+
+            $this->getEventManager()->trigger('preInjectEntity', $this, $eventParams);
+
             $entities[$aliasInfo['parent_alias']]
                 ->$aliasInfo['set_call']($entities[$aliasInfo['alias']]);
+
+            $this->getEventManager()->trigger('postInjectEntity', $this, $eventParams);
         }
 
-        return $this->hydrator->hydrate($data, $object);
+        $this->getEventManager()->trigger('preHydrate', $this, $data);
+        $entity = $this->hydrator->hydrate($data, $object);
+        $this->getEventManager()->trigger('postHydrate', $this, $entity);
+
+        return $entity;
     }
 
     /**
@@ -95,6 +127,29 @@ class JoinedHydratingResultSet extends \Zend\Db\ResultSet\HydratingResultSet
         }
 
         return $input;
+    }
+
+    /**
+     * Set the event manager
+     *
+     * @param EventManagerInterface $eventManager
+     *
+     * @return JoinedHydratingResultSet
+     */
+    public function setEventManager(EventManagerInterface $eventManager)
+    {
+        $this->eventManager = $eventManager;
+        return $this;
+    }
+
+    /**
+     * Get the event manager
+     *
+     * @return EventManager
+     */
+    public function getEventManager()
+    {
+        return $this->eventManager;
     }
 }
 
