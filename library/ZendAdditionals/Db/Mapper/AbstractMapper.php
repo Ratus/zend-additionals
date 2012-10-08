@@ -328,6 +328,10 @@ class AbstractMapper extends \Application\EventProvider implements
             $associations = array_reverse($associations, true);
             $resultSet->setAssociations($associations);
         }
+        /*@var $stmt \Zend\Db\Adapter\Driver\Pdo\Statement*/
+        //var_dump($stmt->getParameterContainer());
+        //echo '<pre>';
+        //echo $this->debugSql($stmt->getSql());
 
         $resultSet->initialize($stmt->execute());
 
@@ -535,7 +539,6 @@ class AbstractMapper extends \Application\EventProvider implements
         $ref = $this->addJoin($select, $attribute);
         $this->addJoin($select, 'attribute', $ref);
         $this->addJoin($select, 'attribute_property', $ref);
-
     }
 
     /**
@@ -726,13 +729,16 @@ class AbstractMapper extends \Application\EventProvider implements
      * Save the given entity
      *
      * @param object $entity
+     * @param string $tablePrefix
+     * @param array  $parentRelationInfo When this save is called from a parent antity
+     * the relational info from the parent is passed thru.
      *
      * @return ResultInterface|bool Boolean true gets returned
      * when there is nothing to update
      *
      * @throws \Exception
      */
-    public function save($entity, $tablePrefix = null)
+    public function save($entity, $tablePrefix = null, array $parentRelationInfo = null)
     {
         if ($this->getTablePrefixRequired() && empty($tablePrefix)) {
             throw new \UnexpectedValueException(
@@ -898,7 +904,7 @@ class AbstractMapper extends \Application\EventProvider implements
             if ($associationHasBackReference) {
                 foreach ($relationInfo['back_reference'] as $foreignId => $myId) {
                     // Set id from entity into associated entity
-                    $getMyId = $this->underscoreToCamelCase('get_' . $myId);
+                    $getMyId      = $this->underscoreToCamelCase('get_' . $myId);
                     $setForeignId = $this->underscoreToCamelCase('set_' . $foreignId);
                     $associatedEntity->$setForeignId($entity->$getMyId());
                 }
@@ -922,7 +928,11 @@ class AbstractMapper extends \Application\EventProvider implements
             }
 
             // Save the associated entity
-            $relationServiceMapper->save($associatedEntity, $tablePrefix);
+            $relationServiceMapper->save(
+                $associatedEntity,
+                $tablePrefix,
+                $relationInfo
+            );
 
             // Set id from associated entity into entity (if applicable)
             if ($entityHasReferenceToAssociation) {

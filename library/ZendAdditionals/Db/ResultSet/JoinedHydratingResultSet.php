@@ -34,15 +34,22 @@ class JoinedHydratingResultSet extends \Zend\Db\ResultSet\HydratingResultSet
         $entities = array();
 
         if (!empty($this->associations)) {
-            foreach($this->associations as $association) { /* @var $association EntityAssociation */
-                $dataJoin = $this->pregGrepKeys('/^'.preg_quote($association->getAlias()).'__/', $data);
+            foreach($this->associations as $association) {
+                /* @var $association EntityAssociation */
+                $dataJoin = $this->pregGrepKeys(
+                    '/^'.preg_quote($association->getAlias()).'__/',
+                    $data
+                );
                 $entityData = array();
                 foreach ($dataJoin as $dataKey => $dataValue) {
                     $entityData[substr($dataKey, strrpos($dataKey, '__') + 2)] = $dataValue;
                 }
                 $setCall = 'set' . $transform($association->getEntityIdentifier());
                 $prototype = clone $association->getPrototype();
-                $entities[$association->getAlias()] = $this->hydrator->hydrate($entityData, $prototype);
+                $entities[$association->getAlias()] = $this->hydrator->hydrate(
+                    $entityData,
+                    $prototype
+                );
 
                 $entitiesToInject[] = array(
                     'set_call' => $setCall,
@@ -53,7 +60,8 @@ class JoinedHydratingResultSet extends \Zend\Db\ResultSet\HydratingResultSet
         }
         $entities['base'] = $this->hydrator->hydrate($data, $object);
         foreach ($entitiesToInject as $aliasInfo) {
-            $entities[$aliasInfo['parent_alias']]->$aliasInfo['set_call']($entities[$aliasInfo['alias']]);
+            $entities[$aliasInfo['parent_alias']]
+                ->$aliasInfo['set_call']($entities[$aliasInfo['alias']]);
         }
 
         return $this->hydrator->hydrate($data, $object);
@@ -67,8 +75,12 @@ class JoinedHydratingResultSet extends \Zend\Db\ResultSet\HydratingResultSet
      *
      * @return array The filtered input array
      */
-    public function pregGrepKeys($pattern, $input, $keyReplacePattern = null, $keyReplaceValue = null)
-    {
+    public function pregGrepKeys(
+        $pattern,
+        $input,
+        $keyReplacePattern = null,
+        $keyReplaceValue = null
+    ) {
         $keys   = array_keys($input);
         $values = array_values($input);
         $input  = array();

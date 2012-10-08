@@ -15,11 +15,21 @@ class Attribute extends AbstractMapper
 
     public function getIdByLabel($label, $tablePrefix)
     {
+        $result = $this->getAttributeByLabel($label, $tablePrefix);
+        return $result->getId();
+    }
+
+    public function getAttributeByLabel($label, $tablePrefix)
+    {
         $select = $this->getSelect($tablePrefix . $this->getTableName())->where(array('label' => $label));
 
-        $result = $this->getCurrent($select);
+        return $this->getCurrent($select);
+    }
 
-        return $result->getId();
+    public function getAttributeById($id, $tablePrefix)
+    {
+        $select = $this->getSelect($tablePrefix . $this->getTableName())->where(array('id' => $id));
+        return $this->getCurrent($select);
     }
 }
 

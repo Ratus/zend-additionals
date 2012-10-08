@@ -8,12 +8,35 @@ class AttributeProperty
     protected $label;
     protected $sortOrder;
 
+    /**
+     * @var Attribute
+     */
+    protected $attribute;
+
     public function getId(){
         return $this->id;
     }
 
     public function setId($id){
         $this->id = $id;
+        return $this;
+    }
+
+    /**
+     * @return Attribute
+     */
+    public function getAttribute()
+    {
+        return $this->attribute;
+    }
+
+    /**
+     * @param  Attribute $attribute
+     * @return AttributeProperty
+     */
+    public function setAttribute(Attribute $attribute)
+    {
+        $this->attribute = $attribute;
         return $this;
     }
 
