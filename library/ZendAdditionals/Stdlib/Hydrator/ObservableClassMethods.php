@@ -119,6 +119,17 @@ class ObservableClassMethods extends ClassMethods implements
         return false;
     }
 
+    public function extractRecursive($object)
+    {
+        $return = $this->extract($object);
+        foreach ($return as $key => $possibleObject) {
+            if (is_object($possibleObject)) {
+                $return[$key] = $this->extractRecursive($possibleObject);
+            }
+        }
+        return $return;
+    }
+
     /**
      * Extracts the original data for a specific entity, the normal extract will be returned
      * when this entity was not hydrated by this instance.

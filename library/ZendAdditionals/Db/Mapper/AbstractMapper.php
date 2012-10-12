@@ -164,6 +164,240 @@ class AbstractMapper implements
         return static::$eventManager;
     }
 
+    protected function applyFilter(Select $select, array $filter)
+    {
+        $where = array();
+        if (isset($filter['profile_id'])) {
+            $id = (int) $filter['profile_id'];
+            $where['profile_id'] = $id;
+        }
+        if (!empty($where)) {
+            $select->where($where);
+        }
+    }
+
+    public function count(array $filter = null)
+    {
+        // @TODO: CACHE!!!
+        $select = $this->getSelect();
+
+        // @TODO: Only attribute join when filter containts attribute filters
+        //$this->addAttributeJoins($select, false);
+
+        // @TODO: Only profile join when filter containts profile filters
+        //$this->addJoin($select, 'profile', null, array());
+
+        // Apply filter
+        if (is_array($filter)) {
+            $this->applyFilter($select, $filter);
+        }
+
+        return $this->getCount($select);
+    }
+
+    /**
+     *
+     * @param array $range array('begin' => 0, 'end' => 10)
+     * @param array $filter array('column' => 'value', 'join1' => array('column' => 'value'))
+     * @param array $orderBy array('column' => 'ASC', 'join2' => array('column' => 'DESC'))
+     * @param array $joins array('some_entity', 'other_entity', 'base_entity' => array('some_other_from_base'))
+     * @param array $columnsFilter array('col_one', 'some_entity' => array('col_two'))
+     * @return type
+     */
+    public function search(
+        array $range = null,
+        array $filter = null,
+        array $orderBy = null,
+        array $joins = null,
+        array $columnsFilter = null
+    ) {
+        $sampleRange = array(
+            'begin' => 0,
+            'end'  => 150,
+        );
+
+        $sampleFilter = array(
+            'profile_id' => 1,
+            'profile' => array(
+                'splash_photo_id' => 3,
+                'splash_photo' => array(
+                    'profile_id' => 1,
+                ),
+            ),
+        );
+
+        $sampleOrderBy = array(
+            'profile_id' => 'DESC',
+            'profile' => array(
+                'splash_photo_id' => 'ASC',
+                'splash_photo' => array(
+                    'profile_id' => 'DESC',
+                ),
+            ),
+        );
+
+        $samplejoins = array(
+            'profile',
+            'other_entity' => array(
+                'splash_photo',
+                'another_one' => array(
+                    'person',
+                ),
+            ),
+        );
+
+        $sampleColumnsFilter = array(
+            'profile_id',
+            'some_entity' => array(
+                'some_entity_id',
+                'sub_entity' => array(
+                    'sub_id',
+                ),
+            ),
+        );
+
+        $limit = 1000;
+        $offset = 0;
+        if (isset($range['begin']) && $range['begin'] >= 0) {
+            $offset = (int)$range['begin'];
+            if (isset($range['end']) && $range['end'] > $range['begin']) {
+                $limit = ((int)$range['end'] - (int)$range['begin']) + 1;
+            }
+        }
+        $select = $this->getSelect();
+        $select->limit($limit);
+        $select->offset($offset);
+
+        $applyColumnsFilter = false;
+        if (!empty($columnsFilter)) {
+            $applyColumnsFilter = true;
+        }
+
+        $columns     = array();
+        $joinColumns = array();
+        if ($applyColumnsFilter) {
+            foreach ($columnsFilter as $joinKey => $column) {
+                if (is_array($column)) {
+                    $joinColumns[$joinKey] = $column;
+                } else {
+                    $columns[] = $column;
+                }
+            }
+        }
+
+        if (
+            isset($this->attributeRelations['attributes']) &&
+            is_array($this->attributeRelations['attributes'])
+        ) {
+            foreach ($this->attributeRelations['attributes'] as $attribute) {
+                if (
+                    $applyColumnsFilter &&
+                    ($colKey = array_search($attribute, $columns)) !== false
+                ) {
+                    // Skip this attribute join when not in selection!
+                    unset($columns[$colKey]);
+                    $columns = array_values($columns);
+                } else {
+                    continue;
+                }
+                $this->addAttributeJoin($select, $attribute);
+            }
+        }
+
+        // Add remaining columns to normal select
+        if ($applyColumnsFilter && !empty($columns)) {
+            $select->columns($columns);
+        }
+
+        // Now we will start to add the necessary joins, since joins
+        // are configured recursive a pointer is required to surf through
+        // the recursion.
+        $pointer = &$joins;
+
+        $columnsPointer = &$joinColumns;
+
+        /*
+         * When surfing through joins and going a level deeper a reference to
+         * the current depth gets appended to this array to be able to go
+         * back when the nested array has been looped.
+         */
+        $joinDepth    = array();
+        $columnsDepth = array();
+        $ref          = null;
+        while(true) {
+            $var = each($pointer);
+            if ($var === false) {
+                if (empty($joinDepth)) {
+                    // There is no previous array to jump back to
+                    break;
+                }
+                // Restore current pointer to the previous depth
+                $previous       = array_pop($joinDepth);
+                $pointer        = &$previous[0];
+                $ref            = $previous[1];
+                $columnsPointer = &$previous[2];
+                continue;
+            }
+            /*
+             * When the value is an array we want add a join based on the key,
+             * store a reference to this join and set the pointer to this array
+             * to start the nested loop.
+             */
+            if (is_array($var['value'])) {
+                $joinDepth[] = array(&$pointer, $ref, &$columnsPointer);
+                $ref = $this->addJoin(
+                    $select,
+                    $var['key'],
+                    $ref,
+                    (
+                        $applyColumnsFilter ? (
+                            isset($columnsPointer[$var['key']]) ?
+                            $columnsPointer[$var['key']] :
+                            array()
+                        ) : null
+                    )
+                );
+                /*@var $ref EntityAssociation*/
+                $pointer = &$pointer[$var['key']];
+                if (
+                    is_array($columnsPointer) &&
+                    isset($columnsPointer[$var['key']])
+                ) {
+                    $columnsPointer = &$columnsPointer[$var['key']];
+                } else {
+                    $columnsPointer = null;
+                }
+                continue;
+            }
+            $this->addJoin(
+                $select,
+                $var['value'],
+                $ref,
+                (
+                    $applyColumnsFilter ? (
+                        isset($columnsPointer[$var['value']]) ?
+                        $columnsPointer[$var['value']] :
+                        array()
+                    ) : null
+                )
+            );
+        }
+
+        if (isset($range['begin']) && $range['begin'] >= 0) {
+            $select->offset((int)$range['begin']);
+            if (isset($range['end']) && $range['end'] > $range['begin']) {
+                $select->limit(((int)$range['end'] - (int)$range['begin'])+1);
+            }
+        }
+
+        // Apply filter
+        if (is_array($filter)) {
+            $this->applyFilter($select, $filter);
+        }
+
+        return $this->getAll($select);
+    }
+
     protected function initializeRelations()
     {
         if (!$this->attributeRelationsGenerated) {
@@ -367,6 +601,7 @@ class AbstractMapper implements
             $associations = array_reverse($associations, true);
             $resultSet->setAssociations($associations);
         }
+        /*@var $stmt \Zend\Db\Adapter\Driver\Pdo\Statement*/
 
         $resultSet->initialize($stmt->execute());
 
@@ -375,9 +610,42 @@ class AbstractMapper implements
         return $resultSet;
     }
 
+    protected function getCount(Select $select)
+    {
+        $this->initialize();
+        $select->columns(array('total' => new \Zend\Db\Sql\Expression('COUNT(*)')));
+        $stmt = $this->getSlaveSql()->prepareStatementForSqlObject($select);
+
+        $result = $stmt->execute();
+        /*@var $result \Zend\Db\Adapter\Driver\Pdo\Result*/
+
+        $total = $result->current();
+        //return $total['total'];
+
+        return (int)$total['total'];
+    }
+
+    protected function getRow(Select $select)
+    {
+	return $this->getResult($select)->getDataSource()->current();
+    }
+
     protected function getCurrent(Select $select)
     {
         return $this->getResult($select)->current();
+    }
+
+    protected function getAll(Select $select)
+    {
+        $return = array();
+        $result = $this->getResult($select);
+        /*@var $result \ZendAdditionals\Db\ResultSet\JoinedHydratingResultSet*/
+
+        while ($entity = $result->current()) {
+            $return[] = $entity;
+            $result->next();
+        }
+        return $return;
     }
 
    protected function debugSql($sql) {
@@ -429,7 +697,7 @@ class AbstractMapper implements
      * @param Select $select
      * @param string $entityIdentifier
      * @param EntityAssociation $parentAssociation
-     * @param string The prefix for joined table
+     * @param array $columnFilter By default all columns get selected, use this array to minimize the selection
      *
      * @return EntityAssociation
      *
@@ -438,7 +706,8 @@ class AbstractMapper implements
     protected function addJoin(
         Select $select,
         $entityIdentifier,
-        EntityAssociation $parentAssociation = null
+        EntityAssociation $parentAssociation = null,
+        array $columnFilter = null
     ) {
         $this->initialize();
         // First get the correct mapper
@@ -534,10 +803,22 @@ class AbstractMapper implements
             }
         }
 
+        $allJoinColumns = $entityAssociation->getJoinColumns();
+        $joinColumns = array();
+        if (is_array($columnFilter)) {
+            foreach ($allJoinColumns as $alias => $column) {
+                if (array_search($column, $columnFilter) !== false) {
+                    $joinColumns[$alias] = $column;
+                }
+            }
+        } else {
+            $joinColumns = $allJoinColumns;
+        }
+
         $select->join(
             $entityAssociation->getJoinTable(),
             $entityAssociation->getPredicate(),
-            $entityAssociation->getJoinColumns(),
+            $joinColumns,
             $entityAssociation->getJoinType()
         );
 
@@ -551,14 +832,14 @@ class AbstractMapper implements
      *
      * @param Select $select
      */
-    protected function addAttributeJoins(Select $select)
+    protected function addAttributeJoins(Select $select, $addSelectionColumns = true)
     {
         if (
             isset($this->attributeRelations['attributes']) &&
             is_array($this->attributeRelations['attributes'])
         ) {
             foreach ($this->attributeRelations['attributes'] as $attribute) {
-                $this->addAttributeJoin($select, $attribute);
+                $this->addAttributeJoin($select, $attribute, $addSelectionColumns);
             }
         }
     }
@@ -569,11 +850,11 @@ class AbstractMapper implements
      * @param Select $select
      * @param type $attribute
      */
-    protected function addAttributeJoin(Select $select, $attribute)
+    protected function addAttributeJoin(Select $select, $attribute, $addSelectionColumns = true)
     {
-        $ref = $this->addJoin($select, $attribute);
-        $this->addJoin($select, 'attribute', $ref);
-        $this->addJoin($select, 'attribute_property', $ref);
+        $ref = $this->addJoin($select, $attribute, null, $addSelectionColumns ? null : array());
+        $this->addJoin($select, 'attribute', $ref, $addSelectionColumns ? null : array());
+        $this->addJoin($select, 'attribute_property', $ref, $addSelectionColumns ? null : array());
     }
 
     /**
