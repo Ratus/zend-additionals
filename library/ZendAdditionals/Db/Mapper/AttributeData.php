@@ -46,11 +46,25 @@ class AttributeData extends AbstractMapper
 
     public function postInjectEntityListener(Event $event)
     {
-        $object = $event->getParam('entity');
-        if ($object instanceOf Entity\AttributeData) {
-            $propertyId = $object->getAttributePropertyId();
-            if (!empty($propertyId)) {
-                $object->setValue($object->getAttributeProperty()->getLabel());
+        $object = $event->getParams();
+        /** @var Entity\EventContainer */
+
+        $data = $object->getData();
+        if ($object->getEntityClassName() == 'ZendAdditionals\Db\Entity\AttributeData') {
+            if ($object->getHydrateType() === Entity\EventContainer::HYDRATE_TYPE_OBJECT) {
+                $propertyId = $data['entity']->getAttributePropertyId();
+                if (!empty($propertyId)) {
+                    $data['entity']->setValue($data['entity']->getAttributeProperty()->getLabel());
+                }
+            } else if (
+                $object->getHydrateType() === Entity\EventContainer::HYDRATE_TYPE_ARRAY
+            ) {
+                $propertyId = $data['entity']['attribute_property_id'];
+                if (!empty($propertyId)) {
+                    $data['entity']['value'] = $data['entity']['attribute_property']['label'];
+                }
+
+                $object->setData($data);
             }
         }
     }

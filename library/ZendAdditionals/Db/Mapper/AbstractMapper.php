@@ -708,23 +708,23 @@ abstract class AbstractMapper implements
         return (int)$total['total'];
     }
 
-    protected function getRow(Select $select)
+    protected function getRow(Select $select, $returnEntity = true)
     {
-	return $this->getResult($select)->getDataSource()->current();
+	return $this->getResult($select)->getDataSource()->current($returnEntity);
     }
 
-    protected function getCurrent(Select $select)
+    protected function getCurrent(Select $select, $returnEntity = true)
     {
-        return $this->getResult($select)->current();
+        return $this->getResult($select)->current($returnEntity);
     }
 
-    protected function getAll(Select $select)
+    protected function getAll(Select $select, $returnEntity = true)
     {
         $return = array();
         $result = $this->getResult($select);
         /*@var $result \ZendAdditionals\Db\ResultSet\JoinedHydratingResultSet*/
 
-        while ($entity = $result->current()) {
+        while ($entity = $result->current($returnEntity)) {
             $return[] = $entity;
             $result->next();
         }
