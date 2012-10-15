@@ -6,6 +6,7 @@ use Zend\EventManager\EventManagerInterface;
 use Zend\EventManager\EventManager;
 
 use ZendAdditionals\Db\EntityAssociation\EntityAssociation;
+use ZendAdditionals\Db\Entity;
 
 class JoinedHydratingResultSet extends \Zend\Db\ResultSet\HydratingResultSet implements
     EventManagerAwareInterface
@@ -25,78 +26,192 @@ class JoinedHydratingResultSet extends \Zend\Db\ResultSet\HydratingResultSet imp
         return $this;
     }
 
-    public function current()
+    /**
+     * Get the current record from the resultset
+     *
+     * @param boolean $returnEntity When FALSE the result will be an array
+     *
+     * @return object|array|FALSE
+     */
+    public function current($returnEntity = true)
     {
         $data = $this->dataSource->current();
-        $object = clone $this->objectPrototype;
-        if (!is_array($data)) {
+
+        // Return false when no data has been found
+        if (is_array($data) === false) {
             return false;
         }
-        $entitiesToInject = array();
 
-        $transform = new \Zend\Filter\Word\UnderscoreToCamelCase();
+        $object             = clone $this->objectPrototype;
+        $objectClassName    = get_class($object);
+        $entitiesToInject   = array();
+        $transform          = new \Zend\Filter\Word\UnderscoreToCamelCase();
+        $entities           = array();
+        $entityClasses      = array(
+            'base' => $objectClassName
+        );
 
-        $entities = array();
-        if (!empty($this->associations)) {
+        // Create Event Container for the event triggers
+        $eventContainer     = new Entity\EventContainer();
+
+        if ($returnEntity) {
+            $eventContainer->setHydrateType(Entity\EventContainer::HYDRATE_TYPE_OBJECT);
+        } else {
+            $eventContainer->setHydrateType(Entity\EventContainer::HYDRATE_TYPE_ARRAY);
+        }
+
+        if (empty($this->associations) === false) {
             foreach($this->associations as $association) {
                 /* @var $association EntityAssociation */
-                $dataJoin = $this->pregGrepKeys(
-                    '/^'.preg_quote($association->getAlias()).'__/',
-                    $data
-                );
-                $entityData = array();
-                foreach ($dataJoin as $dataKey => $dataValue) {
-                    $entityData[substr($dataKey, strrpos($dataKey, '__') + 2)] = $dataValue;
+                $alias           = $association->getAlias();
+                $entityData      = $this->shiftJoinData($alias, $data);
+                $entityClassName = get_class($association->getPrototype());
+
+                // Save classname for the data injection phase
+                $entityClasses[$alias] = $entityClassName;
+
+                // Fill the event container
+                $eventContainer->setData($entityData);
+                $eventContainer->setEntityClassName($entityClassName);
+                unset($entityData);
+
+                // Trigger preHydrate event
+                $this->getEventManager()->trigger('preHydrate', $this, $eventContainer);
+
+                // Call hydrator only when returning entities
+                if ($returnEntity) {
+                    $prototype = clone $association->getPrototype();
+
+                    // Hydrate the data
+                    $eventContainer->setData(
+                        $this->hydrator->hydrate(
+                            $eventContainer->getData(),
+                            $prototype
+                        )
+                    );
                 }
-                $setCall = 'set' . $transform($association->getEntityIdentifier());
-                $prototype = clone $association->getPrototype();
 
+                // Trigger postHydrate event
+                $this->getEventManager()->trigger('postHydrate', $this, $eventContainer);
 
-                $this->getEventManager()->trigger('preHydrate', $this, $entityData);
+                // Set the hydrated results to the entities array
+                $entities[$alias] = $eventContainer->getData();
+                $eventContainer->setData(null);
 
-                $entities[$association->getAlias()] = $this->hydrator->hydrate(
-                    $entityData,
-                    $prototype
-                );
-
-                $this->getEventManager()->trigger(
-                    'postHydrate',
-                    $this,
-                    $entities[$association->getAlias()]
-                );
-
-                $entitiesToInject[] = array(
-                    'set_call' => $setCall,
-                    'parent_alias' => $association->getParentAlias() ?: 'base',
-                    'alias' => $association->getAlias(),
-                );
+                // Set references for injecting entities after hydrating main object
+                $entitiesToInject[] = $association;
             }
         }
 
-        $this->getEventManager()->trigger('preHydrate', $this, $data);
-        $entities['base'] = $this->hydrator->hydrate($data, $object);
-        $this->getEventManager()->trigger('postHydrate', $this, $entities['base']);
+        // Set eventdata for main object
+        $eventContainer->setEntityClassName($objectClassName);
+        $eventContainer->setData($data);
+        unset($data);
 
-        foreach ($entitiesToInject as $aliasInfo) {
-            $eventParams = array(
-                'entity' => $entities[$aliasInfo['parent_alias']],
-                'value' => $entities[$aliasInfo['alias']],
-                'call' => $aliasInfo['set_call'],
+        // Trigger preHydrate for main object
+        $this->getEventManager()->trigger('preHydrate', $this, $eventContainer);
+
+        if ($returnEntity) {
+            // Hydrate main object
+            $eventContainer->setData(
+                $this->hydrator->hydrate(
+                    $eventContainer->getData(),
+                    $object
+                )
             );
-
-            $this->getEventManager()->trigger('preInjectEntity', $this, $eventParams);
-
-            $entities[$aliasInfo['parent_alias']]
-                ->$aliasInfo['set_call']($entities[$aliasInfo['alias']]);
-
-            $this->getEventManager()->trigger('postInjectEntity', $this, $eventParams);
         }
 
-        $this->getEventManager()->trigger('preHydrate', $this, $data);
-        $entity = $this->hydrator->hydrate($data, $object);
-        $this->getEventManager()->trigger('postHydrate', $this, $entity);
+        // Trigger postHydrate for main object
+        $this->getEventManager()->trigger('postHydrate', $this, $eventContainer);
 
-        return $entity;
+        // Set the base to entities array
+        $entities['base'] = $eventContainer->getData();
+        $eventContainer->setData(null);
+
+        // Inject the entities to the main object
+        foreach ($entitiesToInject as $association) {
+            /** @var EntityAssociation */
+            $parentAlias        = $association->getParentAlias() ?: 'base';
+            $alias              = $association->getAlias();
+            $entityIdentifier   = $association->getEntityIdentifier();
+            $setCall            = 'set'.$transform($entityIdentifier);
+
+            // Set event parameters
+            $eventParams = array(
+                'entity' => $entities[$parentAlias],
+                'value'  => $entities[$alias],
+                'call'   => $setCall,
+            );
+
+            // Set parameters in the eventContainer
+            $eventContainer->setData($eventParams);
+            $eventContainer->setEntityClassName($entityClasses[$parentAlias]);
+
+            // We can unset data when we're im array mode
+            if ($returnEntity === false) {
+                unset($eventParams);
+            }
+
+
+            // Trigger preInjectEntity
+            $this->getEventManager()->trigger('preInjectEntity', $this, $eventContainer);
+
+            // Set eventParams when in array mode
+            if ($returnEntity === false) {
+                $eventParams = $eventContainer->getData();
+
+                // Overwrite entities
+                $entities[$parentAlias] = $eventParams['entity'];
+                $entities[$alias]       = $eventParams['value'];
+
+                $entities[$parentAlias][$entityIdentifier] = $entities[$alias];
+
+                // Rebuild eventParams for array mode
+                $eventParams = array(
+                    'entity' => $entities[$parentAlias],
+                    'value'  => $entities[$alias],
+                    'call'   => $setCall,
+                );
+
+                $eventContainer->setData($eventParams);
+                unset($eventParams);
+            } else {
+                // Inject the data via OOP
+                $entities[$parentAlias]->$setCall($entities[$alias]);
+            }
+
+            // Trigger postInjectEntity
+            $this->getEventManager()->trigger('postInjectEntity', $this, $eventContainer);
+
+             // Set eventParams when in array mode
+            if ($returnEntity === false) {
+                $eventParams = $eventContainer->getData();
+
+                // Overwrite entities
+                $entities[$parentAlias] = $eventParams['entity'];
+                $entities[$alias]       = $eventParams['value'];
+            }
+        }
+
+        return $entities['base'];
+    }
+
+    protected function shiftJoinData($alias, &$data, $delimiter = '__')
+    {
+        $needle     = preg_quote($alias.$delimiter);
+        $dataJoin   = $this->pregGrepKeys("/^{$needle}/", $data);
+
+        $data = array_diff_key($data, $dataJoin);
+
+        $joinData = array();
+
+        foreach ($dataJoin as $dataKey => $dataValue) {
+            $newDataKey = substr($dataKey, strrpos($dataKey, $delimiter) + 2);
+            $joinData[$newDataKey] = $dataValue;
+            unset($dataJoin[$dataKey]);
+        }
+
+        return $joinData;
     }
 
     /**
