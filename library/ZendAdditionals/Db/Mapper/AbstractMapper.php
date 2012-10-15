@@ -23,7 +23,9 @@ use Zend\EventManager\EventManagerAwareInterface;
 use Zend\EventManager\EventManagerInterface;
 use Zend\EventManager\EventManager;
 
-class AbstractMapper implements
+use ZendAdditionals\Exception\NotImplementedException;
+
+abstract class AbstractMapper implements
     ServiceManagerAwareInterface,
     AdapterAwareInterface
 {
@@ -136,6 +138,15 @@ class AbstractMapper implements
 
     protected $attributeRelationsGenerated = false;
 
+    /**
+     * Check if this mapper allows filtering, if the mapper
+     * allows filters then the method addFilterToPredicate must
+     * be implemented.
+     *
+     * @return boolean
+     */
+    abstract protected function getAllowFilters();
+
     public function __construct()
     {
         if (static::$eventManager === null) {
@@ -176,7 +187,7 @@ class AbstractMapper implements
         }
     }
 
-    public function count(array $filter = null)
+    public function count(array $filter = null, array $joins = null)
     {
         // @TODO: CACHE!!!
         $select = $this->getSelect();
@@ -185,13 +196,91 @@ class AbstractMapper implements
         //$this->addAttributeJoins($select, false);
 
         // @TODO: Only profile join when filter containts profile filters
-        //$this->addJoin($select, 'profile', null, array());
-
-        // Apply filter
-        if (is_array($filter)) {
-            $this->applyFilter($select, $filter);
+        //
+        /*
+         * When surfing through joins and going a level deeper a reference to
+         * the current depth gets appended to this array to be able to go
+         * back when the nested array has been looped.
+         */
+        $pointer       = &$joins;
+        $joinDepth     = array();
+        $ref           = null;
+        $filterPointer = &$filter;
+        while(true) {
+            $var = each($pointer);
+            if ($var === false) {
+                if (empty($joinDepth)) {
+                    // There is no previous array to jump back to
+                    break;
+                }
+                // Restore current pointer to the previous depth
+                $previous      = array_pop($joinDepth);
+                $pointer       = &$previous[0];
+                $ref           = $previous[1];
+                $filterPointer = &$previous[2];
+                continue;
+            }
+            /*
+             * When the value is an array we want add a join based on the key,
+             * store a reference to this join and set the pointer to this array
+             * to start the nested loop.
+             */
+            if (is_array($var['value'])) {
+                $joinDepth[] = array(&$pointer, $ref, &$filterPointer);
+                // Only join when we have some filters for the join
+                if (isset($filterPointer[$var['key']])) {
+                    $ref = $this->addJoin(
+                        $select,
+                        $var['key'],
+                        $ref,
+                        array(),
+                        $filterPointer[$var['key']]
+                    );
+                }
+                /*@var $ref EntityAssociation*/
+                $pointer = &$pointer[$var['key']];
+                if (
+                    is_array($filterPointer) &&
+                    isset($filterPointer[$var['key']])
+                ) {
+                    $filterPointer = &$filterPointer[$var['key']];
+                } else {
+                    $filterPointer = null;
+                }
+                continue;
+            }
+            // Only join when we have some filters for the join
+            if (isset($filterPointer[$var['value']])) {
+                $this->addJoin(
+                    $select,
+                    $var['value'],
+                    $ref,
+                    array(),
+                    $filterPointer[$var['value']]
+                );
+            }
         }
 
+        $predicate = new Predicate();
+        $applyWhereFilter = false;
+
+        foreach ($filter as $filterColumn => $filterValue) {
+            if (is_array($filterValue)) {
+                // Skip arrays
+                continue;
+            }
+            $this->addFilterToPredicate(
+                $filterColumn,
+                $filterValue,
+                $predicate
+            );
+            $applyWhereFilter = true;
+        }
+
+        // Apply filter
+        if ($applyWhereFilter) {
+            $select->where($predicate);
+        }
         return $this->getCount($select);
     }
 
@@ -309,21 +398,15 @@ class AbstractMapper implements
             $select->columns($columns);
         }
 
-        // Now we will start to add the necessary joins, since joins
-        // are configured recursive a pointer is required to surf through
-        // the recursion.
-        $pointer = &$joins;
-
-        $columnsPointer = &$joinColumns;
-
         /*
          * When surfing through joins and going a level deeper a reference to
          * the current depth gets appended to this array to be able to go
          * back when the nested array has been looped.
          */
-        $joinDepth    = array();
-        $columnsDepth = array();
-        $ref          = null;
+        $pointer        = &$joins;
+        $joinDepth      = array();
+        $ref            = null;
+        $columnsPointer = &$joinColumns;
         while(true) {
             $var = each($pointer);
             if ($var === false) {
@@ -602,6 +685,7 @@ class AbstractMapper implements
             $resultSet->setAssociations($associations);
         }
         /*@var $stmt \Zend\Db\Adapter\Driver\Pdo\Statement*/
+        echo $this->debugSql($stmt->getSql());
 
         $resultSet->initialize($stmt->execute());
 
@@ -620,7 +704,6 @@ class AbstractMapper implements
         /*@var $result \Zend\Db\Adapter\Driver\Pdo\Result*/
 
         $total = $result->current();
-        //return $total['total'];
 
         return (int)$total['total'];
     }
@@ -698,6 +781,8 @@ class AbstractMapper implements
      * @param string $entityIdentifier
      * @param EntityAssociation $parentAssociation
      * @param array $columnFilter By default all columns get selected, use this array to minimize the selection
+     * @param array $filters An array containing filters for this join, note
+     *                       when filters are provided this join becomes required!
      *
      * @return EntityAssociation
      *
@@ -707,7 +792,8 @@ class AbstractMapper implements
         Select $select,
         $entityIdentifier,
         EntityAssociation $parentAssociation = null,
-        array $columnFilter = null
+        array $columnFilter = null,
+        array $filters = null
     ) {
         $this->initialize();
         // First get the correct mapper
@@ -815,16 +901,60 @@ class AbstractMapper implements
             $joinColumns = $allJoinColumns;
         }
 
+        $joinPredicate = $entityAssociation->getPredicate();
+        $joinRequiredByFilter = false;
+        if ($this->getAllowFilters() && !empty($filters)) {
+            foreach ($filters as $filterColumn => $filterValue) {
+                if (is_array($filterValue)) {
+                    // Skip arrays
+                    continue;
+                }
+                $entityAssociation->getMapper()->addFilterToPredicate(
+                    $filterColumn,
+                    $filterValue,
+                    $joinPredicate,
+                    $joinRequired
+                );
+                $joinRequiredByFilter = $joinRequired ?: $joinRequiredByFilter;
+            }
+        }
+
         $select->join(
             $entityAssociation->getJoinTable(),
-            $entityAssociation->getPredicate(),
+            $joinPredicate,
             $joinColumns,
-            $entityAssociation->getJoinType()
+            (
+                $joinRequiredByFilter ?
+                Select::JOIN_INNER :
+                $entityAssociation->getJoinType()
+            )
         );
 
         $this->storeEntityAssociationToSelect($select, $entityAssociation);
 
         return $entityAssociation;
+    }
+
+    /**
+     * Add a filter to the given predicate, this method must be implemented
+     * by the mapper that is responsible.
+     *
+     * @param string    $filterColumn
+     * @param string    $filterValue
+     * @param Predicate $predicate
+     * @param boolean   $requireInnerJoin
+     *
+     * @throws NotImplementedException
+     */
+    protected function addFilterToPredicate(
+        $filterColumn,
+        $filterValue,
+        Predicate $predicate,
+        &$requireInnerJoin = false
+    ) {
+        throw new NotImplementedException(
+            'The method ' . __METHOD__ . ' must be implemented by class ' . __CLASS__
+        );
     }
 
     /**

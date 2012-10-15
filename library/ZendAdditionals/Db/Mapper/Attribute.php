@@ -31,5 +31,10 @@ class Attribute extends AbstractMapper
         $select = $this->getSelect($tablePrefix . $this->getTableName())->where(array('id' => $id));
         return $this->getCurrent($select);
     }
+
+    protected function getAllowFilters()
+    {
+        return true;
+    }
 }
 

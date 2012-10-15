@@ -54,6 +54,15 @@ abstract class AbstractRestfulController extends AbstractController
     abstract protected function getMaxResources();
 
     /**
+     * Get an array of filter patterns, these patterns will be used
+     * to match against the X-Filter-By headers to prevent weird
+     * filters to come through.
+     *
+     * @return array
+     */
+    abstract protected function getFilterPatterns();
+
+    /**
      * Generate  and / or extend the current filter based on the parent information
      *
      * @param array $parent
@@ -63,6 +72,19 @@ abstract class AbstractRestfulController extends AbstractController
      * @return mixed
      */
     protected function createParentFilter(array $parent, array $filter = null)
+    {
+        throw new NotImplementedException(
+            'The method ' . __METHOD__ . ' must be implemented by class ' . __CLASS__
+        );
+    }
+
+    /**
+     * Get the unique column identifier, this only needs to be implemented
+     * when the restful api supports GET with an identifier
+     *
+     * @throws NotImplementedException
+     */
+    protected function getUniqueIdentifier()
     {
         throw new NotImplementedException(
             'The method ' . __METHOD__ . ' must be implemented by class ' . __CLASS__
@@ -138,7 +160,9 @@ abstract class AbstractRestfulController extends AbstractController
             $filter = $this->createParentFilter($parent, $filter);
         }
 
-        $count = $mapper->count($filter);
+        $joins = $this->getDefaultJoins();
+
+        $count = $mapper->count($filter, $joins);
         if ($range === null) {
             $range = array(
                 'begin' => 0,
@@ -158,8 +182,6 @@ abstract class AbstractRestfulController extends AbstractController
         if ($range['end'] > $count) {
             $range['end'] = $count;
         }
-
-        $joins = $this->getDefaultJoins();
         $columnsFilter = $this->getAllowedColumnsFilter();
         if (null === $orderBy) {
             $orderBy = $this->getDefaultOrderBy();
@@ -179,6 +201,52 @@ abstract class AbstractRestfulController extends AbstractController
         return $results;
     }
 
+    /**
+     * Return a single resource
+     *
+     * @param mixed $id The identifier for this resource
+     * @param array $parent [optional] Contains parent information like
+     * array(
+     *     'collection' => 'somecollection',  // The parent collection through which this
+     *                                        // collection got called
+     *     'id'         => 'some_identifier', // The identifier of the parent collection
+     * )
+     *
+     * @return mixed
+     */
+    public function get($id, $parent = null)
+    {
+        $mapper = $this->getMapper();
+
+        $filter = array();
+        if (!empty($parent)) {
+            $filter = $this->createParentFilter($parent, $filter);
+        }
+
+        $range = array(
+            'begin' => 0,
+            'end'   => 1,
+        );
+
+        $uniqueIdentifier          = $this->getUniqueIdentifier();
+        $filter[$uniqueIdentifier] = $id;
+
+        $joins         = $this->getDefaultJoins();
+        $columnsFilter = $this->getAllowedColumnsFilter();
+
+        $results = $mapper->search(
+            $range,
+            $filter,
+            null,
+            $joins,
+            $columnsFilter
+        );
+
+        if (!empty($results)) {
+            return $this->entityToArray($results[0]);
+        }
+    }
+
     protected function entityToArray($entity)
     {
         $hydrator = $this->getMapper()->getHydrator();
@@ -186,14 +254,6 @@ abstract class AbstractRestfulController extends AbstractController
         // TODO: filter return
         return $return;
     }
-
-    /**
-     * Return single resource
-     *
-     * @param  mixed $id
-     * @return mixed
-     */
-    abstract public function get($id);
 
     /**
      * Create a new resource
@@ -315,6 +375,17 @@ abstract class AbstractRestfulController extends AbstractController
                 );
             }
 
+            $filterPatterns = $this->getFilterPatterns();
+
+            $checkFilterPatterns = function($subject, $patterns) {
+                foreach ($patterns as $pattern) {
+                    if (preg_match("/{$pattern}/", $subject)) {
+                        return true;
+                    }
+                }
+                return false;
+            };
+
             if (
                 ($filterByHeader = $this->getRequest()->getHeader('xfilterby')) &&
                 ($rawFilter = $filterByHeader->getFieldValue())
@@ -322,9 +393,21 @@ abstract class AbstractRestfulController extends AbstractController
                 $filter = array();
                 $filterParts = explode(',', $rawFilter);
                 foreach ($filterParts as $filterPart) {
-                    if (preg_match('/^([a-z]{1}[a-z0-9_]*)=([a-z0-9 \*\?\!-_]*)/i', $filterPart, $matches)) {
+                    if (preg_match('/^([a-z]{1}[a-z0-9_]*)=([a-z0-9 \|\*\?\!-_]*)$/i', $filterPart, $matches)) {
+                        if (
+                            !isset($filterPatterns[$matches[1]]) ||
+                            !$checkFilterPatterns($matches[2], $filterPatterns[$matches[1]])
+                        ) {
+                            continue;
+                        }
                         $filter[$matches[1]] = $matches[2];
-                    } elseif (preg_match('/^([a-z]{1}[a-z0-9_.]*)=([a-z0-9 \*\?\!-_]*)/i', $filterPart, $matches)) {
+                    } elseif (preg_match('/^([a-z]{1}[a-z0-9_.]*)=([a-z0-9 \|\*\?\!-_]*)$/i', $filterPart, $matches)) {
+                        if (
+                            !isset($filterPatterns[$matches[1]]) ||
+                            !$checkFilterPatterns($matches[2], $filterPatterns[$matches[1]])
+                        ) {
+                            continue;
+                        }
                         $filterParts = explode('.', $matches[1]);
                         $pointer = &$filter;
                         foreach ($filterParts as $part) {
@@ -337,6 +420,8 @@ abstract class AbstractRestfulController extends AbstractController
                     }
                 }
             }
+
+            var_dump($filter);die();
 
             if (
                 ($orderByHeader = $this->getRequest()->getHeader('xorderby')) &&
@@ -421,6 +506,7 @@ abstract class AbstractRestfulController extends AbstractController
         }
 
         if (empty($return)) {
+            $this->getResponse()->setStatusCode(204);
             return $this->getResponse();
         } else {
 

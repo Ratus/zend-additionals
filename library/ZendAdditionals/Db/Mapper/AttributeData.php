@@ -151,5 +151,10 @@ class AttributeData extends AbstractMapper
         }
         return $changes;
     }
+
+    protected function getAllowFilters()
+    {
+        return true;
+    }
 }
 

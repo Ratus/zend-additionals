@@ -40,5 +40,10 @@ class AttributeProperty extends AbstractMapper
 
         return $entities;
     }
+
+    protected function getAllowFilters()
+    {
+        return true;
+    }
 }
 
