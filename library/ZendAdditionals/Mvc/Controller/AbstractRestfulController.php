@@ -423,15 +423,24 @@ abstract class AbstractRestfulController extends AbstractController
         if (empty($return)) {
             return $this->getResponse();
         } else {
+            $accept         = $this->getRequest()->getHeader('accept')->getFieldValue();
+            $acceptList     = array();
+            $explodedAccept = explode(',', $accept);
 
-            $accept = $this->getRequest()->getHeader('accept')->getFieldValue();
-            if (false !== $accept && '*/*' !== $accept) {
-                if ($accept !== 'application/json') {
+            foreach($explodedAccept as $explode) {
+                $tmp            = explode(';', $explode);
+                $acceptMime     = array_shift($tmp);
+                $acceptList[]   = trim($acceptMime);
+            }
+
+            if (false !== $accept && in_array('*/*', $acceptList) === false) {
+                if (in_array('application/json', $acceptList) === false) {
                     $this->getResponse()->setStatusCode(406);
                     return $this->getResponse();
                     // TODO: Support more accept types
                 }
             }
+
             $viewModel = new \Zend\View\Model\JsonModel();
             $viewModel->setVariables($return);
         }
