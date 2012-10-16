@@ -15,15 +15,12 @@ use ZendAdditionals\Db\ResultSet\JoinedHydratingResultSet;
 use Zend\Db\Adapter\AdapterAwareInterface;
 use Zend\ServiceManager\ServiceManagerAwareInterface;
 use Zend\ServiceManager\ServiceManager;
-
 use Zend\Db\Sql\Predicate\Predicate;
 use Zend\Db\Sql\Predicate\Operator;
-
-use Zend\EventManager\EventManagerAwareInterface;
 use Zend\EventManager\EventManagerInterface;
 use Zend\EventManager\EventManager;
-
 use ZendAdditionals\Exception\NotImplementedException;
+use ZendAdditionals\Db\Mapper\AttributeProperty;
 
 abstract class AbstractMapper implements
     ServiceManagerAwareInterface,
@@ -192,11 +189,69 @@ abstract class AbstractMapper implements
         // @TODO: CACHE!!!
         $select = $this->getSelect();
 
-        // @TODO: Only attribute join when filter containts attribute filters
-        //$this->addAttributeJoins($select, false);
+        // Filter attribute joins when filter requires it
+        if (is_array($filter)) {
+            foreach ($filter as $possibleAttribute => $operator) {
+                if (
+                    isset($this->attributeRelations['attributes']) &&
+                    array_search($possibleAttribute, $this->attributeRelations['attributes']) !== false
+                ) {
+                    $attributeMapper = $this->getServiceManager()->get(Attribute::SERVICE_NAME);
+                    /*@var $attributeMapper Attribute*/
+                    $attribute = $attributeMapper->getAttributeByLabel($possibleAttribute, $this->attributeRelations['table_prefix']);
+                    $attributeFilter = null;
 
-        // @TODO: Only profile join when filter containts profile filters
-        //
+                    $setIdentifier = 'setIdentifier';
+                    $setValue = 'setValue';
+                    $getValue = 'getValue';
+                    $operatorClone = clone $operator;
+                    if (method_exists($operatorClone, 'getLeft')) {
+                        $setIdentifier = 'setLeft';
+                        $setValue = 'setRight';
+                        $getValue = 'getRight';
+                    }
+
+                    $multiple = false;
+                    if (method_exists($operatorClone, 'getValueSet')) {
+                        $multiple = true;
+                        $getValue = 'getValueSet';
+                        $setValue = 'setValueSet';
+                    }
+
+                    if ($attribute->getType() === 'enum') {
+                        $attributePropertyMapper = $this->getServiceManager()->get(AttributeProperty::SERVICE_NAME);
+                        /*@var $attributePropertyMapper AttributeProperty*/
+                        $newOperatorValue = false;
+                        if ($multiple) {
+                            $newOperatorValue = $attributePropertyMapper->getPropertyIdsByAttributeIdAndLabels($attribute->getId(), $operatorClone->$getValue(), $this->attributeRelations['table_prefix']);
+                        } else {
+                            $newOperatorValue = $attributePropertyMapper->getPropertyIdByAttributeIdAndLabel($attribute->getId(), $operatorClone->$getValue(), $this->attributeRelations['table_prefix']);
+                        }
+
+                        if (!$newOperatorValue) {
+                            return;
+                        }
+
+                        $operatorClone->$setIdentifier('attribute_property_id');
+
+                        $operatorClone->$setValue($newOperatorValue);
+                        $attributeFilter = array(
+                            'attribute_property_id' => $operatorClone
+                        );
+                    } else {
+                        $operatorClone->$setIdentifier('value');
+                        $attributeFilter = array(
+                            'value' => $operatorClone
+                        );
+                    }
+
+                    $this->addAttributeJoin($select, $possibleAttribute, false, $attributeFilter);
+                    unset($filter[$possibleAttribute]);
+                }
+            }
+        }
+
+
         /*
          * When surfing through joins and going a level deeper a reference to
          * the current depth gets appended to this array to be able to go
@@ -206,7 +261,7 @@ abstract class AbstractMapper implements
         $joinDepth     = array();
         $ref           = null;
         $filterPointer = &$filter;
-        while(true) {
+        while(true && is_array($joins)) {
             $var = each($pointer);
             if ($var === false) {
                 if (empty($joinDepth)) {
@@ -245,7 +300,8 @@ abstract class AbstractMapper implements
                 ) {
                     $filterPointer = &$filterPointer[$var['key']];
                 } else {
-                    $filterPointer = null;
+                    $filterPointer[$var['key']] = array();
+                    $filterPointer = &$filterPointer[$var['key']];
                 }
                 continue;
             }
@@ -261,26 +317,35 @@ abstract class AbstractMapper implements
             }
         }
 
-        $predicate = new Predicate();
+        $where = new \Zend\Db\Sql\Where();
         $applyWhereFilter = false;
-
-        foreach ($filter as $filterColumn => $filterValue) {
-            if (is_array($filterValue)) {
-                // Skip arrays
-                continue;
+        if (is_array($filter)) {
+            foreach ($filter as $filterColumn => $operator) {
+                if (!($operator instanceof \Zend\Db\Sql\Predicate\PredicateInterface)) {
+                    // Skip non predicates
+                    continue;
+                }
+                $getIdentifier = 'getIdentifier';
+                $setIdentifier = 'setIdentifier';
+                if (method_exists($operator, 'getLeft')) {
+                    $getIdentifier = 'getLeft';
+                    $setIdentifier = 'setLeft';
+                }
+                // Prefix with table name because it's a where clause
+                // TODO: Jesper improve this part
+                if (strstr($operator->$getIdentifier(), $this->getTableName()) === false) {
+                    $operator->$setIdentifier($this->getTableName() . '.' . $operator->$getIdentifier());
+                }
+                $where->addPredicate($operator);
+                $applyWhereFilter = true;
             }
-            $this->addFilterToPredicate(
-                $filterColumn,
-                $filterValue,
-                $predicate
-            );
-            $applyWhereFilter = true;
         }
 
         // Apply filter
         if ($applyWhereFilter) {
-            $select->where($predicate);
+            $select->where($where);
         }
+
         return $this->getCount($select);
     }
 
@@ -291,6 +356,8 @@ abstract class AbstractMapper implements
      * @param array $orderBy array('column' => 'ASC', 'join2' => array('column' => 'DESC'))
      * @param array $joins array('some_entity', 'other_entity', 'base_entity' => array('some_other_from_base'))
      * @param array $columnsFilter array('col_one', 'some_entity' => array('col_two'))
+     * @param boolean $returnEntities By default return entities, set to false for an array
+     *
      * @return type
      */
     public function search(
@@ -298,53 +365,9 @@ abstract class AbstractMapper implements
         array $filter = null,
         array $orderBy = null,
         array $joins = null,
-        array $columnsFilter = null
+        array $columnsFilter = null,
+        $returnEntities = true
     ) {
-        $sampleRange = array(
-            'begin' => 0,
-            'end'  => 150,
-        );
-
-        $sampleFilter = array(
-            'profile_id' => 1,
-            'profile' => array(
-                'splash_photo_id' => 3,
-                'splash_photo' => array(
-                    'profile_id' => 1,
-                ),
-            ),
-        );
-
-        $sampleOrderBy = array(
-            'profile_id' => 'DESC',
-            'profile' => array(
-                'splash_photo_id' => 'ASC',
-                'splash_photo' => array(
-                    'profile_id' => 'DESC',
-                ),
-            ),
-        );
-
-        $samplejoins = array(
-            'profile',
-            'other_entity' => array(
-                'splash_photo',
-                'another_one' => array(
-                    'person',
-                ),
-            ),
-        );
-
-        $sampleColumnsFilter = array(
-            'profile_id',
-            'some_entity' => array(
-                'some_entity_id',
-                'sub_entity' => array(
-                    'sub_id',
-                ),
-            ),
-        );
-
         $limit = 1000;
         $offset = 0;
         if (isset($range['begin']) && $range['begin'] >= 0) {
@@ -378,18 +401,74 @@ abstract class AbstractMapper implements
             isset($this->attributeRelations['attributes']) &&
             is_array($this->attributeRelations['attributes'])
         ) {
-            foreach ($this->attributeRelations['attributes'] as $attribute) {
+            foreach ($this->attributeRelations['attributes'] as $attributeIdentifier) {
+                $attributeFilter = null;
+                if (isset($filter[$attributeIdentifier])) {
+                    $attributeMapper = $this->getServiceManager()->get(Attribute::SERVICE_NAME);
+                    /*@var $attributeMapper Attribute*/
+                    $attribute = $attributeMapper->getAttributeByLabel($attributeIdentifier, $this->attributeRelations['table_prefix']);
+
+                    $setIdentifier = 'setIdentifier';
+                    $setValue = 'setValue';
+                    $getValue = 'getValue';
+                    $operator = clone $filter[$attributeIdentifier];
+
+                    if (method_exists($operator, 'getLeft')) {
+                        $setIdentifier = 'setLeft';
+                        $setValue = 'setRight';
+                        $getValue = 'getRight';
+                    }
+
+                    $multiple = false;
+                    if (method_exists($operator, 'getValueSet')) {
+                        $multiple = true;
+                        $getValue = 'getValueSet';
+                        $setValue = 'setValueSet';
+                    }
+
+                    if ($attribute->getType() === 'enum') {
+                        $attributePropertyMapper = $this->getServiceManager()->get(AttributeProperty::SERVICE_NAME);
+                        /*@var $attributePropertyMapper AttributeProperty*/
+                        $newOperatorValue = false;
+                        if ($multiple) {
+                            $newOperatorValue = $attributePropertyMapper->getPropertyIdsByAttributeIdAndLabels($attribute->getId(), $operator->$getValue(), $this->attributeRelations['table_prefix']);
+                        } else {
+                            $newOperatorValue = $attributePropertyMapper->getPropertyIdByAttributeIdAndLabel($attribute->getId(), $operator->$getValue(), $this->attributeRelations['table_prefix']);
+                        }
+
+                        if (!$newOperatorValue) {
+                            return;
+                        }
+
+                        $operator->$setIdentifier('attribute_property_id');
+
+                        $operator->$setValue($newOperatorValue);
+                        $attributeFilter = array(
+                            'attribute_property_id' => $operator
+                        );
+                    } else {
+                        $operator->$setIdentifier('value');
+                        $attributeFilter = array(
+                            'value' => $operator
+                        );
+                    }
+                    unset($filter[$attributeIdentifier]);
+                }
+
                 if (
                     $applyColumnsFilter &&
-                    ($colKey = array_search($attribute, $columns)) !== false
+                    ($colKey = array_search($attributeIdentifier, $columns)) !== false
                 ) {
                     // Skip this attribute join when not in selection!
                     unset($columns[$colKey]);
                     $columns = array_values($columns);
-                } else {
+                } elseif ($applyColumnsFilter) {
+                    if (!empty($attributeFilter)) {
+                        $this->addAttributeJoin($select, $attributeIdentifier, false, $attributeFilter);
+                    }
                     continue;
                 }
-                $this->addAttributeJoin($select, $attribute);
+                $this->addAttributeJoin($select, $attributeIdentifier, true, $attributeFilter);
             }
         }
 
@@ -407,7 +486,8 @@ abstract class AbstractMapper implements
         $joinDepth      = array();
         $ref            = null;
         $columnsPointer = &$joinColumns;
-        while(true) {
+        $filterPointer  = &$filter;
+        while(true && is_array($joins)) {
             $var = each($pointer);
             if ($var === false) {
                 if (empty($joinDepth)) {
@@ -419,6 +499,7 @@ abstract class AbstractMapper implements
                 $pointer        = &$previous[0];
                 $ref            = $previous[1];
                 $columnsPointer = &$previous[2];
+                $filterPointer  = &$previous[3];
                 continue;
             }
             /*
@@ -427,7 +508,7 @@ abstract class AbstractMapper implements
              * to start the nested loop.
              */
             if (is_array($var['value'])) {
-                $joinDepth[] = array(&$pointer, $ref, &$columnsPointer);
+                $joinDepth[] = array(&$pointer, $ref, &$columnsPointer, &$filterPointer);
                 $ref = $this->addJoin(
                     $select,
                     $var['key'],
@@ -438,6 +519,11 @@ abstract class AbstractMapper implements
                             $columnsPointer[$var['key']] :
                             array()
                         ) : null
+                    ),
+                    (
+                        isset($filterPointer[$var['key']]) ?
+                        $filterPointer[$var['key']] :
+                        null
                     )
                 );
                 /*@var $ref EntityAssociation*/
@@ -448,7 +534,17 @@ abstract class AbstractMapper implements
                 ) {
                     $columnsPointer = &$columnsPointer[$var['key']];
                 } else {
-                    $columnsPointer = null;
+                    $columnsPointer[$var['key']] = array();
+                    $columnsPointer = &$columnsPointer[$var['key']];
+                }
+                if (
+                    is_array($filterPointer) &&
+                    isset($filterPointer[$var['key']])
+                ) {
+                    $filterPointer = &$filterPointer[$var['key']];
+                } else {
+                    $filterPointer[$var['key']] = array();
+                    $filterPointer = &$filterPointer[$var['key']];
                 }
                 continue;
             }
@@ -462,6 +558,11 @@ abstract class AbstractMapper implements
                         $columnsPointer[$var['value']] :
                         array()
                     ) : null
+                ),
+                (
+                    isset($filterPointer[$var['value']]) ?
+                    $filterPointer[$var['value']] :
+                    null
                 )
             );
         }
@@ -473,18 +574,45 @@ abstract class AbstractMapper implements
             }
         }
 
-        // Apply filter
+        $where = new \Zend\Db\Sql\Where();
+        $applyWhereFilter = false;
         if (is_array($filter)) {
-            $this->applyFilter($select, $filter);
+            foreach ($filter as $operator) {
+                if (!($operator instanceof \Zend\Db\Sql\Predicate\PredicateInterface)) {
+                    // Skip non predicates
+                    continue;
+                }
+                $getIdentifier = 'getIdentifier';
+                $setIdentifier = 'setIdentifier';
+                if (method_exists($operator, 'getLeft')) {
+                    $getIdentifier = 'getLeft';
+                    $setIdentifier = 'setLeft';
+                }
+                // Prefix with table name because it's a where clause
+                // TODO: Jesper improve this part
+                if (strstr($operator->$getIdentifier(), $this->getTableName()) === false) {
+                    $operator->$setIdentifier($this->getTableName() . '.' . $operator->$getIdentifier());
+                }
+                $where->addPredicate($operator);
+                $applyWhereFilter = true;
+            }
         }
 
-        return $this->getAll($select);
+        // Apply filter
+        if ($applyWhereFilter) {
+            $select->where($where);
+        }
+
+        return $this->getAll($select, $returnEntities);
     }
 
     protected function initializeRelations()
     {
         if (!$this->attributeRelationsGenerated) {
-            if (isset($this->attributeRelations['attributes']) && is_array($this->attributeRelations['attributes'])) {
+            if (
+                isset($this->attributeRelations['attributes']) &&
+                is_array($this->attributeRelations['attributes'])
+            ) {
                 foreach ($this->attributeRelations['attributes'] as $attributeLabel) {
                     $this->generateAttributeRelation($attributeLabel);
                 }
@@ -670,6 +798,7 @@ abstract class AbstractMapper implements
      */
     protected function getResult(Select $select)
     {
+        //echo $this->debugSql($select->getSqlString());
         $this->initialize();
         $stmt = $this->getSlaveSql()->prepareStatementForSqlObject($select);
         $resultSet = new JoinedHydratingResultSet(
@@ -685,7 +814,6 @@ abstract class AbstractMapper implements
             $resultSet->setAssociations($associations);
         }
         /*@var $stmt \Zend\Db\Adapter\Driver\Pdo\Statement*/
-        echo $this->debugSql($stmt->getSql());
 
         $resultSet->initialize($stmt->execute());
 
@@ -698,6 +826,7 @@ abstract class AbstractMapper implements
     {
         $this->initialize();
         $select->columns(array('total' => new \Zend\Db\Sql\Expression('COUNT(*)')));
+        //echo $this->debugSql($select->getSqlString());
         $stmt = $this->getSlaveSql()->prepareStatementForSqlObject($select);
 
         $result = $stmt->execute();
@@ -710,7 +839,7 @@ abstract class AbstractMapper implements
 
     protected function getRow(Select $select, $returnEntity = true)
     {
-	return $this->getResult($select)->getDataSource()->current($returnEntity);
+        return $this->getResult($select)->getDataSource()->current($returnEntity);
     }
 
     protected function getCurrent(Select $select, $returnEntity = true)
@@ -781,7 +910,7 @@ abstract class AbstractMapper implements
      * @param string $entityIdentifier
      * @param EntityAssociation $parentAssociation
      * @param array $columnFilter By default all columns get selected, use this array to minimize the selection
-     * @param array $filters An array containing filters for this join, note
+     * @param array<Operator> $filters An array containing filters for this join, note
      *                       when filters are provided this join becomes required!
      *
      * @return EntityAssociation
@@ -904,7 +1033,25 @@ abstract class AbstractMapper implements
         $joinPredicate = $entityAssociation->getPredicate();
         $joinRequiredByFilter = false;
         if ($this->getAllowFilters() && !empty($filters)) {
-            foreach ($filters as $filterColumn => $filterValue) {
+            foreach ($filters as $operator) {
+                $getIdentifier = 'getLeft';
+                $setIdentifier = 'setLeft';
+                if (method_exists($operator, 'getIdentifier')) {
+                    $getIdentifier = 'getIdentifier';
+                    $setIdentifier = 'setIdentifier';
+                }
+                $currentIdentifier = $operator->$getIdentifier();
+                if (strpos($currentIdentifier, '.') === false) {
+                    $operator->$setIdentifier($entityAssociation->getAlias() . '.' . $currentIdentifier);
+                }
+                if (!($operator instanceof \Zend\Db\Sql\Predicate\PredicateInterface)) {
+                    // Skip non predicates
+                    continue;
+                }
+                $joinRequiredByFilter = true;
+                $joinPredicate->addPredicate($operator);
+            }
+            /*foreach ($filters as $filterColumn => $filterValue) {
                 if (is_array($filterValue)) {
                     // Skip arrays
                     continue;
@@ -916,7 +1063,7 @@ abstract class AbstractMapper implements
                     $joinRequired
                 );
                 $joinRequiredByFilter = $joinRequired ?: $joinRequiredByFilter;
-            }
+            }*/
         }
 
         $select->join(
@@ -980,9 +1127,9 @@ abstract class AbstractMapper implements
      * @param Select $select
      * @param type $attribute
      */
-    protected function addAttributeJoin(Select $select, $attribute, $addSelectionColumns = true)
+    protected function addAttributeJoin(Select $select, $attribute, $addSelectionColumns = true, array $attributeDataFilters = null)
     {
-        $ref = $this->addJoin($select, $attribute, null, $addSelectionColumns ? null : array());
+        $ref = $this->addJoin($select, $attribute, null, $addSelectionColumns ? null : array(), $attributeDataFilters);
         $this->addJoin($select, 'attribute', $ref, $addSelectionColumns ? null : array());
         $this->addJoin($select, 'attribute_property', $ref, $addSelectionColumns ? null : array());
     }

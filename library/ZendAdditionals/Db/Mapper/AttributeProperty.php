@@ -41,6 +41,30 @@ class AttributeProperty extends AbstractMapper
         return $entities;
     }
 
+
+    public function getPropertyIdsByAttributeIdAndLabels($id, array $labels, $tablePrefix)
+    {
+        $return = array();
+        foreach ($labels as $label) {
+            $return[] = $this->getPropertyIdByAttributeIdAndLabel($id, $label, $tablePrefix);
+        }
+        return empty($return) ? false : $return;
+    }
+
+
+    public function getPropertyIdByAttributeIdAndLabel($id, $label, $tablePrefix)
+    {
+        $properties = $this->getPropertiesByAttributeId($id, $tablePrefix);
+
+        foreach ($properties as $property) {
+            if ($property->getLabel() === $label) {
+                return $property->getId();
+            }
+        }
+
+        return false;
+    }
+
     protected function getAllowFilters()
     {
         return true;

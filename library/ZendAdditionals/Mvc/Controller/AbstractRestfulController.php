@@ -9,6 +9,13 @@ use Zend\Stdlib\RequestInterface as Request;
 use Zend\Stdlib\ResponseInterface as Response;
 use Zend\Mvc\Controller\AbstractController;
 use ZendAdditionals\Exception\NotImplementedException;
+use Zend\Db\Sql\Predicate\Operator;
+use Zend\Db\Sql\Predicate\Between;
+use ZendAdditionals\Db\Sql\Predicate\NotBetween;
+use Zend\Db\Sql\Predicate\Like;
+use ZendAdditionals\Db\Sql\Predicate\NotLike;
+use Zend\Db\Sql\Predicate\In;
+use ZendAdditionals\Db\Sql\Predicate\NotIn;
 
 /**
  * Abstract RESTful controller
@@ -69,7 +76,7 @@ abstract class AbstractRestfulController extends AbstractController
      * @param array $filter
      * @throws NotImplementedException
      *
-     * @return mixed
+     * @return array<Operator>
      */
     protected function createParentFilter(array $parent, array $filter = null)
     {
@@ -92,6 +99,16 @@ abstract class AbstractRestfulController extends AbstractController
     }
 
     /**
+     * Get an array contianing direct relations from this resource
+     *
+     * @return array
+     */
+    protected function getRelations()
+    {
+        return array();
+    }
+
+    /**
      * Return a default list of entities to join
      *
      * @return array|null
@@ -109,6 +126,24 @@ abstract class AbstractRestfulController extends AbstractController
     protected function getDefaultOrderBy()
     {
         return null;
+    }
+
+    protected function stripEntityAttributes(array $entity)
+    {
+        foreach ($entity as $key => &$column) {
+            if (
+                is_array($column) &&
+                !isset($column['entity_id']) &&
+                !isset($column['attribute_id'])
+            ) {
+                // We have found a sub-entity
+                $column = $this->stripEntityAttributes($column);
+            } elseif(is_array($column)) {
+                // We have found an attribute
+                $entity[$key] = $column['value'];
+            }
+        }
+        return $entity;
     }
 
     /**
@@ -187,7 +222,7 @@ abstract class AbstractRestfulController extends AbstractController
             $orderBy = $this->getDefaultOrderBy();
         }
 
-        $results = $mapper->search($range, $filter, $orderBy, $joins, $columnsFilter);
+        $results = $mapper->search($range, $filter, $orderBy, $joins, $columnsFilter, false);
 
         $this->getResponse()->getHeaders()->addHeaderLine(
             'Content-Range',
@@ -195,7 +230,7 @@ abstract class AbstractRestfulController extends AbstractController
         );
 
         foreach ($results as &$result) {
-            $result = $this->entityToArray($result);
+            $result = $this->stripEntityAttributes($result);
         }
 
         return $results;
@@ -239,11 +274,12 @@ abstract class AbstractRestfulController extends AbstractController
             $filter,
             null,
             $joins,
-            $columnsFilter
+            $columnsFilter,
+            false
         );
 
         if (!empty($results)) {
-            return $this->entityToArray($results[0]);
+            return $this->stripEntityAttributes($results[0]);
         }
     }
 
@@ -386,6 +422,55 @@ abstract class AbstractRestfulController extends AbstractController
                 return false;
             };
 
+            $createOperator = function($column, $operand, $value) {
+                if ($value === 'null') {
+                    $value = null;
+                }
+                switch ($operand) {
+                    case '!=':
+                    case '=':
+                        $not = $operand === '!=';
+                        if ((preg_match('/^([0-9]+)-([0-9]+)$/', $value, $matches))) {
+                            return ($not ?
+                                new NotBetween($column, $matches[1], $matches[2]) :
+                                new Between($column, $matches[1], $matches[2])
+                            );
+                        }
+                        if (preg_match('/^([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2})-([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2})$/', $value, $matches)) {
+                            return ($not ?
+                                new NotBetween($column, $matches[1], $matches[2]) :
+                                new Between($column, $matches[1], $matches[2])
+                            );
+                        }
+                        if (strpos($value, '|') !== false) {
+                            $values = explode('|', $value);
+                            return ($not ?
+                                new NotIn($column, $values) :
+                                new In($column, $values)
+                            );
+                        }
+                        if (strpos($value, '*') !== false) {
+                            $value = str_replace('*', '%', $value);
+                            return ($not ?
+                                new NotLike($column, $value) :
+                                new Like($column, $value)
+                            );
+                        }
+                        return new Operator($column, $operand, $value);
+                    case '>':
+                    case '<':
+                    case '>=':
+                    case '<=':
+                        return new Operator($column, $operand, (int)$value);
+                        break;
+
+                }
+                throw new \UnexpectedValueException(
+                    'Did not expect the operand "' . $operand .
+                    '", this has not been implemented.'
+                );
+            };
+
             if (
                 ($filterByHeader = $this->getRequest()->getHeader('xfilterby')) &&
                 ($rawFilter = $filterByHeader->getFieldValue())
@@ -393,22 +478,19 @@ abstract class AbstractRestfulController extends AbstractController
                 $filter = array();
                 $filterParts = explode(',', $rawFilter);
                 foreach ($filterParts as $filterPart) {
-                    if (preg_match('/^([a-z]{1}[a-z0-9_]*)=([a-z0-9 \|\*\?\!-_]*)$/i', $filterPart, $matches)) {
+                    if (preg_match('/^([a-z]{1}[a-z0-9_\.]*)(=|!=|>=|<=|>|<)([0-9]+-[0-9]+|[a-zA-Z0-9\*-_\|\s:]+)$/', $filterPart, $matches)) {
+                        $column  = $matches[1];
+                        $operand = $matches[2];
+                        $value   = $matches[3];
+                        //$value = $matches[4];
                         if (
-                            !isset($filterPatterns[$matches[1]]) ||
-                            !$checkFilterPatterns($matches[2], $filterPatterns[$matches[1]])
+                            !isset($filterPatterns[$column]) ||
+                            !$checkFilterPatterns($operand . $value, $filterPatterns[$column])
                         ) {
                             continue;
                         }
-                        $filter[$matches[1]] = $matches[2];
-                    } elseif (preg_match('/^([a-z]{1}[a-z0-9_.]*)=([a-z0-9 \|\*\?\!-_]*)$/i', $filterPart, $matches)) {
-                        if (
-                            !isset($filterPatterns[$matches[1]]) ||
-                            !$checkFilterPatterns($matches[2], $filterPatterns[$matches[1]])
-                        ) {
-                            continue;
-                        }
-                        $filterParts = explode('.', $matches[1]);
+
+                        $filterParts = explode('.', $column);
                         $pointer = &$filter;
                         foreach ($filterParts as $part) {
                             if (!isset($pointer[$part])) {
@@ -416,12 +498,10 @@ abstract class AbstractRestfulController extends AbstractController
                             }
                             $pointer = &$pointer[$part];
                         }
-                        $pointer = $matches[2];
+                        $pointer = $createOperator($part, $operand, $value);
                     }
                 }
             }
-
-            var_dump($filter);die();
 
             if (
                 ($orderByHeader = $this->getRequest()->getHeader('xorderby')) &&
@@ -467,6 +547,13 @@ abstract class AbstractRestfulController extends AbstractController
                     if (null !== $requestId) {
                         $action = 'get';
                         $return = $this->get($requestId, $parent);
+                        $relations = $this->getRelations();
+                        foreach ($relations as $relation) {
+                            $return[$relation] = array(
+                                'rel'  => 'collection/' . $relation,
+                                'link' => $_SERVER['REQUEST_URI'] . '/' . $relation
+                            );
+                        }
                         break;
                     }
                     $action = 'getList';
