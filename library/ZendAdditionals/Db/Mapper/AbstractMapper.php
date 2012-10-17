@@ -142,7 +142,9 @@ abstract class AbstractMapper implements
      *
      * @return boolean
      */
-    abstract protected function getAllowFilters();
+    protected function getAllowFilters() {
+        return false;
+    }
 
     public function __construct()
     {
