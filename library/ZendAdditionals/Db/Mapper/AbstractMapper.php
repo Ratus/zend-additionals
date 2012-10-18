@@ -324,8 +324,9 @@ abstract class AbstractMapper implements
         if (is_array($filter)) {
             foreach ($filter as $filterColumn => $operator) {
                 if (!($operator instanceof \Zend\Db\Sql\Predicate\PredicateInterface)) {
-                    // Skip non predicates
-                    continue;
+                    $value    = $operator;
+                    $operator = new Operator();
+                    $operator->setLeft($filterColumn)->setRight($value);
                 }
                 $getIdentifier = 'getIdentifier';
                 $setIdentifier = 'setIdentifier';
@@ -579,10 +580,11 @@ abstract class AbstractMapper implements
         $where = new \Zend\Db\Sql\Where();
         $applyWhereFilter = false;
         if (is_array($filter)) {
-            foreach ($filter as $operator) {
+            foreach ($filter as $key => $operator) {
                 if (!($operator instanceof \Zend\Db\Sql\Predicate\PredicateInterface)) {
-                    // Skip non predicates
-                    continue;
+                    $value    = $operator;
+                    $operator = new Operator();
+                    $operator->setLeft($key)->setRight($value);
                 }
                 $getIdentifier = 'getIdentifier';
                 $setIdentifier = 'setIdentifier';
@@ -1082,28 +1084,6 @@ abstract class AbstractMapper implements
         $this->storeEntityAssociationToSelect($select, $entityAssociation);
 
         return $entityAssociation;
-    }
-
-    /**
-     * Add a filter to the given predicate, this method must be implemented
-     * by the mapper that is responsible.
-     *
-     * @param string    $filterColumn
-     * @param string    $filterValue
-     * @param Predicate $predicate
-     * @param boolean   $requireInnerJoin
-     *
-     * @throws NotImplementedException
-     */
-    protected function addFilterToPredicate(
-        $filterColumn,
-        $filterValue,
-        Predicate $predicate,
-        &$requireInnerJoin = false
-    ) {
-        throw new NotImplementedException(
-            'The method ' . __METHOD__ . ' must be implemented by class ' . __CLASS__
-        );
     }
 
     /**
