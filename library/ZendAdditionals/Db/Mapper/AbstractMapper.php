@@ -275,6 +275,16 @@ abstract class AbstractMapper implements
                 $pointer       = &$previous[0];
                 $ref           = $previous[1];
                 $filterPointer = &$previous[2];
+
+                // When previous round a filterPointer has been created. Unset
+                // the record. Otherwise it will be added to the wheres
+                if (
+                    array_key_exists($previous[3], $filterPointer) &&
+                    empty($filterPointer[$previous[3]])
+                ) {
+                    unset($filterPointer[$previous[3]]);
+                }
+
                 continue;
             }
             /*
@@ -283,7 +293,7 @@ abstract class AbstractMapper implements
              * to start the nested loop.
              */
             if (is_array($var['value'])) {
-                $joinDepth[] = array(&$pointer, $ref, &$filterPointer);
+                $joinDepth[] = array(&$pointer, $ref, &$filterPointer, $var['key']);
                 // Only join when we have some filters for the join
                 if (isset($filterPointer[$var['key']])) {
                     $ref = $this->addJoin(
@@ -348,6 +358,8 @@ abstract class AbstractMapper implements
         if ($applyWhereFilter) {
             $select->where($where);
         }
+
+//        echo $this->debugSql($select->getSqlString());
 
         return $this->getCount($select);
     }
@@ -503,6 +515,16 @@ abstract class AbstractMapper implements
                 $ref            = $previous[1];
                 $columnsPointer = &$previous[2];
                 $filterPointer  = &$previous[3];
+
+                // When previous round a filterPointer has been created. Unset
+                // the record. Otherwise it will be added to the wheres
+                if (
+                    array_key_exists($previous[4], $filterPointer) &&
+                    empty($filterPointer[$previous[4]])
+                ) {
+                    unset($filterPointer[$previous[4]]);
+                }
+
                 continue;
             }
             /*
@@ -511,7 +533,14 @@ abstract class AbstractMapper implements
              * to start the nested loop.
              */
             if (is_array($var['value'])) {
-                $joinDepth[] = array(&$pointer, $ref, &$columnsPointer, &$filterPointer);
+                $joinDepth[] = array(
+                    &$pointer,
+                    $ref,
+                    &$columnsPointer,
+                    &$filterPointer,
+                    $var['key']
+                );
+
                 $ref = $this->addJoin(
                     $select,
                     $var['key'],
@@ -802,7 +831,8 @@ abstract class AbstractMapper implements
      */
     protected function getResult(Select $select)
     {
-        //echo $this->debugSql($select->getSqlString());
+//        echo '<pre>';
+//        echo $this->debugSql($select->getSqlString());
         $this->initialize();
         $stmt = $this->getSlaveSql()->prepareStatementForSqlObject($select);
         $resultSet = new JoinedHydratingResultSet(
