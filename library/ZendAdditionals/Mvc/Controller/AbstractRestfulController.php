@@ -2,7 +2,8 @@
 
 namespace ZendAdditionals\Mvc\Controller;
 
-use Zend\Http\Request as HttpRequest;
+use Zend\Http\Request as HTTPRequest;
+use Zend\Http\Response as HTTPResponse;
 use Zend\Mvc\Exception;
 use Zend\Mvc\MvcEvent;
 use Zend\Stdlib\RequestInterface as Request;
@@ -26,6 +27,11 @@ use ZendAdditionals\Db\Sql\Predicate\NotIn;
  */
 abstract class AbstractRestfulController extends AbstractController
 {
+    /**
+     * @var boolean
+     */
+    protected $enableTunneling = false;
+
     /**
      * @var string
      */
@@ -354,6 +360,99 @@ abstract class AbstractRestfulController extends AbstractController
     }
 
     /**
+     * Get the HTTPRequest
+     *
+     * @return HTTPRequest
+     */
+    public function getRequest()
+    {
+        $request = parent::getRequest();
+
+        $this->checkEnableTunneling($request);
+        if ($this->getTunnelingEnabled()) {
+            $this->setRequestMethodFromQuery($request);
+            $this->setRequestHeadersFromQuery($request);
+        }
+
+        return $request;
+    }
+
+    /**
+     * Check if the given request contains tunneled parameters
+     * for the method and/or the headers
+     *
+     * @param HTTPRequest $request
+     */
+    protected function checkEnableTunneling(HTTPRequest $request)
+    {
+        $this->enableTunneling = ($request->getQuery('et') == 1);
+    }
+
+    /**
+     * Check if we are now in tunneled mode
+     *
+     * @return boolean
+     */
+    public function getTunnelingEnabled()
+    {
+        return $this->enableTunneling;
+    }
+
+    /**
+     * Manipulate the http method based on the method parameter passed
+     * in the url.
+     *
+     * @param HTTPRequest $request
+     */
+    protected function setRequestMethodFromQuery(HTTPRequest $request)
+    {
+        if (null !== ($method = $request->getQuery('method'))) {
+            $request->setMethod(strtoupper($method));
+        }
+    }
+
+    /**
+     * Manipulate the request headers based on query parameters passed
+     * in the url.
+     *
+     * @param HTTPRequest $request
+     */
+    protected function setRequestHeadersFromQuery(HTTPRequest $request)
+    {
+        if (null !== ($range = $request->getQuery('range'))) {
+            $request->getHeaders()->addHeaderLine(
+                'Range',
+                'resources=' . $range
+            );
+        }
+        if (null !== ($filterBy = $request->getQuery('filterby'))) {
+            $request->getHeaders()->addHeaderLine(
+                'X-Filter-By',
+                base64_decode($filterBy)
+            );
+        }
+        if (null !== ($orderby = $request->getQuery('orderby'))) {
+            $request->getHeaders()->addHeaderLine(
+                'X-Order-By',
+                base64_decode($orderby)
+            );
+        }
+        if (null !== ($authorize = $request->getQuery('authorize'))) {
+            $request->getHeaders()->addHeaderLine(
+                'Authorization',
+                base64_decode($authorize)
+            );
+        }
+        if (null !== ($browserDigest = $request->getQuery('browserdigest'))) {
+            $request->getHeaders()->addHeaderLine(
+                'X-Browser-Digest',
+                $browserDigest
+            );
+        }
+    }
+
+
+    /**
      * Handle the request
      *
      * @param  MvcEvent $e
@@ -592,10 +691,62 @@ abstract class AbstractRestfulController extends AbstractController
             $routeMatch->setParam('action', $action);
         }
 
+        $allowedOrigin = isset($_SERVER['HTTP_HOST']) ?
+            str_replace('api.', '', $_SERVER['HTTP_HOST']) : '*';
+
+        if (($originHeader = $this->getRequest()->getHeader('Origin'))) {
+            $allowedOrigin = $originHeader->getFieldValue();
+        }
+
+        $this->getResponse()->getHeaders()->addHeaderLine(
+            'Access-Control-Allow-Credentials', 'true'
+        );
+        $this->getResponse()->getHeaders()->addHeaderLine(
+            'Access-Control-Allow-Origin', $allowedOrigin
+        );
+        $this->getResponse()->getHeaders()->addHeaderLine(
+            'Access-Control-Allow-Methods',
+            'GET, POST, PUT, PATCH, HEAD, TRACE, OPTIONS'
+        );
+        $this->getResponse()->getHeaders()->addHeaderLine(
+            'Access-Control-Expose-Headers',
+            'WWW-Authenticate, Vary, Content-Range'
+        );
+        $this->getResponse()->getHeaders()->addHeaderLine(
+            'Access-Control-Allow-Headers',
+            'Accept, Authorization, Accept-Encoding, Accept-Language, Range, X-Browser-Digest, X-Filter-By, X-Order-By'
+        );
+
+        $viewModel = new \Zend\View\Model\JsonModel();
+
+        if (empty($return) && $this->getResponse()->getStatusCode() != 401) {
+            $this->getResponse()->setStatusCode(204);
+        }
+
+        $trMetaData = null;
+        if ($this->getTunnelingEnabled()) {
+
+            $trMetaData = $this->getTunnelledResponsemetaData(
+                $this->getResponse()
+            );
+
+            $wwwAuthenticate = $this->getResponse()->getHeaders()->get('WWW-Authenticate');
+            if ($wwwAuthenticate) {
+                $this->getResponse()->getHeaders()->removeHeader($wwwAuthenticate[0]);
+            }
+
+        }
         if (empty($return)) {
             $this->getResponse()->setStatusCode(204);
-            return $this->getResponse();
+            if (null !== $trMetaData) {
+                $return = $trMetaData;
+            } else {
+                return $this->getResponse();
+            }
         } else {
+            if (null !== $trMetaData) {
+                $return = array_merge($trMetaData, $return);
+            }
             $accept         = $this->getRequest()->getHeader('accept')->getFieldValue();
             $acceptList     = array();
             $explodedAccept = explode(',', $accept);
@@ -613,10 +764,21 @@ abstract class AbstractRestfulController extends AbstractController
                     // TODO: Support more accept types
                 }
             }
-
-            $viewModel = new \Zend\View\Model\JsonModel();
-            $viewModel->setVariables($return);
         }
+
+        // jsonp workaround for */* header..
+        if ($this->getRequest()->getQuery('callback') !== false) {
+            // Enforce the callback to be called
+            $viewModel->setJsonpCallback($this->getRequest()->getQuery('callback'));
+        }
+
+        // When tunneling for method, status and headers is enabled alwayw
+        // return status 200 for the tunnel client to be able to get the
+        // body.
+        if ($this->getTunnelingEnabled()) {
+            $this->getResponse()->setStatusCode(200);
+        }
+        $viewModel->setVariables($return);
 
         // Emit post-dispatch signal, passing:
         // - return from method, request, response
@@ -625,6 +787,16 @@ abstract class AbstractRestfulController extends AbstractController
 
 
         return $viewModel;
+    }
+
+    protected function getTunnelledResponsemetaData(HTTPResponse $response)
+    {
+        return array(
+            'tr-meta-data' => array(
+                'headers' => $response->getHeaders()->toArray(),
+                'status'  => $response->getStatusCode(),
+            ),
+        );
     }
 
     /**
