@@ -17,6 +17,7 @@ use Zend\Db\Sql\Predicate\Like;
 use ZendAdditionals\Db\Sql\Predicate\NotLike;
 use Zend\Db\Sql\Predicate\In;
 use ZendAdditionals\Db\Sql\Predicate\NotIn;
+use Zend\Mvc\Router\RouteMatch;
 
 /**
  * Abstract RESTful controller
@@ -451,6 +452,17 @@ abstract class AbstractRestfulController extends AbstractController
         }
     }
 
+    /**
+     * Verify authentication to the given collection and method
+     *
+     * @param RouteMatch $routeMatch
+     *
+     * @return boolean
+     */
+    protected function verifyAuthentication(RouteMatch $routeMatch)
+    {
+        return true;
+    }
 
     /**
      * Handle the request
@@ -640,7 +652,10 @@ abstract class AbstractRestfulController extends AbstractController
                 implode(',', $varyOptions)
             );
 
-            // RESTful methods
+            if (!$this->verifyAuthentication($routeMatch)) {
+                return $this->getResponse();
+            }
+
             switch (strtolower($request->getMethod())) {
                 case 'get':
                     if (null !== $requestId) {
