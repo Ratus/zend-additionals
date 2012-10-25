@@ -652,156 +652,160 @@ abstract class AbstractRestfulController extends AbstractController
                 implode(',', $varyOptions)
             );
 
-            if (!$this->verifyAuthentication($routeMatch)) {
-                return $this->getResponse();
-            }
+            if ($this->verifyAuthentication($routeMatch)) {
 
-            switch (strtolower($request->getMethod())) {
-                case 'get':
-                    if (null !== $requestId) {
-                        $action = 'get';
-                        $return = $this->get($requestId, $parent);
-                        $relations = $this->getRelations();
-                        foreach ($relations as $relation) {
-                            $return[$relation] = array(
-                                'rel'  => 'collection/' . $relation,
-                                'link' => $_SERVER['REQUEST_URI'] . '/' . $relation
-                            );
+                switch (strtolower($request->getMethod())) {
+                    case 'get':
+                        if (null !== $requestId) {
+                            $action = 'get';
+                            $return = $this->get($requestId, $parent);
+                            $relations = $this->getRelations();
+                            foreach ($relations as $relation) {
+                                $return[$relation] = array(
+                                    'rel'  => 'collection/' . $relation,
+                                    'link' => $_SERVER['REQUEST_URI'] . '/' . $relation
+                                );
+                            }
+                            break;
                         }
+                        $action = 'getList';
+                        $return = $this->getList($range, $filter, $orderBy, $parent);
                         break;
-                    }
-                    $action = 'getList';
-                    $return = $this->getList($range, $filter, $orderBy, $parent);
-                    break;
-                case 'post':
-                    $action = 'create';
-                    $return = $this->processPostData($request);
-                    break;
-                case 'put':
-                    $action = 'update';
-                    $return = $this->processPutData($request, $routeMatch);
-                    break;
-                case 'patch':
-                    $action = 'patch';
-                    $return = $this->processPatchData($request, $routeMatch);
-                    break;
-                case 'delete':
-                    if (null === $requestId) {
-                        throw new Exception\DomainException('Missing identifier');
-                    }
-                    $action = 'delete';
-                    $return = $this->delete($requestId, $parent);
-                    break;
-                case 'options':
-                    if (null !== $requestId) {
-                        $return = $this->getOptions($requestId, $parent);
+                    case 'post':
+                        $action = 'create';
+                        $return = $this->processPostData($request);
                         break;
-                    }
-                    $return = $this->getOptions(null, $parent);
-                    break;
-                default:
-                    throw new Exception\DomainException('Invalid HTTP method!');
+                    case 'put':
+                        $action = 'update';
+                        $return = $this->processPutData($request, $routeMatch);
+                        break;
+                    case 'patch':
+                        $action = 'patch';
+                        $return = $this->processPatchData($request, $routeMatch);
+                        break;
+                    case 'delete':
+                        if (null === $requestId) {
+                            throw new Exception\DomainException('Missing identifier');
+                        }
+                        $action = 'delete';
+                        $return = $this->delete($requestId, $parent);
+                        break;
+                    case 'options':
+                        if (null !== $requestId) {
+                            $return = $this->getOptions($requestId, $parent);
+                            break;
+                        }
+                        $return = $this->getOptions(null, $parent);
+                        break;
+                    default:
+                        throw new Exception\DomainException('Invalid HTTP method!');
+                }
+
+                $routeMatch->setParam('action', $action);
             }
 
-            $routeMatch->setParam('action', $action);
-        }
 
-        $allowedOrigin = isset($_SERVER['HTTP_HOST']) ?
-            str_replace('api.', '', $_SERVER['HTTP_HOST']) : '*';
+            $allowedOrigin = isset($_SERVER['HTTP_HOST']) ?
+                str_replace('api.', '', $_SERVER['HTTP_HOST']) : '*';
 
-        if (($originHeader = $this->getRequest()->getHeader('Origin'))) {
-            $allowedOrigin = $originHeader->getFieldValue();
-        }
+            if (($originHeader = $this->getRequest()->getHeader('Origin'))) {
+                $allowedOrigin = $originHeader->getFieldValue();
+            }
 
-        $this->getResponse()->getHeaders()->addHeaderLine(
-            'Access-Control-Allow-Credentials', 'true'
-        );
-        $this->getResponse()->getHeaders()->addHeaderLine(
-            'Access-Control-Allow-Origin', $allowedOrigin
-        );
-        $this->getResponse()->getHeaders()->addHeaderLine(
-            'Access-Control-Allow-Methods',
-            'GET, POST, PUT, PATCH, HEAD, TRACE, OPTIONS'
-        );
-        $this->getResponse()->getHeaders()->addHeaderLine(
-            'Access-Control-Expose-Headers',
-            'WWW-Authenticate, Vary, Content-Range'
-        );
-        $this->getResponse()->getHeaders()->addHeaderLine(
-            'Access-Control-Allow-Headers',
-            'Accept, Authorization, Accept-Encoding, Accept-Language, Range, X-Browser-Digest, X-Filter-By, X-Order-By'
-        );
-
-        $viewModel = new \Zend\View\Model\JsonModel();
-
-        if (empty($return) && $this->getResponse()->getStatusCode() != 401) {
-            $this->getResponse()->setStatusCode(204);
-        }
-
-        $trMetaData = null;
-        if ($this->getTunnelingEnabled()) {
-
-            $trMetaData = $this->getTunnelledResponsemetaData(
-                $this->getResponse()
+            $this->getResponse()->getHeaders()->addHeaderLine(
+                'Access-Control-Allow-Credentials', 'true'
+            );
+            $this->getResponse()->getHeaders()->addHeaderLine(
+                'Access-Control-Allow-Origin', $allowedOrigin
+            );
+            $this->getResponse()->getHeaders()->addHeaderLine(
+                'Access-Control-Allow-Methods',
+                'GET, POST, PUT, PATCH, HEAD, TRACE, OPTIONS'
+            );
+            $this->getResponse()->getHeaders()->addHeaderLine(
+                'Access-Control-Expose-Headers',
+                'WWW-Authenticate, Vary, Content-Range'
+            );
+            $this->getResponse()->getHeaders()->addHeaderLine(
+                'Access-Control-Allow-Headers',
+                'Accept, Authorization, Accept-Encoding, Accept-Language, Range, X-Browser-Digest, X-Filter-By, X-Order-By'
             );
 
-            $wwwAuthenticate = $this->getResponse()->getHeaders()->get('WWW-Authenticate');
-            if ($wwwAuthenticate) {
-                $this->getResponse()->getHeaders()->removeHeader($wwwAuthenticate[0]);
+            $viewModel = new \Zend\View\Model\JsonModel();
+
+            if (
+                empty($return) &&
+                $this->getResponse()->getStatusCode() < 400 &&
+                $this->getRequest()->getMethod() != 'OPTIONS'
+            ) {
+                $this->getResponse()->setStatusCode(204);
             }
 
-        }
-        if (empty($return)) {
-            $this->getResponse()->setStatusCode(204);
-            if (null !== $trMetaData) {
-                $return = $trMetaData;
-            } else {
-                return $this->getResponse();
-            }
-        } else {
-            if (null !== $trMetaData) {
-                $return = array_merge($trMetaData, $return);
-            }
-            $accept         = $this->getRequest()->getHeader('accept')->getFieldValue();
-            $acceptList     = array();
-            $explodedAccept = explode(',', $accept);
+            $trMetaData = null;
+            if ($this->getTunnelingEnabled()) {
 
-            foreach($explodedAccept as $explode) {
-                $tmp            = explode(';', $explode);
-                $acceptMime     = array_shift($tmp);
-                $acceptList[]   = trim($acceptMime);
-            }
+                $trMetaData = $this->getTunnelledResponsemetaData(
+                    $this->getResponse()
+                );
 
-            if (false !== $accept && in_array('*/*', $acceptList) === false) {
-                if (in_array('application/json', $acceptList) === false) {
-                    $this->getResponse()->setStatusCode(406);
+                $wwwAuthenticate = $this->getResponse()->getHeaders()->get('WWW-Authenticate');
+                if ($wwwAuthenticate) {
+                    $this->getResponse()->getHeaders()->removeHeader($wwwAuthenticate[0]);
+                }
+
+            }
+            if (empty($return)) {
+                if (null !== $trMetaData) {
+                    $return = $trMetaData;
+                } else {
                     return $this->getResponse();
-                    // TODO: Support more accept types
+                }
+            } else {
+                if (null !== $trMetaData) {
+                    $return = array_merge($trMetaData, $return);
+                }
+                $accept         = $this->getRequest()->getHeader('accept')->getFieldValue();
+                $acceptList     = array();
+                $explodedAccept = explode(',', $accept);
+
+                foreach($explodedAccept as $explode) {
+                    $tmp            = explode(';', $explode);
+                    $acceptMime     = array_shift($tmp);
+                    $acceptList[]   = trim($acceptMime);
+                }
+
+                if (false !== $accept && in_array('*/*', $acceptList) === false) {
+                    if (in_array('application/json', $acceptList) === false) {
+                        $this->getResponse()->setStatusCode(406);
+                        return $this->getResponse();
+                        // TODO: Support more accept types
+                    }
                 }
             }
+
+            // jsonp workaround for */* header..
+            if ($this->getRequest()->getQuery('callback') !== false) {
+                // Enforce the callback to be called
+                $viewModel->setJsonpCallback($this->getRequest()->getQuery('callback'));
+            }
+
+            // When tunneling for method, status and headers is enabled alwayw
+            // return status 200 for the tunnel client to be able to get the
+            // body.
+            if ($this->getTunnelingEnabled()) {
+                $this->getResponse()->setStatusCode(200);
+            }
+            $viewModel->setVariables($return);
+
+            // Emit post-dispatch signal, passing:
+            // - return from method, request, response
+            // If a listener returns a response object, return it immediately
+            $e->setResult($viewModel);
+
+
+            $return = $viewModel;
         }
-
-        // jsonp workaround for */* header..
-        if ($this->getRequest()->getQuery('callback') !== false) {
-            // Enforce the callback to be called
-            $viewModel->setJsonpCallback($this->getRequest()->getQuery('callback'));
-        }
-
-        // When tunneling for method, status and headers is enabled alwayw
-        // return status 200 for the tunnel client to be able to get the
-        // body.
-        if ($this->getTunnelingEnabled()) {
-            $this->getResponse()->setStatusCode(200);
-        }
-        $viewModel->setVariables($return);
-
-        // Emit post-dispatch signal, passing:
-        // - return from method, request, response
-        // If a listener returns a response object, return it immediately
-        $e->setResult($viewModel);
-
-
-        return $viewModel;
+        return $return;
     }
 
     protected function getTunnelledResponsemetaData(HTTPResponse $response)

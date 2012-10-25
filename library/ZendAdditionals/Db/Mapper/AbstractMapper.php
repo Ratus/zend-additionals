@@ -136,9 +136,7 @@ abstract class AbstractMapper implements
     protected $attributeRelationsGenerated = false;
 
     /**
-     * Check if this mapper allows filtering, if the mapper
-     * allows filters then the method addFilterToPredicate must
-     * be implemented.
+     * Check if this mapper allows filtering be implemented.
      *
      * @return boolean
      */
@@ -1085,19 +1083,6 @@ abstract class AbstractMapper implements
                 $joinRequiredByFilter = true;
                 $joinPredicate->addPredicate($operator);
             }
-            /*foreach ($filters as $filterColumn => $filterValue) {
-                if (is_array($filterValue)) {
-                    // Skip arrays
-                    continue;
-                }
-                $entityAssociation->getMapper()->addFilterToPredicate(
-                    $filterColumn,
-                    $filterValue,
-                    $joinPredicate,
-                    $joinRequired
-                );
-                $joinRequiredByFilter = $joinRequired ?: $joinRequiredByFilter;
-            }*/
         }
 
         $select->join(
@@ -1114,6 +1099,49 @@ abstract class AbstractMapper implements
         $this->storeEntityAssociationToSelect($select, $entityAssociation);
 
         return $entityAssociation;
+    }
+
+    /**
+     * Adds an attribute relation
+     *
+     * @param string $attribute The identifier of the attribute
+     */
+    protected function addAttributeRelation($attribute)
+    {
+        if (!is_array($this->attributeRelations)) {
+            $this->attributeRelations = array();
+        }
+        if (!isset($this->attributeRelations['attributes'])) {
+            $this->attributeRelations['attributes'] = array();
+        }
+        if (
+            false === array_search(
+                $attribute, $this->attributeRelations['attributes']
+            )
+        ) {
+            $this->attributeRelations['attributes'][] = $attribute;
+        }
+    }
+
+    /**
+     * Set the attribute relations, note previously set attribute
+     * relations will be replaced.
+     *
+     * @param array $attributes
+     *
+     * @return AbstractMapper
+     */
+    protected function setAttributeRelations(array $attributes)
+    {
+        if (!is_array($this->attributeRelations)) {
+            $this->attributeRelations = array(
+                'attributes'      => array(),
+                'table_prefix'    => $this->getTableName() . '_',
+                'relation_column' => 'id'
+            );
+        }
+        $this->attributeRelations['attributes'] = $attributes;
+        return $this;
     }
 
     /**
