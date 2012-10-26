@@ -386,7 +386,7 @@ abstract class AbstractMapper implements
         if (isset($range['begin']) && $range['begin'] >= 0) {
             $offset = (int)$range['begin'];
             if (isset($range['end']) && $range['end'] > $range['begin']) {
-                $limit = ((int)$range['end'] - (int)$range['begin']) + 1;
+                $limit = ((int)$range['end'] - (int)$range['begin']);
             }
         }
         $select = $this->getSelect();

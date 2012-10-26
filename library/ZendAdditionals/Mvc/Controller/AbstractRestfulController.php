@@ -140,8 +140,8 @@ abstract class AbstractRestfulController extends AbstractController
         foreach ($entity as $key => &$column) {
             if (
                 is_array($column) &&
-                !isset($column['entity_id']) &&
-                !isset($column['attribute_id'])
+                !array_key_exists('entity_id', $column) &&
+                !array_key_exists('attribute_id', $column)
             ) {
                 // We have found a sub-entity
                 $column = $this->stripEntityAttributes($column);
