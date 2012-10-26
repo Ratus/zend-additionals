@@ -829,7 +829,7 @@ abstract class AbstractMapper implements
     protected function getResult(Select $select)
     {
         //echo '<pre>';
-        echo $this->debugSql($select->getSqlString());
+        //echo $this->debugSql($select->getSqlString());
         $this->initialize();
         $stmt = $this->getSlaveSql()->prepareStatementForSqlObject($select);
         $resultSet = new JoinedHydratingResultSet(
