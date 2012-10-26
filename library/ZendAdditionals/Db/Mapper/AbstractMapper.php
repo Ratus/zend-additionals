@@ -829,8 +829,8 @@ abstract class AbstractMapper implements
      */
     protected function getResult(Select $select)
     {
-//        echo '<pre>';
-//        echo $this->debugSql($select->getSqlString());
+        //echo '<pre>';
+        //echo $this->debugSql($select->getSqlString());
         $this->initialize();
         $stmt = $this->getSlaveSql()->prepareStatementForSqlObject($select);
         $resultSet = new JoinedHydratingResultSet(
@@ -858,7 +858,6 @@ abstract class AbstractMapper implements
     {
         $this->initialize();
         $select->columns(array('total' => new \Zend\Db\Sql\Expression('COUNT(*)')));
-        //echo $this->debugSql($select->getSqlString());
         $stmt = $this->getSlaveSql()->prepareStatementForSqlObject($select);
 
         $result = $stmt->execute();

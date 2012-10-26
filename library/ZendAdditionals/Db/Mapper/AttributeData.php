@@ -148,7 +148,7 @@ class AttributeData extends AbstractMapper
             if (strlen($value) > $attribute->getLength()) {
                 throw new \Exception('au');
             }
-            if ($attribute->getIsRequired() && empty($value)) {
+            if ($attribute->isRequired() && empty($value)) {
                 throw new \Exception('au2');
             }
         }

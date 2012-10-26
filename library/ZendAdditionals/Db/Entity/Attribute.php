@@ -7,8 +7,8 @@ class Attribute
     protected $label;
     protected $type;
     protected $length;
-    protected $isRequired;
-    protected $isModerationRequired;
+    protected $required;
+    protected $moderationRequired;
     protected $sortOrder;
 
     public function getId(){
@@ -47,21 +47,21 @@ class Attribute
         return $this;
     }
 
-    public function getIsRequired(){
-        return $this->isRequired;
+    public function isRequired(){
+        return (bool)$this->required;
     }
 
-    public function setIsRequired($isRequired){
-        $this->isRequired = $isRequired;
+    public function setRequired($required){
+        $this->required = (bool)$required;
         return $this;
     }
 
-    public function getIsModerationRequired(){
-        return $this->isModerationRequired;
+    public function isModerationRequired(){
+        return (bool)$this->moderationRequired;
     }
 
-    public function setIsModerationRequired($isModerationRequired){
-        $this->isModerationRequired = $isModerationRequired;
+    public function setModerationRequired($moderationRequired){
+        $this->moderationRequired = (bool)$moderationRequired;
         return $this;
     }
 
