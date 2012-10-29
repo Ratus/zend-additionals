@@ -20,7 +20,7 @@ abstract class Widget extends CustomViewHelper
     /** @var Array $config */
     protected $config;
 
-    /** @var Array (numeric) $data */
+    /** @var Array $data */
     protected $data;
 
     private $defaultskey = 'defaults';
