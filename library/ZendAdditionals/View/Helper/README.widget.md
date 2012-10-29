@@ -10,7 +10,11 @@ The Abstract widget makes use of the [Custom Module](https://github.com/Ratus/Cu
 
 How to use
 ---------
-1.  Create an class and extend the abstract widget (\ZendAdditionals\View\Helper\Widget)
+1.  Create an class and extend the abstract widget (\ZendAdditionals\View\Helper\Widget) <br />
+Create a function init(){} to do your actions. <br />
+Data needed in the template must be set with $this->data.
+
+
 2.  Create an viewhelper in you Module.php (add the function getViewHelperConfig() if needed)
 
     
@@ -67,4 +71,6 @@ How to use
     
 
 
-
+TODO
+---------
++ $this->data keeps the old data and save the new data
