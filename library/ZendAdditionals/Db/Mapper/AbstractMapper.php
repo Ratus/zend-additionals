@@ -19,7 +19,6 @@ use Zend\Db\Sql\Predicate\Predicate;
 use Zend\Db\Sql\Predicate\Operator;
 use Zend\EventManager\EventManagerInterface;
 use Zend\EventManager\EventManager;
-use ZendAdditionals\Exception\NotImplementedException;
 use ZendAdditionals\Db\Mapper\AttributeProperty;
 
 abstract class AbstractMapper implements
