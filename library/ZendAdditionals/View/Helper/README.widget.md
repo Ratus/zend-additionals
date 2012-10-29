@@ -74,3 +74,4 @@ Data needed in the template must be set with $this->data.
 TODO
 ---------
 + $this->data keeps the old data and save the new data
++ Better english
