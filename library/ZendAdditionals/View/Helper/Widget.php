@@ -1,13 +1,14 @@
 <?php
 namespace ZendAdditionals\View\Helper;
 
-use Zend\View\Model\ViewModel;
-use Zend\View\Helper\AbstractHelper;
 use Zend\ServiceManager\ServiceManager;
+use Zend\View\Exception;
+use Zend\View\Helper\AbstractHelper;
+use Zend\View\Model\ViewModel;
 
 use Custom\View\Helper\Custom as CustomViewHelper;
 
-use Zend\View\Exception;
+
 
 /**
 *   @author     Dennis Duwel <dennis@ratus.nl>
