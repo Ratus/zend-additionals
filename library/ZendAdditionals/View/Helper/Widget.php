@@ -223,7 +223,6 @@ abstract class Widget extends CustomViewHelper
         }
 
         $config = $config[$this->widgetskey];
-
         // Get the config for the type widget
         if (array_key_exists($type, $config)) {
             $config = $config[$type];
@@ -307,6 +306,10 @@ abstract class Widget extends CustomViewHelper
     {
         foreach( $array1 as $key => $value ) {
             if (is_array($value) && !empty($value)) {
+                if (!isset($array2[$key])) {
+                    $array2[$key] = array();
+                }
+
                 $this->mergeRecursive($array1[$key], $array2[$key]);
             } else if (isset($array2[$key])) {
                 $array1[$key] = $array2[$key];
