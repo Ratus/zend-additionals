@@ -14,6 +14,9 @@ use Custom\View\Helper\Custom as CustomViewHelper;
 *   @uses Custom\View\Helper\Custom
 *   @uses Zend\View\Model\ViewModel
 *   @uses Zend\View\Helper\AbstractHelper
+*
+*   @todo build in cache
+*   @todo merge recursive
 */
 abstract class Widget extends CustomViewHelper
 {
@@ -30,10 +33,12 @@ abstract class Widget extends CustomViewHelper
     protected $config;
 
     /** @var Array $data */
-    protected $data;
+    protected $data = array();
+
 
     private $defaultskey = 'defaults';
     private $widgetskey  = 'widgets';
+    private $sm;
 
 
     /**
@@ -47,16 +52,10 @@ abstract class Widget extends CustomViewHelper
     public function __construct($type, $sm)
     {
         $this->type = $type;
-
-        // Get and create the config from the custom
-        $config   = $sm->getServiceLocator()->get('config');
-        $custom   = !(empty($config['custom'])) ? $config['custom'] : array();
-        parent::__construct($custom);
+        $this->sm   = $sm;
 
         // Create an viewmodel and set the config variables
         $this->vmodel = new ViewModel();
-
-        return $this;
     }
 
     /**
@@ -73,7 +72,7 @@ abstract class Widget extends CustomViewHelper
             // Get the custom config
             $this->widgetConfig();
         } catch (\Exception $e) {
-            var_dump($e->getMessage());
+            error_log($e->getMessage());
         }
 
         // Initialize the widget
@@ -83,7 +82,7 @@ abstract class Widget extends CustomViewHelper
             // Render the widget
             return $this->render();
         } catch (\Exception $e) {
-            var_dump($e->getMessage());
+            error_log($e->getMessage());
         }
     }
 
@@ -110,9 +109,16 @@ abstract class Widget extends CustomViewHelper
     * @throws \Exception '[widgets] not found in config'
     * @throws \Exception '[defaults] not found in config'
     * @throws \Exception '[key] not found in config'
+    *
+    * @todo add cache
     */
     private function widgetConfig()
     {
+        // Get and create the config from the custom
+        $config   = $this->sm->getServiceLocator()->get('config');
+        $custom   = !(empty($config['custom'])) ? $config['custom'] : array();
+        parent::__construct($custom);
+
         // The widgets config
         $config = $this->get($this->widgetskey);
         if ( empty($config) ) {
@@ -146,7 +152,11 @@ abstract class Widget extends CustomViewHelper
             return false;
         }
 
-        $this->config = array_merge($defaults, $widget);
+        // Update the defaults with the widgetconfig
+        $this->mergeRecursive($defaults, $widget);
+        //$this->checkParams($defaults, $config['musthaves']);
+
+        $this->config = $defaults;
     }
 
     /**
@@ -168,13 +178,45 @@ abstract class Widget extends CustomViewHelper
             }
         }
 
-        $this->vmodel->setVariables($this->data);
+        if ( !empty($this->data) ) {
+            $this->vmodel->setVariables($this->data);
+        }
+
+        if ( !empty($this->config) ) {
+            $this->vmodel->setVariables($this->config);
+        }
+        $this->vmodel->setVariable('type', $this->type);
+        $this->vmodel->setVariable('name', $this->name);
 
         $rendered = $this->getView()->render($this->vmodel);
+
+
         if (empty($rendered)) {
-            return false;
+            error_log("Nothing renderd");
         }
 
         return $rendered;
+    }
+
+//    private function checkParams(&$params, $musthaves)
+//    {
+//        foreach( $params as $key => &$value ) {
+//            if ( is_array($value) && !empty($value) ) {
+//                $this->checkParams($value, $musthaves);
+//            } else {
+//                if ()
+//            }
+//        }
+//    }
+
+    private function mergeRecursive(&$main, &$sub)
+    {
+        foreach( $main as $key => $value ) {
+            if (is_array($value) && !empty($value)) {
+                $this->mergeRecursive($main[$key], $sub[$key]);
+            } else if (isset($sub[$key])) {
+                $main[$key] = $sub[$key];
+            }
+        }
     }
 }
