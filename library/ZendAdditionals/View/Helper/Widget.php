@@ -6,10 +6,14 @@ use Zend\View\Helper\AbstractHelper;
 use Custom\View\Helper\Custom as CustomViewHelper;
 
 /**
-*   @author  Dennis Duwel <dennis@ratus.nl>
-*   @version 0.1 <initial>
-*   @since   29-10-2012
-*   changed  29-10-2012
+*   @author     Dennis Duwel <dennis@ratus.nl>
+*   @package    ZendAdditionals
+*   @category   ZendAdditionals
+*   @subpackage View\Helper
+*
+*   @version    0.1 <initial>
+*   @since      29-10-2012
+*   @changed    29-10-2012
 *
 *   @uses Custom\View\Helper\Custom
 *   @uses Zend\View\Model\ViewModel
@@ -61,6 +65,7 @@ abstract class Widget extends CustomViewHelper
     /**
     * Invoke, function called to create the viewhelper
     *
+    * @return string The rendered HTML
     */
     public function __invoke()
     {
