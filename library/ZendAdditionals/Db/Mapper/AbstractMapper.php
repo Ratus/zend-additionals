@@ -607,6 +607,10 @@ abstract class AbstractMapper implements
         $applyWhereFilter = false;
         if (is_array($filter)) {
             foreach ($filter as $key => $operator) {
+                if (is_array($operator)) { //Skip join conditions
+                    continue;
+                }
+
                 if (!($operator instanceof \Zend\Db\Sql\Predicate\PredicateInterface)) {
                     $value    = $operator;
                     $operator = new Operator();
@@ -1063,7 +1067,13 @@ abstract class AbstractMapper implements
         $joinPredicate = $entityAssociation->getPredicate();
         $joinRequiredByFilter = false;
         if ($this->getAllowFilters() && !empty($filters)) {
-            foreach ($filters as $operator) {
+            foreach ($filters as $key => $operator) {
+                if (!($operator instanceof \Zend\Db\Sql\Predicate\PredicateInterface)) {
+                    $value    = $operator;
+                    $operator = new Operator();
+                    $operator->setLeft($key)->setRight($value);
+                }
+
                 $getIdentifier = 'getLeft';
                 $setIdentifier = 'setLeft';
                 if (method_exists($operator, 'getIdentifier')) {
