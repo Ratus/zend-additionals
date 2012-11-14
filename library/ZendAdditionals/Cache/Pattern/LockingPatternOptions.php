@@ -10,6 +10,16 @@ class LockingPatternOptions extends \Zend\Cache\Pattern\PatternOptions
     protected $lockPrefix = 'lock_';
     protected $ttlBuffer  = 30;
 
+    public function setEnabled($enabled)
+    {
+        $this->enabled = (boolean)$enabled;
+    }
+
+    public function getEnabled()
+    {
+        return $this->enabled;
+    }
+
     public function setRetryCount($count)
     {
         $this->retryCount = $count;
