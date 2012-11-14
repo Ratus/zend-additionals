@@ -103,6 +103,15 @@ class Object
         return $this->readValue($key);
     }
     
+    public function getValues(array $keys)
+    {
+        $return = array();
+        foreach ($keys as $key) {
+            $return[$key] = $this->readValue($key);
+        }
+        return $return;
+    }
+    
     public function setValue($key, $value)
     {
         $this->writeValue($key, $value);

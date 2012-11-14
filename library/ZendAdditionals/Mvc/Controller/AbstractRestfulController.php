@@ -135,24 +135,6 @@ abstract class AbstractRestfulController extends AbstractController
         return null;
     }
 
-    protected function stripEntityAttributes(array $entity)
-    {
-        foreach ($entity as $key => &$column) {
-            if (
-                is_array($column) &&
-                !array_key_exists('entity_id', $column) &&
-                !array_key_exists('attribute_id', $column)
-            ) {
-                // We have found a sub-entity
-                $column = $this->stripEntityAttributes($column);
-            } elseif(is_array($column)) {
-                // We have found an attribute
-                $entity[$key] = $column['value'];
-            }
-        }
-        return $entity;
-    }
-
     /**
      * Return list of resources
      *
@@ -236,10 +218,6 @@ abstract class AbstractRestfulController extends AbstractController
             'resources=' . $range['begin'] . '-' . $range['end'] . '/' . $count
         );
 
-        foreach ($results as &$result) {
-            $result = $this->stripEntityAttributes($result);
-        }
-
         return $results;
     }
 
@@ -286,7 +264,7 @@ abstract class AbstractRestfulController extends AbstractController
         );
 
         if (!empty($results)) {
-            return $this->stripEntityAttributes($results[0]);
+            return $results[0];
         }
     }
 
@@ -872,4 +850,3 @@ abstract class AbstractRestfulController extends AbstractController
     }
 
 }
-
