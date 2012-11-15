@@ -411,9 +411,14 @@ abstract class AbstractMapper implements
         $offset = 0;
         if (isset($range['begin']) && $range['begin'] >= 0) {
             $offset = (int)$range['begin'];
-            if (isset($range['end']) && $range['end'] > $range['begin']) {
-                $limit = ((int)$range['end'] - (int)$range['begin']);
-            }
+        }
+        if (isset($range['end']) && $range['end'] > $offset) {
+            $limit = ((int)$range['end'] - $offset);
+        }
+        if (isset($_SESSION['dumpert'])) {
+            var_dump('LIMIT', $limit, 'OFFSET', $offset);
+            unset($_SESSION['dumpert']);
+            die();
         }
         $select = $this->getSelect();
         $select->limit($limit);
@@ -452,6 +457,10 @@ abstract class AbstractMapper implements
                     }
                     $columns[] = $column;
                 }
+            }
+        } else {
+            foreach ($possibleXmlAttributeColumns as $column => $possibleXmlAttributes) {
+                $xmlAttributes[$column] = $possibleXmlAttributes;
             }
         }
 
