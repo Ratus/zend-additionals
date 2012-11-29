@@ -2,22 +2,24 @@
 
 namespace ZendAdditionals\Mvc\Controller;
 
+use Zend\Db\Sql\Predicate\Operator;
+use Zend\Db\Sql\Predicate\Between;
+use Zend\Db\Sql\Predicate\Like;
+use Zend\Db\Sql\Predicate\In;
 use Zend\Http\Request as HTTPRequest;
 use Zend\Http\Response as HTTPResponse;
+use Zend\Mvc\Controller\AbstractController;
+use Zend\Mvc\Router\Http\RouteMatch;
 use Zend\Mvc\Exception;
 use Zend\Mvc\MvcEvent;
 use Zend\Stdlib\RequestInterface as Request;
 use Zend\Stdlib\ResponseInterface as Response;
-use Zend\Mvc\Controller\AbstractController;
+use Zend\Stdlib\Hydrator\ClassMethods;
+
 use ZendAdditionals\Exception\NotImplementedException;
-use Zend\Db\Sql\Predicate\Operator;
-use Zend\Db\Sql\Predicate\Between;
 use ZendAdditionals\Db\Sql\Predicate\NotBetween;
-use Zend\Db\Sql\Predicate\Like;
 use ZendAdditionals\Db\Sql\Predicate\NotLike;
-use Zend\Db\Sql\Predicate\In;
 use ZendAdditionals\Db\Sql\Predicate\NotIn;
-use Zend\Mvc\Router\RouteMatch;
 
 /**
  * Abstract RESTful controller
@@ -28,6 +30,20 @@ use Zend\Mvc\Router\RouteMatch;
  */
 abstract class AbstractRestfulController extends AbstractController
 {
+    const REQUEST_GET       = 'GET',
+          REQUEST_POST      = 'POST',
+          REQUEST_HEAD      = 'HEAD',
+          REQUEST_OPTIONS   = 'OPTIONS',
+          REQUEST_PATCH     = 'PATCH',
+          REQUEST_PUT       = 'PUT',
+          REQUEST_TRACE     = 'TRACE';
+    /**
+     * The options that can be used. GET, POST, HEAD etc.
+     *
+     * @var array
+     */
+    protected $options = array();
+
     /**
      * @var boolean
      */
@@ -39,11 +55,55 @@ abstract class AbstractRestfulController extends AbstractController
     protected $eventIdentifier = __CLASS__;
 
     /**
+     * @var RouteMatch
+     */
+    protected $routeMatch;
+
+    /**
      * Return available HTTP methods and other options
      *
      * @return mixed
      */
-    abstract public function getOptions($id = null);
+    public function getOptions($id = null)
+    {
+        $response       = $this->getResponse();
+        $return         = array();
+
+        // Default request types for Collection and Resource
+        $allowedRequestTypes  = array(
+            self::REQUEST_GET,
+            self::REQUEST_HEAD,
+            self::REQUEST_OPTIONS,
+        );
+
+        if (empty($id)) { // Collection has POST possibility
+            $response->getHeaders()->addHeaderLine('Accept-Ranges', 'resources');
+            $allowedRequestTypes[] = self::REQUEST_POST;
+        } else { // Resource has PATCH possibility
+            $allowedRequestTypes[] = self::REQUEST_PATCH;
+        }
+
+        // Set the allowed request types
+        $response->getHeaders()->addHeaderLine('Allow', implode(',', $allowedRequestTypes));
+
+        foreach($allowedRequestTypes as $requestType) {
+            if (isset($this->options[$requestType])) {
+                $return[$requestType] = $this->options[$requestType];
+            }
+        }
+
+        if (!empty($return)) {
+            return $return;
+        }
+    }
+
+    /**
+     * @return \Zend\Http\PhpEnvironment\Response
+     */
+    public function getResponse()
+    {
+        return parent::getResponse();
+    }
 
     /**
      * Return the entity mapper for this collection
@@ -135,22 +195,24 @@ abstract class AbstractRestfulController extends AbstractController
         return null;
     }
 
-    protected function stripEntityAttributes(array $entity)
+    /**
+     * @return RouteMatch | null
+     */
+    protected function getRouteMatch()
     {
-        foreach ($entity as $key => &$column) {
-            if (
-                is_array($column) &&
-                !array_key_exists('entity_id', $column) &&
-                !array_key_exists('attribute_id', $column)
-            ) {
-                // We have found a sub-entity
-                $column = $this->stripEntityAttributes($column);
-            } elseif(is_array($column)) {
-                // We have found an attribute
-                $entity[$key] = $column['value'];
-            }
-        }
-        return $entity;
+        return $this->routeMatch;
+    }
+
+    /**
+     * This will be called on the onDispatch event
+     *
+     * @param RouteMatch $routeMatch
+     * @return self
+     */
+    protected function setRouteMatch(RouteMatch $routeMatch)
+    {
+        $this->routeMatch = $routeMatch;
+        return $this;
     }
 
     /**
@@ -236,10 +298,6 @@ abstract class AbstractRestfulController extends AbstractController
             'resources=' . $range['begin'] . '-' . $range['end'] . '/' . $count
         );
 
-        foreach ($results as &$result) {
-            $result = $this->stripEntityAttributes($result);
-        }
-
         return $results;
     }
 
@@ -286,7 +344,7 @@ abstract class AbstractRestfulController extends AbstractController
         );
 
         if (!empty($results)) {
-            return $this->stripEntityAttributes($results[0]);
+            return $results[0];
         }
     }
 
@@ -301,10 +359,21 @@ abstract class AbstractRestfulController extends AbstractController
     /**
      * Create a new resource
      *
-     * @param  mixed $data
-     * @return mixed
+     * @param  array $data
+     * @return object|boolean Entity on success | FALSE on failure
      */
-    abstract public function create($data);
+    public function create($data)
+    {
+        $entity     = clone $this->getMapper()->getEntityPrototype();
+        $hydrator   = new ClassMethods();
+        $hydrator->hydrate($data, $entity);
+
+        if($this->getMapper()->save($entity) === false) {
+            return false;
+        }
+
+        return $entity;
+    }
 
     /**
      * Update an existing resource
@@ -474,6 +543,8 @@ abstract class AbstractRestfulController extends AbstractController
     public function onDispatch(MvcEvent $e)
     {
         $routeMatch = $e->getRouteMatch();
+        $this->setRouteMatch($routeMatch);
+
         if (!$routeMatch) {
             throw new Exception\DomainException(
                 'Missing route matches; unsure how to retrieve action'
@@ -752,8 +823,8 @@ abstract class AbstractRestfulController extends AbstractController
                 if ($wwwAuthenticate) {
                     $this->getResponse()->getHeaders()->removeHeader($wwwAuthenticate[0]);
                 }
-
             }
+
             if (empty($return)) {
                 if (null !== $trMetaData) {
                     $return = $trMetaData;
@@ -871,5 +942,21 @@ abstract class AbstractRestfulController extends AbstractController
         return $this->update($id, $parsedParams);
     }
 
-}
+    /**
+     * Get controller based on the full classname
+     * The required objects will be injected in the controller
+     *
+     * @param string $controllerName The fullclassname of the controller
+     * @return AbstractController
+     */
+    public function getController($controllerName)
+    {
+        $profile = new $controllerName();
+        $profile->setEventManager($this->getEventManager());
+        $profile->setPluginManager($this->getPluginManager());
+        $profile->setServiceLocator($this->getServiceLocator());
 
+        return $profile;
+    }
+
+}
