@@ -958,5 +958,4 @@ abstract class AbstractRestfulController extends AbstractController
 
         return $profile;
     }
-
 }

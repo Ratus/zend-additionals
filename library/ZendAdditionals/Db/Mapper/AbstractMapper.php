@@ -133,6 +133,14 @@ abstract class AbstractMapper implements
     protected $attributeRelations = array();
 
     protected $attributeRelationsGenerated = false;
+    
+    /**
+     * Xml attribute columns tells which of the columns
+     * holds xml and what fields are available within the xml
+     * 
+     * @var array
+     */
+    protected $xmlAttributeColumns = array();
 
     /**
      * Check if this mapper allows filtering be implemented.
@@ -148,6 +156,25 @@ abstract class AbstractMapper implements
         if (static::$eventManager === null) {
             $this->setEventManager(new EventManager());
         }
+    }
+    
+    /**
+     * @param array $xmlAttributeColumns
+     * 
+     * @return AbstractMapper
+     */
+    public function setXmlAttributeColumns(array $xmlAttributeColumns)
+    {
+        $this->xmlAttributeColumns = $xmlAttributeColumns;
+        return $this;
+    }
+    
+    /**
+     * @return array
+     */
+    public function getXmlAttributeColumns()
+    {
+        return $this->xmlAttributeColumns;
     }
 
     /**
@@ -384,9 +411,14 @@ abstract class AbstractMapper implements
         $offset = 0;
         if (isset($range['begin']) && $range['begin'] >= 0) {
             $offset = (int)$range['begin'];
-            if (isset($range['end']) && $range['end'] > $range['begin']) {
-                $limit = ((int)$range['end'] - (int)$range['begin']);
-            }
+        }
+        if (isset($range['end']) && $range['end'] > $offset) {
+            $limit = ((int)$range['end'] - $offset);
+        }
+        if (isset($_SESSION['dumpert'])) {
+            var_dump('LIMIT', $limit, 'OFFSET', $offset);
+            unset($_SESSION['dumpert']);
+            die();
         }
         $select = $this->getSelect();
         $select->limit($limit);
@@ -396,16 +428,39 @@ abstract class AbstractMapper implements
         if (!empty($columnsFilter)) {
             $applyColumnsFilter = true;
         }
-
+        $possibleXmlAttributeColumns = $this->getXmlAttributeColumns();
+        $xmlAttributes = array();
+        
         $columns     = array();
         $joinColumns = array();
         if ($applyColumnsFilter) {
             foreach ($columnsFilter as $joinKey => $column) {
                 if (is_array($column)) {
-                    $joinColumns[$joinKey] = $column;
+                    if (array_key_exists($joinKey, $possibleXmlAttributeColumns)) {
+                        $columns[] = $joinKey;
+                        if (!$returnEntities) {
+                            $xmlAttributes[$joinKey] = (
+                                empty($column) ? 
+                                $possibleXmlAttributeColumns[$joinKey] : 
+                                $column
+                            );
+                        }
+                    } else {
+                        $joinColumns[$joinKey] = $column;
+                    }
                 } else {
+                    if (
+                        !$returnEntities && 
+                        array_key_exists($column, $possibleXmlAttributeColumns)
+                    ) {
+                        $xmlAttributes[$column] = $possibleXmlAttributeColumns[$column];
+                    }
                     $columns[] = $column;
                 }
+            }
+        } else {
+            foreach ($possibleXmlAttributeColumns as $column => $possibleXmlAttributes) {
+                $xmlAttributes[$column] = $possibleXmlAttributes;
             }
         }
 
@@ -416,9 +471,14 @@ abstract class AbstractMapper implements
             foreach ($this->attributeRelations['attributes'] as $attributeIdentifier) {
                 $attributeFilter = null;
                 if (isset($filter[$attributeIdentifier])) {
-                    $attributeMapper = $this->getServiceManager()->get(Attribute::SERVICE_NAME);
+                    $attributeMapper = $this->getServiceManager()->get(
+                        Attribute::SERVICE_NAME
+                    );
                     /*@var $attributeMapper Attribute*/
-                    $attribute = $attributeMapper->getAttributeByLabel($attributeIdentifier, $this->attributeRelations['table_prefix']);
+                    $attribute = $attributeMapper->getAttributeByLabel(
+                        $attributeIdentifier, 
+                        $this->attributeRelations['table_prefix']
+                    );
 
                     $setIdentifier = 'setIdentifier';
                     $setValue = 'setValue';
@@ -439,13 +499,26 @@ abstract class AbstractMapper implements
                     }
 
                     if ($attribute->getType() === 'enum') {
-                        $attributePropertyMapper = $this->getServiceManager()->get(AttributeProperty::SERVICE_NAME);
+                        $attributePropertyMapper = $this->getServiceManager()
+                        ->get(
+                            AttributeProperty::SERVICE_NAME
+                        );
                         /*@var $attributePropertyMapper AttributeProperty*/
                         $newOperatorValue = false;
                         if ($multiple) {
-                            $newOperatorValue = $attributePropertyMapper->getPropertyIdsByAttributeIdAndLabels($attribute->getId(), $operator->$getValue(), $this->attributeRelations['table_prefix']);
+                            $newOperatorValue = $attributePropertyMapper
+                            ->getPropertyIdsByAttributeIdAndLabels(
+                                $attribute->getId(), 
+                                $operator->$getValue(), 
+                                $this->attributeRelations['table_prefix']
+                            );
                         } else {
-                            $newOperatorValue = $attributePropertyMapper->getPropertyIdByAttributeIdAndLabel($attribute->getId(), $operator->$getValue(), $this->attributeRelations['table_prefix']);
+                            $newOperatorValue = $attributePropertyMapper
+                            ->getPropertyIdByAttributeIdAndLabel(
+                                $attribute->getId(), 
+                                $operator->$getValue(), 
+                                $this->attributeRelations['table_prefix']
+                            );
                         }
 
                         if (!$newOperatorValue) {
@@ -476,11 +549,21 @@ abstract class AbstractMapper implements
                     $columns = array_values($columns);
                 } elseif ($applyColumnsFilter) {
                     if (!empty($attributeFilter)) {
-                        $this->addAttributeJoin($select, $attributeIdentifier, false, $attributeFilter);
+                        $this->addAttributeJoin(
+                            $select, 
+                            $attributeIdentifier, 
+                            false, 
+                            $attributeFilter
+                        );
                     }
                     continue;
                 }
-                $this->addAttributeJoin($select, $attributeIdentifier, true, $attributeFilter);
+                $this->addAttributeJoin(
+                    $select, 
+                    $attributeIdentifier,
+                    true, 
+                    $attributeFilter
+                );
             }
         }
 
@@ -624,8 +707,15 @@ abstract class AbstractMapper implements
                 }
                 // Prefix with table name because it's a where clause
                 // TODO: Jesper improve this part
-                if (strstr($operator->$getIdentifier(), $this->getTableName()) === false) {
-                    $operator->$setIdentifier($this->getTableName() . '.' . $operator->$getIdentifier());
+                if (
+                    strstr(
+                        $operator->$getIdentifier(),
+                        $this->getTableName()
+                    ) === false
+                ) {
+                    $operator->$setIdentifier(
+                        $this->getTableName() . '.' . $operator->$getIdentifier()
+                    );
                 }
                 $where->addPredicate($operator);
                 $applyWhereFilter = true;
@@ -636,8 +726,23 @@ abstract class AbstractMapper implements
         if ($applyWhereFilter) {
             $select->where($where);
         }
+        
+        $return = array();
+        $result = $this->getResult($select);
+        /*@var $result \ZendAdditionals\Db\ResultSet\JoinedHydratingResultSet*/
 
-        return $this->getAll($select, $returnEntities);
+        while ($entity = $result->current($returnEntities)) {
+            if (!$returnEntities && !empty($xmlAttributes)) {
+                foreach ($xmlAttributes as $xmlColumn => $filteredXmlFields) {
+                    $xmlData = new \ZendAdditionals\Xml\Object($entity[$xmlColumn]);
+                    $entity[$xmlColumn] = $xmlData->getValues($filteredXmlFields);
+                }
+            }
+            $return[] = $entity;
+            $result->next();
+        }
+
+        return $return;
     }
 
     protected function initializeRelations()
@@ -685,10 +790,16 @@ abstract class AbstractMapper implements
     {
         if (
             !isset($this->attributeRelations['attributes']) ||
-            ($key = array_search($label, $this->attributeRelations['attributes'])) === false
+            (
+                $key = array_search(
+                    $label, 
+                    $this->attributeRelations['attributes']
+                )
+            ) === false
         ) {
             throw new \UnexpectedValueException(
-                'There is no attribute relation defined for label "' . $label . '"!'
+                'There is no attribute relation defined for label "' . 
+                $label . '"!'
             );
         }
 
@@ -700,12 +811,14 @@ abstract class AbstractMapper implements
 
         if (!isset($this->attributeRelations['table_prefix'])) {
             throw new \UnexpectedValueException(
-                'There is no attribute table prefix defined for label "' . $label . '"!'
+                'There is no attribute table prefix defined for label "' . 
+                $label . '"!'
             );
         }
         if (!isset($this->attributeRelations['relation_column'])) {
             throw new \UnexpectedValueException(
-                'There is no attribute relation column defined for label "' . $label . '"!'
+                'There is no attribute relation column defined for label "' . 
+                $label . '"!'
             );
         }
 
@@ -725,7 +838,10 @@ abstract class AbstractMapper implements
                     'operand' => self::OPERAND_EQUALS,
                     'right'   => array(
                         'type'     => self::RELATION_TYPE_CALLBACK,
-                        'value'    => array($label, $this->attributeRelations['table_prefix']),
+                        'value'    => array(
+                            $label, 
+                            $this->attributeRelations['table_prefix']
+                        ),
                         'callback' => array($this, 'getAttributeIdByLabel'),
                     ),
                 ),
@@ -860,7 +976,9 @@ abstract class AbstractMapper implements
     protected function getCount(Select $select)
     {
         $this->initialize();
-        $select->columns(array('total' => new \Zend\Db\Sql\Expression('COUNT(*)')));
+        $select->columns(
+            array('total' => new \Zend\Db\Sql\Expression('COUNT(*)'))
+        );
         $stmt = $this->getSlaveSql()->prepareStatementForSqlObject($select);
 
         $result = $stmt->execute();
@@ -873,7 +991,8 @@ abstract class AbstractMapper implements
 
     protected function getRow(Select $select, $returnEntity = true)
     {
-        return $this->getResult($select)->getDataSource()->current($returnEntity);
+        return $this->getResult($select)
+               ->getDataSource()->current($returnEntity);
     }
 
     protected function getCurrent(Select $select, $returnEntity = true)
@@ -943,7 +1062,8 @@ abstract class AbstractMapper implements
      * @param Select $select
      * @param string $entityIdentifier
      * @param EntityAssociation $parentAssociation
-     * @param array $columnFilter By default all columns get selected, use this array to minimize the selection
+     * @param array $columnFilter By default all columns get selected, 
+     *                            use this array to minimize the selection
      * @param array<Operator> $filters An array containing filters for this join, note
      *                       when filters are provided this join becomes required!
      *
@@ -1082,7 +1202,9 @@ abstract class AbstractMapper implements
                 }
                 $currentIdentifier = $operator->$getIdentifier();
                 if (strpos($currentIdentifier, '.') === false) {
-                    $operator->$setIdentifier($entityAssociation->getAlias() . '.' . $currentIdentifier);
+                    $operator->$setIdentifier(
+                        $entityAssociation->getAlias() . '.' . $currentIdentifier
+                    );
                 }
                 if (!($operator instanceof \Zend\Db\Sql\Predicate\PredicateInterface)) {
                     // Skip non predicates
@@ -1157,8 +1279,10 @@ abstract class AbstractMapper implements
      *
      * @param Select $select
      */
-    protected function addAttributeJoins(Select $select, $addSelectionColumns = true)
-    {
+    protected function addAttributeJoins(
+        Select $select, 
+        $addSelectionColumns = true
+    ) {
         if (
             isset($this->attributeRelations['attributes']) &&
             is_array($this->attributeRelations['attributes'])
@@ -1175,11 +1299,31 @@ abstract class AbstractMapper implements
      * @param Select $select
      * @param type $attribute
      */
-    protected function addAttributeJoin(Select $select, $attribute, $addSelectionColumns = true, array $attributeDataFilters = null)
-    {
-        $ref = $this->addJoin($select, $attribute, null, $addSelectionColumns ? null : array(), $attributeDataFilters);
-        $this->addJoin($select, 'attribute', $ref, $addSelectionColumns ? null : array());
-        $this->addJoin($select, 'attribute_property', $ref, $addSelectionColumns ? null : array());
+    protected function addAttributeJoin(
+        Select $select, 
+        $attribute, 
+        $addSelectionColumns = true, 
+        array $attributeDataFilters = null
+    ) {
+        $ref = $this->addJoin(
+            $select, 
+            $attribute, 
+            null, 
+            $addSelectionColumns ? null : array(), 
+            $attributeDataFilters
+        );
+        $this->addJoin(
+            $select, 
+            'attribute', 
+            $ref, 
+            $addSelectionColumns ? null : array()
+        );
+        $this->addJoin(
+            $select, 
+            'attribute_property', 
+            $ref, 
+            $addSelectionColumns ? null : array()
+        );
     }
 
     /**
