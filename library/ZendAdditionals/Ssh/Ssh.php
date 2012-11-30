@@ -58,7 +58,7 @@ class Ssh
         $this->host             = $host;
         $this->port             = $port;
 
-        $this->connectMethods   = $methods ?: new Connect\Methods();
+        $this->connectMethods   = $methods   ?: new Connect\Methods();
         $this->connectCallbacks = $callbacks ?: new Connect\Callbacks();
     }
 
@@ -379,3 +379,4 @@ class Ssh
         stream_set_blocking($errStream, $errStreamBlocking);
     }
 }
+

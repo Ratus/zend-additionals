@@ -8,3 +8,4 @@ namespace ZendAdditionals\Ssh\Exception;
  */
 class UnexpectedValueException extends \UnexpectedValueException
 {}
+

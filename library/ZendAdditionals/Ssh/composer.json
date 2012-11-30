@@ -8,9 +8,9 @@
     ],
     "authors" : [
         {
-             "name" : "Jesper Dolieslager",
-             "email" : "jdolieslager@gmail.com",
-             "homepage" : "http://www.jesperdolieslager.nl"
+             "name"     : "Jesper Dolieslager",
+             "email"    : "jesper@ratus.nl",
+             "homepage" : "http://www.ratus.nl"
         }
     ],
     "autoload": {
@@ -20,9 +20,9 @@
     },
     "target-dir": "ZendAdditionals/Ssh",
     "require": {
-        "php": ">=5.3.3",
-        "ext-ssh2" : ">= 0.9.0",
-        "zendframework/zend-cache": "2.*"
+        "php"                      : ">=5.3.3",
+        "ext-ssh2"                 : ">= 0.9.0",
+        "zendframework/zend-cache" : "2.*"
     }
 }
 

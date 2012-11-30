@@ -8,3 +8,4 @@ namespace ZendAdditionals\Ssh\Exception;
  */
 class InvalidArgumentException extends \InvalidArgumentException
 {}
+
