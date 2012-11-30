@@ -98,6 +98,21 @@ abstract class AbstractRestfulController extends AbstractController
     }
 
     /**
+     * Get the parameters based on the request method
+     *
+     * @return array
+     */
+    public function getAvailableParameters()
+    {
+        $method = $this->getRequest()->getMethod();
+        if (empty($this->options[$method]['parameters'])) {
+            return array();
+        }
+
+        return $this->options[$method]['parameters'];
+    }
+
+    /**
      * @return \Zend\Http\PhpEnvironment\Response
      */
     public function getResponse()
@@ -364,6 +379,8 @@ abstract class AbstractRestfulController extends AbstractController
      */
     public function create($data)
     {
+        $parameters = $this->getAvailableParameters();
+
         $entity     = clone $this->getMapper()->getEntityPrototype();
         $hydrator   = new ClassMethods();
         $hydrator->hydrate($data, $entity);
@@ -372,7 +389,7 @@ abstract class AbstractRestfulController extends AbstractController
             return false;
         }
 
-        return $entity;
+        return $hydrator->extract($entity);
     }
 
     /**
