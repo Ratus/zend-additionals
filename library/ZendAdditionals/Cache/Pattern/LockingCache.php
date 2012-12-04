@@ -34,12 +34,18 @@ class LockingCache extends AbstractPattern
     public function get($key, $callback = null, $ttl = null)
     {
         $options = $this->getOptions();
-        $ttl = $ttl ?: $this->storage->getOptions()->getTtl();
-
-        $result = $this->storage->getItem($key, $success);
+        $enabled = $options->getEnabled();
+        
+        $result = null;
+        
+        if ($enabled) {
+            $ttl = $ttl ?: $this->storage->getOptions()->getTtl();
+            $result = $this->storage->getItem($key, $success);
+        }
+        
         $retryCount = 0;
-
-        while ($retryCount < $options->getRetryCount()) {
+        
+        while ($enabled && $retryCount < $options->getRetryCount()) {
             if ($success && $this->isValid($result)) {
                 // Raw data exists in cache
                 if (!$this->isExpired($result) || $this->isLocked($key)) {
@@ -60,7 +66,7 @@ class LockingCache extends AbstractPattern
             $retryCount++;
         }
         if (is_callable($callback)) {
-            $locked = $this->getLock($key);
+            $locked = ($enabled ? $this->getLock($key) : false);
             $data = call_user_func($callback);
             if ($locked) {
                 $this->set($key, $data, $ttl);
@@ -79,6 +85,12 @@ class LockingCache extends AbstractPattern
      */
     public function getLock($key, $ttl = null)
     {
+        /**
+         * Ignore locking when not enabled (this prevents sleeping code)
+         */
+        if (!$this->getOptions()->getEnabled()) {
+            return true;
+        }
         $lockKey = $this->getPreparedLockKey($key);
         $ttl = $ttl ?: $this->getOptions()->getLockTime();
         $currentlyLocked = $this->isLocked($key, $lockValue);
@@ -109,6 +121,12 @@ class LockingCache extends AbstractPattern
      */
     public function hasLock($key)
     {
+        /**
+         * Ignore locking when not enabled (this prevents sleeping code)
+         */
+        if (!$this->getOptions()->getEnabled()) {
+            return false;
+        }
         $lockKey = $this->getPreparedLockKey($key);
         if (!isset($this->locks[$lockKey])) {
             return false;
@@ -130,6 +148,12 @@ class LockingCache extends AbstractPattern
      */
     public function releaseLock($key, $force = false)
     {
+        /**
+         * Ignore locking when not enabled (this prevents sleeping code)
+         */
+        if (!$this->getOptions()->getEnabled()) {
+            return true;
+        }
         $lockKey = $this->getPreparedLockKey($key);
         $currentlyLocked = $this->isLocked($key, $lockValue);
         if (!$this->hasLock($key) && !$force) {
@@ -159,6 +183,12 @@ class LockingCache extends AbstractPattern
      */
     public function set($key, $value, $ttl = null)
     {
+        /**
+         * Ignore setting when not enabled
+         */
+        if (!$this->getOptions()->getEnabled()) {
+            return true;
+        }
         $originalTtl = $this->storage->getOptions()->getTtl();
         $ttl = $ttl ?: $originalTtl;
         if ($this->hasLock($key)) {
@@ -172,8 +202,18 @@ class LockingCache extends AbstractPattern
         return false;
     }
 
+    /**
+     * @param string $key
+     * @return boolean
+     */
     public function del($key)
     {
+        /**
+         * Ignore deleting when not enabled
+         */
+        if (!$this->getOptions()->getEnabled()) {
+            return true;
+        }
         return $this->storage->removeItem($key);
     }
 
@@ -187,6 +227,10 @@ class LockingCache extends AbstractPattern
     public function setOptions(PatternOptions $options)
     {
         parent::setOptions($options);
+        // Prevent checking the storage adapter when not enabled
+        if (!$options->getEnabled()) {
+            return $this;
+        }
         if (!($this->storage = $options->getStorage())) {
             throw new Exception\InvalidArgumentException('Missing option \'storage\'');
         }
