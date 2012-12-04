@@ -1494,6 +1494,38 @@ abstract class AbstractMapper implements
 
         return $this->save($entity, $tablePrefix);
     }
+    
+    public function delete(
+        $entity,
+        ObservableStrategyInterface $hydrator = null,
+        $tablePrefix = null
+    ) {
+        $this->storeRelatedEntities($entity, $tablePrefix);
+
+        $this->initialize();
+        $tableName = $this->getTableName();
+        if (!empty($tablePrefix)) {
+            $tableName = $tablePrefix . $tableName;
+        }
+
+        $sql = $this->getSql()->setTable($tableName);
+        $delete = $sql->delete();
+
+        $where = $this->getPrimaryData(
+            $this->entityToArray($entity, $hydrator)
+        );
+
+        $delete->where($where);
+
+        $statement = $sql->prepareStatementForSqlObject($delete);
+        /*@var $statement \Zend\Db\Adapter\Driver\Pdo\Statement*/
+
+        $result = $statement->execute();
+
+/*      $hydrator->setChangesCommitted($entity);*/
+
+        return $result;
+    }
 
     protected function unsetRelatedEntityColumns(& $entityArray)
     {
