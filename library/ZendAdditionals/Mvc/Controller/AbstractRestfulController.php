@@ -15,6 +15,7 @@ use Zend\Mvc\MvcEvent;
 use Zend\Stdlib\RequestInterface as Request;
 use Zend\Stdlib\ResponseInterface as Response;
 use Zend\Stdlib\Hydrator\ClassMethods;
+use Zend\Validator;
 
 use ZendAdditionals\Exception\NotImplementedException;
 use ZendAdditionals\Db\Sql\Predicate\NotBetween;
@@ -37,6 +38,12 @@ abstract class AbstractRestfulController extends AbstractController
           REQUEST_PATCH     = 'PATCH',
           REQUEST_PUT       = 'PUT',
           REQUEST_TRACE     = 'TRACE';
+
+    const VALIDATOR_DATE         = 'date',
+          VALIDATOR_DATETIME     = 'datetime',
+          VALIDATOR_DATE_CUSTOM  = 'date_custom',
+          VALIDATOR_EMAIL        = 'email';
+
     /**
      * The options that can be used. GET, POST, HEAD etc.
      *
@@ -59,6 +66,10 @@ abstract class AbstractRestfulController extends AbstractController
      */
     protected $routeMatch;
 
+    protected $parameterFieldsExcludedFromOptionRequest = array(
+        'foreign_key' => '',
+    );
+
     /**
      * Return available HTTP methods and other options
      *
@@ -67,7 +78,6 @@ abstract class AbstractRestfulController extends AbstractController
     public function getOptions($id = null)
     {
         $response       = $this->getResponse();
-        $return         = array();
 
         // Default request types for Collection and Resource
         $allowedRequestTypes  = array(
@@ -86,15 +96,73 @@ abstract class AbstractRestfulController extends AbstractController
         // Set the allowed request types
         $response->getHeaders()->addHeaderLine('Allow', implode(',', $allowedRequestTypes));
 
-        foreach($allowedRequestTypes as $requestType) {
-            if (isset($this->options[$requestType])) {
-                $return[$requestType] = $this->options[$requestType];
-            }
-        }
+        $return = $this->buildOptionsList($allowedRequestTypes);
 
         if (!empty($return)) {
             return $return;
         }
+    }
+
+    /**
+     * Build the options to be returned to the client
+     *
+     * @param array $allowedRequestTypes array('POST', 'GET', 'HEAD')
+     * @return array
+     */
+    protected function buildOptionsList(array $allowedRequestTypes)
+    {
+        $return = array();
+
+        foreach($allowedRequestTypes as $requestType) {
+            if (isset($this->options[$requestType])) {
+                $return[$requestType] = $this->options[$requestType];
+
+                // Inject forward controller parameters
+                if (isset($return[$requestType]['controller_forward'])) {
+                    foreach($return[$requestType]['controller_forward'] as $controller) {
+                         $return[$requestType]['parameters'] = array_merge(
+                            $return[$requestType]['parameters'], $controller['parameters']
+                        );
+                    }
+                }
+
+                // Strip off the keys which shouldnt be visible for the client
+                foreach($return[$requestType]['parameters'] as $key => &$parameter) {
+                    if (isset($parameter['internal_usage']) && $parameter['internal_usage'] === true) {
+                        unset($return[$requestType]['parameters'][$key]);
+                        continue;
+                    }
+
+                    $parameter = array_diff_key(
+                        $parameter,
+                        $this->parameterFieldsExcludedFromOptionRequest
+                    );
+                }
+
+                // Unset the controller_forward information
+                if (isset($return[$requestType]['controller_forward'])) {
+                    unset($return[$requestType]['controller_forward']);
+                }
+            }
+        }
+
+        return $return;
+    }
+
+    /**
+     * Get the parameters based on the request method
+     *
+     * @return array
+     */
+    public function getAvailableParameters()
+    {
+        $method = $this->getRequest()->getMethod();
+
+        if (empty($this->options[$method]['parameters'])) {
+            return array();
+        }
+
+        return $this->options[$method]['parameters'];
     }
 
     /**
@@ -364,15 +432,215 @@ abstract class AbstractRestfulController extends AbstractController
      */
     public function create($data)
     {
+        $parameters = $this->getAvailableParameters();
+        if (empty($parameters)) {
+            $this->getResponse()->setStatusCode(412); // Precondition Failed
+            return;
+        }
+
+        $eventContainer = new \ZendAdditionals\Db\Entity\EventContainer();
+        $eventContainer->setData($data);
+
+        $class = get_called_class();
+        $method = $this->getRequest()->getMethod();
+
+        // Trigger event on controller::requestMethod
+        $this->getEventManager()->trigger("{$class}::{$method}", $this, $eventContainer);
+
+        $errors = array();
+
+        if (isset($this->options[$method]['controller_forward'])) {
+            $result = $this->processControllerForwardsForCreate(
+                $data,
+                $this->options[$method]['controller_forward']
+            );
+
+            // Return when controller_forwards has failed
+            if ($this->getResponse()->getStatusCode() !== 200) {
+                return $result;
+            }
+        }
+
+        // Start validating parameters given
+        foreach($parameters as $field => $parameter) {
+            $isSet = array_key_exists($field, $data);
+
+            // Set Default value when not set and default is available
+            if ($isSet === false && isset($parameter['default'])) {
+                $data[$field] = $parameter['default'];
+            }
+
+            // Validate if the parameter is required and required
+            if ($parameter['required'] && $isSet === false) {
+                $errors[] = array('error_message'   => "Field {$field} is required!");
+                continue;
+            }
+
+            // Validate min length if given
+            if ($isSet && isset($parameter['minlen']) && strlen($data[$field]) < $parameter['minlen']) {
+                $errors[] = array(
+                    'error_message' => "Field {$field} minimal length is {$parameter['minlen']}",
+                );
+                continue;
+            }
+
+            // Validate max length if given
+            if ($isSet && isset($parameter['maxlen']) && strlen($data[$field]) > $parameter['maxlen']) {
+                $errors[] = array(
+                    'error_message' => "Field {$field} maximum length is {$parameter['maxlen']}",
+                );
+                continue;
+            }
+
+            // Check if the record match the regex if given
+            if ($isSet && isset($parameter['regex'])) {
+                $regex = str_replace('/', '\\/', $parameter['regex']);
+
+                if (!preg_match("/{$regex}/", $data[$field])) {
+                    $errors[] = array(
+                        'error_message' => "Field {$field} does not match {$parameter['regex']}",
+                    );
+                    continue;
+                }
+            }
+
+            if ($isSet && isset($parameter['validator'])) {
+                // Support arrays if the validator needs extra parameters.
+                if ($parameter['validator'] === (array) $parameter['validator']) {
+                    $extraParams = array_pop($parameter['validator']);
+                    $type        = array_pop($parameter['validator']);
+                } else {
+                    $type        = $parameter['validator'];
+                    $extraParams = array();
+                }
+
+                switch($type) {
+                    case self::VALIDATOR_DATE:
+                        $validator = new Validator\Date(array('format' => 'Y-m-d'));
+                        break;
+                    case self::VALIDATOR_DATETIME:
+                        $validator = new Validator\Date(array('format' => 'Y-m-d H:i:s'));
+                        break;
+                    case self::VALIDATOR_DATE_CUSTOM:
+                        $validator = new Validator\Date($extraParams);
+                        break;
+                    case self::VALIDATOR_EMAIL:
+                        $validator = new Validator\EmailAddress();
+                        break;
+                    default:
+                        throw new \RuntimeException("Validator {$type} is not implemented");
+                        break;
+                }
+
+                if ($validator->isValid($data[$field]) === false) {
+                    $errors[] = array(
+                        'error_message' => "Value {$data[$field]} does not match against validator {$type}",
+                        'errors' => $validator->getMessages(),
+                    );
+                    continue;
+                }
+            }
+
+            if (
+                $isSet &&
+                isset($parameter['foreign_key']) &&
+                empty($errors) // Only do DB interaction when no errors has been occured
+            ) {
+                $relation = $this->getMapper()->getRelation(
+                    $parameter['foreign_key']['mapper'],
+                    $parameter['foreign_key']['identifier']
+                );
+
+                $mapper = $this->getServiceLocator()->get($parameter['foreign_key']['mapper']);
+                if ($mapper->exists($relation['reference'][$field], $data[$field]) === false) {
+                    $errors[] = array(
+                        'error_message' => "Cannot find foreign record {$field}={$data[$field]}",
+                    );
+                }
+            }
+
+            // Check database if the record already exists
+            if (
+                $isSet &&
+                isset($parameter['unique']) &&
+                $parameter['unique'] === true &&
+                empty($errors) && // Only do DB interaction when no errors has been occured
+                $this->getMapper()->exists($field, $data[$field])
+            ) {
+                $errors[] = array(
+                    'error_message' => "Value {$data[$field]} does already exists",
+                );
+            }
+        }
+
+        if (empty($errors) === false) {
+            $this->getResponse()->setStatusCode(412);
+            return $errors;
+        }
+
         $entity     = clone $this->getMapper()->getEntityPrototype();
         $hydrator   = new ClassMethods();
         $hydrator->hydrate($data, $entity);
 
-        if($this->getMapper()->save($entity) === false) {
-            return false;
+        try {
+            if($this->getMapper()->save($entity) === false) {
+                return false;
+            }
+        } Catch (\Zend\Db\Adapter\Exception\InvalidQueryException $e) {
+            $this->getResponse()->setStatusCode(500);
+            $errors[] = array(
+                'error_message' => $e->getMessage(),
+                'sql_message' => $e->getPrevious()->getMessage(),
+            );
+            return $errors;
         }
 
-        return $entity;
+        return $hydrator->extract($entity);
+    }
+
+    /**
+     * Call all the controllers and store the needed data in the data array
+     *
+     * @param array $data The main data
+     * @param array $controllers The forward controllers
+     * @return array|boolean array on errors | TRUE on success
+     */
+    protected function processControllerForwardsForCreate(array &$data, array $controllers)
+    {
+        foreach ($controllers as $serviceName => $info) {
+            // Get data that should be forwarded
+            $dataForController  = array_intersect_key($data, $info['parameters']);
+
+            // Empty data is no use to forward
+            if (empty($dataForController)) {
+                continue;
+            }
+
+            // Strip data from original array
+            $data           = array_diff_key($data, $dataForController);
+            $controller     = $this->getController($serviceName);
+            $result         = $controller->create($dataForController, true);
+
+            /**
+             * @TODO create transaction layer for main create.
+             *       When one of the controller_forwards fails all the
+             *      current inserts/update should be rolled back
+             */
+            if ($this->getResponse()->getStatusCode() !== 200) {
+                return $result;
+            }
+
+            foreach ($info['replacements'] as $foreignParam => $parentParam) {
+                if (isset($result[$foreignParam]) === false) {
+                    $data[$parentParam] = null;
+                    continue;
+                }
+
+                $data[$parentParam] = $result[$foreignParam];
+            }
+        }
+
+        return true;
     }
 
     /**
@@ -951,11 +1219,37 @@ abstract class AbstractRestfulController extends AbstractController
      */
     public function getController($controllerName)
     {
-        $profile = new $controllerName();
-        $profile->setEventManager($this->getEventManager());
-        $profile->setPluginManager($this->getPluginManager());
-        $profile->setServiceLocator($this->getServiceLocator());
+        $controller = new $controllerName();
+        $controller->setEventManager($this->getEventManager());
+        $controller->setPluginManager($this->getPluginManager());
+        $controller->setServiceLocator($this->getServiceLocator());
+        $controller->setRequest($this->getRequest());
+        $controller->setResponse($this->getResponse());
 
-        return $profile;
+        return $controller;
+    }
+
+    /**
+     * Set the HTTP Request object to the controller
+     *
+     * @param HTTPRequest $request
+     * @return self
+     */
+    public function setRequest(HTTPRequest $request)
+    {
+        $this->request = $request;
+        return $this;
+    }
+
+    /**
+     * Set the HTTP Response object to the controller
+     *
+     * @param HTTPResponse $response
+     * @return self
+     */
+    public function setResponse(HTTPResponse $response)
+    {
+        $this->response = $response;
+        return $this;
     }
 }
