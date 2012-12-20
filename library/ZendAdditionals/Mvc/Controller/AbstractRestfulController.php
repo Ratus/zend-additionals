@@ -31,6 +31,8 @@ use ZendAdditionals\Db\Sql\Predicate\NotIn;
  */
 abstract class AbstractRestfulController extends AbstractController
 {
+    use TraitAuthenticationController;
+
     const REQUEST_GET       = 'GET',
           REQUEST_POST      = 'POST',
           REQUEST_HEAD      = 'HEAD',
@@ -61,14 +63,14 @@ abstract class AbstractRestfulController extends AbstractController
      */
     protected $eventIdentifier = __CLASS__;
 
-    /**
-     * @var RouteMatch
-     */
-    protected $routeMatch;
-
     protected $parameterFieldsExcludedFromOptionRequest = array(
         'foreign_key' => '',
     );
+    
+    public function __construct()
+    {
+        $this->mergeParametersWithOptions();
+    }
 
     /**
      * Return available HTTP methods and other options
@@ -157,7 +159,7 @@ abstract class AbstractRestfulController extends AbstractController
     public function getAvailableParameters()
     {
         $method = $this->getRequest()->getMethod();
-
+        
         if (empty($this->options[$method]['parameters'])) {
             return array();
         }
@@ -261,26 +263,6 @@ abstract class AbstractRestfulController extends AbstractController
     protected function getDefaultOrderBy()
     {
         return null;
-    }
-
-    /**
-     * @return RouteMatch | null
-     */
-    protected function getRouteMatch()
-    {
-        return $this->routeMatch;
-    }
-
-    /**
-     * This will be called on the onDispatch event
-     *
-     * @param RouteMatch $routeMatch
-     * @return self
-     */
-    protected function setRouteMatch(RouteMatch $routeMatch)
-    {
-        $this->routeMatch = $routeMatch;
-        return $this;
     }
 
     /**
@@ -423,16 +405,13 @@ abstract class AbstractRestfulController extends AbstractController
         // TODO: filter return
         return $return;
     }
-
-    /**
-     * Create a new resource
-     *
-     * @param  array $data
-     * @return object|boolean Entity on success | FALSE on failure
-     */
-    public function create($data)
+    
+    protected function validateParameters(&$data)
     {
         $parameters = $this->getAvailableParameters();
+        
+//        var_dump(get_called_class(), $parameters);
+        
         if (empty($parameters)) {
             $this->getResponse()->setStatusCode(412); // Precondition Failed
             return;
@@ -463,7 +442,9 @@ abstract class AbstractRestfulController extends AbstractController
 
         // Start validating parameters given
         foreach($parameters as $field => $parameter) {
-            $isSet = array_key_exists($field, $data);
+            //array_key_exists returns true when a key is set, but the value is null
+//            $isSet = array_key_exists($field, $data);
+            $isSet = isset($data[$field]);
 
             // Set Default value when not set and default is available
             if ($isSet === false && isset($parameter['default'])) {
@@ -495,7 +476,6 @@ abstract class AbstractRestfulController extends AbstractController
             // Check if the record match the regex if given
             if ($isSet && isset($parameter['regex'])) {
                 $regex = str_replace('/', '\\/', $parameter['regex']);
-
                 if (!preg_match("/{$regex}/", $data[$field])) {
                     $errors[] = array(
                         'error_message' => "Field {$field} does not match {$parameter['regex']}",
@@ -577,6 +557,21 @@ abstract class AbstractRestfulController extends AbstractController
             $this->getResponse()->setStatusCode(412);
             return $errors;
         }
+        return true;
+    }
+
+    /**
+     * Create a new resource
+     *
+     * @param  array $data
+     * @return object|boolean Entity on success | FALSE on failure
+     */
+    public function create($data)
+    {
+        $result = $this->validateParameters($data);
+        if ($result !== true) {
+            return $result;
+        }
 
         $entity     = clone $this->getMapper()->getEntityPrototype();
         $hydrator   = new ClassMethods();
@@ -610,7 +605,19 @@ abstract class AbstractRestfulController extends AbstractController
         foreach ($controllers as $serviceName => $info) {
             // Get data that should be forwarded
             $dataForController  = array_intersect_key($data, $info['parameters']);
-
+            
+            // Check if parameters are not only internal
+            $onlyInternal = true;
+            foreach($dataForController as $field => $parameter) {
+                if (empty($info['parameters'][$field]['internal_usage'])) {
+                    $onlyInternal = false;
+                }
+            }
+            // If only internal parameters are set, there is no use to forward
+            if ($onlyInternal === true) {
+                continue;
+            }
+            
             // Empty data is no use to forward
             if (empty($dataForController)) {
                 continue;
@@ -650,7 +657,66 @@ abstract class AbstractRestfulController extends AbstractController
      * @param  mixed $data
      * @return mixed
      */
-    abstract public function update($id, $data);
+    public function update($id, $data)
+    {
+/*/
+        $result = $this->validateParameters($data);
+        if ($result !== true) {
+            return $result;
+        }
+
+        $mapper = $this->getServiceLocator()->get(\DatingProfile\Mapper\Registrations::SERVICE_NAME);
+        $entity = $mapper->getEntityPrototype();
+        $mapper->hydrator->hydrate($data, $entity);
+//        $entity     = clone $this->getMapper()->getEntityPrototype();
+        try {
+            if($mapper->save($entity) === false) {
+                return false;
+            }
+        } Catch (\Zend\Db\Adapter\Exception\InvalidQueryException $e) {
+            $this->getResponse()->setStatusCode(500);
+            $errors[] = array(
+                'error_message' => $e->getMessage(),
+                'sql_message' => $e->getPrevious()->getMessage(),
+            );
+            return $errors;
+        }
+
+        return $mapper->hydrator->extract($entity);
+
+/*/
+        $result = $this->validateParameters($data);
+        if ($result !== true) {
+            return $result;
+        }
+        
+        
+        $select = $this->getMapper()
+            ->search(array(0, 1), array(
+                'id' => $id,
+            )
+        );
+        if (!isset($select[0])) {
+             return false;
+        }
+        $entity = $select[0];
+        $hydrator   = $this->getMapper()->getHydrator();
+        $hydrator->hydrate($data, $entity);                      
+        try {
+            if($this->getMapper()->save($entity) === false) {
+                return false;
+            }
+        } Catch (\Zend\Db\Adapter\Exception\InvalidQueryException $e) {
+            $this->getResponse()->setStatusCode(500);
+            $errors[] = array(
+                'error_message' => $e->getMessage(),
+                'sql_message' => $e->getPrevious()->getMessage(),
+            );
+            return $errors;
+        }
+
+        return $hydrator->extract($entity);
+    }
 
     /**
      * Delete an existing resource
@@ -820,7 +886,6 @@ abstract class AbstractRestfulController extends AbstractController
         }
 
         $request = $e->getRequest(); /*@var $request \Zend\Http\PhpEnvironment\Request*/
-
         $action  = $routeMatch->getParam('action', false);
         /*@var $headers \Zend\Http\Header\Accept*/
         if ($action) {
@@ -985,14 +1050,11 @@ abstract class AbstractRestfulController extends AbstractController
                     'id'         => $parentId,
                 );
             }
-
             $this->getResponse()->getHeaders()->addHeaderLine(
                 'Vary',
                 implode(',', $varyOptions)
             );
-
             if ($this->verifyAuthentication($routeMatch)) {
-
                 switch (strtolower($request->getMethod())) {
                     case 'get':
                         if (null !== $requestId) {
@@ -1204,29 +1266,11 @@ abstract class AbstractRestfulController extends AbstractController
                 throw new Exception\DomainException('Missing identifier');
             }
         }
+        
         $content = $request->getContent();
         parse_str($content, $parsedParams);
-
+        
         return $this->update($id, $parsedParams);
-    }
-
-    /**
-     * Get controller based on the full classname
-     * The required objects will be injected in the controller
-     *
-     * @param string $controllerName The fullclassname of the controller
-     * @return AbstractController
-     */
-    public function getController($controllerName)
-    {
-        $controller = new $controllerName();
-        $controller->setEventManager($this->getEventManager());
-        $controller->setPluginManager($this->getPluginManager());
-        $controller->setServiceLocator($this->getServiceLocator());
-        $controller->setRequest($this->getRequest());
-        $controller->setResponse($this->getResponse());
-
-        return $controller;
     }
 
     /**
@@ -1251,5 +1295,39 @@ abstract class AbstractRestfulController extends AbstractController
     {
         $this->response = $response;
         return $this;
+    }
+    
+    /**
+    * This method will merge the parameters within the options
+    * 
+    * Usage:
+    *   //Retrieve default parameter
+    *   $options[$method]['parameters'][] = 'parameter_key'
+    *   //Retrieve default parameter with exceptions in array
+    *   $options[$method]['parameters']['parameter_key'] = array('required'=>true)
+    */
+    protected function mergeParametersWithOptions()
+    {
+        if (!isset($this->parameters) || !isset($this->options)) {
+            return false;
+        }
+        foreach ($this->options as $method => $option) {
+            foreach ($option['parameters'] as $parameterKey => $parameter) {
+                if (!is_array($parameter) && !isset($this->parameters[$parameter])) {
+                    if (!is_array($parameter)) {
+                        return false;
+                    }
+                }
+                if (!is_array($parameter)) {
+                    unset($this->options[$method]['parameters'][$parameterKey]);
+                    $this->options[$method]['parameters'][$parameter] = $this->parameters[$parameter];
+                    continue;
+                }
+                $this->options[$method]['parameters'][$parameterKey] = $this->parameters[$parameterKey];
+                foreach ($parameter as $key => $customParams) {
+                    $this->options[$method]['parameters'][$parameterKey][$key] = $customParams;
+                }
+            }
+        }
     }
 }

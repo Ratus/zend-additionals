@@ -180,14 +180,14 @@ class ObservableClassMethods extends ClassMethods implements
     }
 
     /**
-     * Hydrates the given data and makes sure the internal object storage makes a snapshot
+     * Hydrates the given data and makes sure the internal object storage makes a snapshot (When original entity isn't found)
      *
      * @see \Zend\Stdlib\Hydrator\ClassMethods::hydrate
      */
     public function hydrate(array $data, $object)
     {
         $object = parent::hydrate($data, $object);
-        if (!empty($data)) {
+        if (!empty($data) && !$this->hasOriginal($object)) {
             $this->getObjectStorage()->attach($object, $data); // store object relative to data
         }
         return $object;

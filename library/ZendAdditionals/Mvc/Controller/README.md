@@ -4,3 +4,5 @@ TODO AbstractRestfulontroller:
  - On non existing filter throw error
  - On a filter that does not match pattern throw error
  - Allow null joins for negative matches or null matches
+ 
+ -- on create and update remove fields that are identified as 'internal_usage'
