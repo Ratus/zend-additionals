@@ -7,19 +7,19 @@ namespace ZendAdditionals\Http\PostProcessor;
  */
 abstract class AbstractPostProcessor
 {
-	/**
-	 * @var array
-	 */
-	protected $variables;
+    /**
+     * @var array
+     */
+    protected $variables;
 
-	/**
-	 * @var \Zend\Http\Response
-	 */
-	protected $response;
+    /**
+     * @var \Zend\Http\Response
+     */
+    protected $response;
 
     public function setResponse(\Zend\Http\Response $response)
     {
-		$this->response = $response;
+        $this->response = $response;
         return $this;
     }
 
@@ -33,7 +33,7 @@ abstract class AbstractPostProcessor
 
     public function setVariables($variables)
     {
-		$this->variables = $variables;
+        $this->variables = $variables;
         return $this;
     }
 
@@ -42,9 +42,9 @@ abstract class AbstractPostProcessor
         return $this->variables;
     }
 
-	/**
-	 * @abstract
-	 */
-	abstract public function process();
+    /**
+     * @abstract
+     */
+    abstract public function process();
 }
 
