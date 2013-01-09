@@ -35,16 +35,16 @@ class LockingCache extends AbstractPattern
     {
         $options = $this->getOptions();
         $enabled = $options->getEnabled();
-        
+
         $result = null;
-        
+
         if ($enabled) {
             $ttl = $ttl ?: $this->storage->getOptions()->getTtl();
             $result = $this->storage->getItem($key, $success);
         }
-        
+
         $retryCount = 0;
-        
+
         while ($enabled && $retryCount < $options->getRetryCount()) {
             if ($success && $this->isValid($result)) {
                 // Raw data exists in cache
@@ -236,6 +236,7 @@ class LockingCache extends AbstractPattern
         }
         if (
             !($this->storage instanceof \Zend\Cache\Storage\Adapter\Memcached) &&
+            !($this->storage instanceof \ZendAdditionals\Cache\Storage\Adapter\Memcache) &&
             !($this->storage instanceof \Zend\Cache\Storage\Adapter\Apc)
         ) {
             throw new Exception\InvalidArgumentException(
