@@ -444,11 +444,6 @@ abstract class AbstractMapper implements
         if (isset($range['end']) && $range['end'] > $offset) {
             $limit = ((int)$range['end'] - $offset);
         }
-        if (isset($_SESSION['dumpert'])) {
-            var_dump('LIMIT', $limit, 'OFFSET', $offset);
-            unset($_SESSION['dumpert']);
-            die();
-        }
         $select = $this->getSelect();
         $select->limit($limit);
         $select->offset($offset);
