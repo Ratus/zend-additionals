@@ -66,7 +66,7 @@ abstract class AbstractRestfulController extends AbstractController
     protected $parameterFieldsExcludedFromOptionRequest = array(
         'foreign_key' => '',
     );
-    
+
     public function __construct()
     {
         $this->mergeParametersWithOptions();
@@ -159,7 +159,7 @@ abstract class AbstractRestfulController extends AbstractController
     public function getAvailableParameters()
     {
         $method = $this->getRequest()->getMethod();
-        
+
         if (empty($this->options[$method]['parameters'])) {
             return array();
         }
@@ -340,7 +340,7 @@ abstract class AbstractRestfulController extends AbstractController
         if (null === $orderBy) {
             $orderBy = $this->getDefaultOrderBy();
         }
-
+        
         $results = $mapper->search($range, $filter, $orderBy, $joins, $columnsFilter, false);
 
         $this->getResponse()->getHeaders()->addHeaderLine(
@@ -405,13 +405,13 @@ abstract class AbstractRestfulController extends AbstractController
         // TODO: filter return
         return $return;
     }
-    
+
     protected function validateParameters(&$data)
     {
         $parameters = $this->getAvailableParameters();
-        
+
 //        var_dump(get_called_class(), $parameters);
-        
+
         if (empty($parameters)) {
             $this->getResponse()->setStatusCode(412); // Precondition Failed
             return;
@@ -605,7 +605,7 @@ abstract class AbstractRestfulController extends AbstractController
         foreach ($controllers as $serviceName => $info) {
             // Get data that should be forwarded
             $dataForController  = array_intersect_key($data, $info['parameters']);
-            
+
             // Check if parameters are not only internal
             $onlyInternal = true;
             foreach($dataForController as $field => $parameter) {
@@ -617,7 +617,7 @@ abstract class AbstractRestfulController extends AbstractController
             if ($onlyInternal === true) {
                 continue;
             }
-            
+
             // Empty data is no use to forward
             if (empty($dataForController)) {
                 continue;
@@ -689,8 +689,8 @@ abstract class AbstractRestfulController extends AbstractController
         if ($result !== true) {
             return $result;
         }
-        
-        
+
+
         $select = $this->getMapper()
             ->search(array(0, 1), array(
                 'id' => $id,
@@ -701,7 +701,7 @@ abstract class AbstractRestfulController extends AbstractController
         }
         $entity = $select[0];
         $hydrator   = $this->getMapper()->getHydrator();
-        $hydrator->hydrate($data, $entity);                      
+        $hydrator->hydrate($data, $entity);
         try {
             if($this->getMapper()->save($entity) === false) {
                 return false;
@@ -1266,10 +1266,10 @@ abstract class AbstractRestfulController extends AbstractController
                 throw new Exception\DomainException('Missing identifier');
             }
         }
-        
+
         $content = $request->getContent();
         parse_str($content, $parsedParams);
-        
+
         return $this->update($id, $parsedParams);
     }
 
@@ -1296,10 +1296,10 @@ abstract class AbstractRestfulController extends AbstractController
         $this->response = $response;
         return $this;
     }
-    
+
     /**
     * This method will merge the parameters within the options
-    * 
+    *
     * Usage:
     *   //Retrieve default parameter
     *   $options[$method]['parameters'][] = 'parameter_key'
