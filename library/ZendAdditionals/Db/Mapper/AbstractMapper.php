@@ -140,7 +140,17 @@ abstract class AbstractMapper implements
      *
      * @var array
      */
-    protected $xmlAttributeColumns = array();
+    protected $xmlAttributeColumns        = array();
+
+    /**
+     * Serialized attribute columns tells which of the columns
+     * holds serialized data, the column identifier must be the key
+     * with all possible fields being the values. An empty array tells
+     * to use all the values.
+     *
+     * @var array
+     */
+    protected $serializedAttributeColumns = array();
 
     /**
      * Check if this mapper allows filtering be implemented.
@@ -175,6 +185,25 @@ abstract class AbstractMapper implements
     public function getXmlAttributeColumns()
     {
         return $this->xmlAttributeColumns;
+    }
+
+    /**
+     * @param array $serializedAttributeColumns
+     *
+     * @return AbstractMapper
+     */
+    public function setSerializedAttributeColumns(array $serializedAttributeColumns)
+    {
+        $this->serializedAttributeColumns = $serializedAttributeColumns;
+        return $this;
+    }
+
+    /**
+     * @return array
+     */
+    public function getSerializedAttributeColumns()
+    {
+        return $this->serializedAttributeColumns;
     }
 
     /**
@@ -428,8 +457,11 @@ abstract class AbstractMapper implements
         if (!empty($columnsFilter)) {
             $applyColumnsFilter = true;
         }
-        $possibleXmlAttributeColumns = $this->getXmlAttributeColumns();
-        $xmlAttributes = array();
+        $possibleXmlAttributeColumns        = $this->getXmlAttributeColumns();
+        $possibleSerializedAttributeColumns = $this->getSerializedAttributeColumns();
+
+        $xmlAttributes        = array();
+        $serializedAttributes = array();
 
         $columns     = array();
         $joinColumns = array();
@@ -445,6 +477,15 @@ abstract class AbstractMapper implements
                                 $column
                             );
                         }
+                    } elseif (array_key_exists($joinKey, $possibleSerializedAttributeColumns)) {
+                        $columns[] = $joinKey;
+                        if (!$returnEntities) {
+                            $serializedAttributes[$joinKey] = (
+                                empty($column) ?
+                                $possibleSerializedAttributeColumns[$joinKey] :
+                                $column
+                            );
+                        }
                     } else {
                         $joinColumns[$joinKey] = $column;
                     }
@@ -454,6 +495,11 @@ abstract class AbstractMapper implements
                         array_key_exists($column, $possibleXmlAttributeColumns)
                     ) {
                         $xmlAttributes[$column] = $possibleXmlAttributeColumns[$column];
+                    } elseif (
+                        !$returnEntities &&
+                        array_key_exists($column, $possibleSerializedAttributeColumns)
+                    ) {
+                        $serializedAttributes[$column] = $possibleSerializedAttributeColumns[$column];
                     }
                     $columns[] = $column;
                 }
@@ -461,6 +507,9 @@ abstract class AbstractMapper implements
         } else {
             foreach ($possibleXmlAttributeColumns as $column => $possibleXmlAttributes) {
                 $xmlAttributes[$column] = $possibleXmlAttributes;
+            }
+            foreach ($possibleSerializedAttributeColumns as $column => $possibleSerializedAttributes) {
+                $serializedAttributes[$column] = $possibleSerializedAttributes;
             }
         }
 
@@ -738,6 +787,26 @@ abstract class AbstractMapper implements
                     $entity[$xmlColumn] = $xmlData->getValues($filteredXmlFields);
                 }
             }
+            if (!$returnEntities && !empty($serializedAttributes)) {
+                foreach ($serializedAttributes as $serializedColumn => $filteredSerializedFields) {
+                    if (
+                        !empty($entity[$serializedColumn]) &&
+                        false !== ($unserialized = @unserialize($entity[$serializedColumn]))
+                    ) {
+                        $entity[$serializedColumn] = array();
+                        if (empty($filteredSerializedFields)) {
+                            $filteredSerializedFields = array_keys($unserialized);
+                        }
+                        foreach ($filteredSerializedFields as $filteredField) {
+                            if (array_key_exists($filteredField, $unserialized)) {
+                                $entity[$serializedColumn][$filteredField] = $unserialized[$filteredField];
+                            }
+                        }
+                    } else {
+                        $entity[$serializedColumn] = array();
+                    }
+                }
+            }
             $return[] = $entity;
             $result->next();
         }
@@ -754,6 +823,42 @@ abstract class AbstractMapper implements
         $result = $this->getRow($select);
 
         return (bool)($result !== false);
+    }
+
+    /**
+     * Check to see if some data is serialized or not
+     *
+     * @param string $data serialized data
+     * @return boolean
+     */
+    protected function isSerialized($data) {
+        // if it isn't a string, it isn't serialized
+        if ( !is_string( $data ) ) {
+            return false;
+        }
+        $data = trim( $data );
+        if ('N;' == $data) {
+            return true;
+        }
+        if (!preg_match('/^([adObis]):/', $data, $badions)) {
+            return false;
+        }
+        switch ($badions[1]) {
+            case 'a' :
+            case 'O' :
+            case 's' :
+                if (preg_match("/^{$badions[1]}:[0-9]+:.*[;}]\$/s", $data)) {
+                    return true;
+                }
+                break;
+            case 'b' :
+            case 'i' :
+            case 'd' :
+                if (preg_match( "/^{$badions[1]}:[0-9.E-]+;\$/", $data))
+                    return true;
+                break;
+        }
+        return false;
     }
 
     protected function initializeRelations()
@@ -1651,7 +1756,7 @@ abstract class AbstractMapper implements
 
         return $this->save($entity, $tablePrefix);
     }
-    
+
     public function delete(
         $entity,
         ObservableStrategyInterface $hydrator = null,
@@ -2054,6 +2159,19 @@ abstract class AbstractMapper implements
                 $entityArray = $hydrator->extractChanges($entity);
             } else {
                 $entityArray = $hydrator->extract($entity);
+            }
+            foreach ($this->serializedAttributeColumns as $column => $fields) {
+                error_log($column);
+                if (
+                    array_key_exists($column, $entityArray) &&
+                    !empty($entityArray[$column]) &&
+                    !$this->isSerialized($entityArray[$column])
+                ) {
+                    throw new \InvalidArgumentException(
+                        'The data for column: ' . $column . ' must be serialized ' .
+                        'prior to storing the entity into the database!'
+                    );
+                }
             }
             return $entityArray;
         }
