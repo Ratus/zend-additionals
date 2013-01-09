@@ -106,8 +106,6 @@ class Handler implements SessionHandlerInterface
 
         $return = $this->getLockingCache()->get($sessionId);
 
-        error_log(__METHOD__.'::'.$return);
-
         if ($return === false) {
             return '';
         }
@@ -130,8 +128,6 @@ class Handler implements SessionHandlerInterface
         if ($this->getLockingCache()->getLock($sessionId) === false) {
             return false;
         }
-
-        error_log(__METHOD__.'::'.$sessionData);
 
         $this->getLockingCache()->set($sessionId, $sessionData);
 
