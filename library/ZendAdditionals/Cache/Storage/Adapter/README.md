@@ -1,8 +1,6 @@
 ### Zend-Additionals Caching
 
-## Configuration example for local.php - LockingCachePatternServiceFactory
-
-**Note:** The servicefactory will look for zend_additions.locking_cache
+## Configuration example for memcache adapter
 
 ```php
 $storage = \Zend\Cache\StorageFactory::adapterFactory(
