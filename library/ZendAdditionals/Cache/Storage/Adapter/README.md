@@ -18,6 +18,7 @@ $storage->setOptions(array(
 ```
 
 **note:** Available server keys and defaults
+```php
 array(
     'host'             => **REQUIRED**,
     'port'             => 11211,
@@ -28,4 +29,5 @@ array(
     'status'           => true,
     'failure_callback' => null
 );
+```
 
