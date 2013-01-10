@@ -218,7 +218,7 @@ abstract class AbstractRestfulController extends AbstractController
     protected function createParentFilter(array $parent, array $filter = null)
     {
         throw new NotImplementedException(
-            'The method ' . __METHOD__ . ' must be implemented by class ' . __CLASS__
+            'The method ' . __METHOD__ . ' must be implemented by class ' . get_class($this)
         );
     }
 
@@ -231,7 +231,7 @@ abstract class AbstractRestfulController extends AbstractController
     protected function getUniqueIdentifier()
     {
         throw new NotImplementedException(
-            'The method ' . __METHOD__ . ' must be implemented by class ' . __CLASS__
+            'The method ' . __METHOD__ . ' must be implemented by class ' . get_class($this)
         );
     }
 
