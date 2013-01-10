@@ -63,10 +63,26 @@ abstract class AbstractRestfulController extends AbstractController
      */
     protected $eventIdentifier = __CLASS__;
 
+
+    /**
+     * If the longpolling is enabled for the GET request (Default: FALSE)
+     *
+     * @var boolean
+     */
+    protected $longPollEnabled = false;
+
+    /**
+     * The timeout in seconds when we're terminate the longpolling when no result found
+     *
+     * @var integer
+     */
+    protected $longPollTimeout = 600;
+
+
     protected $parameterFieldsExcludedFromOptionRequest = array(
         'foreign_key' => '',
     );
-    
+
     public function __construct()
     {
         $this->mergeParametersWithOptions();
@@ -159,7 +175,7 @@ abstract class AbstractRestfulController extends AbstractController
     public function getAvailableParameters()
     {
         $method = $this->getRequest()->getMethod();
-        
+
         if (empty($this->options[$method]['parameters'])) {
             return array();
         }
@@ -300,14 +316,25 @@ abstract class AbstractRestfulController extends AbstractController
      *     'id'         => 'some_identifier', // The identifier of the parent collection
      * )
      *
+     * @param array $longpoll [optional] Identify the request as a longpoll request
+     * array(
+     *     'field' => 'id',         // The field of the id (normalwise id)
+     *     'value' => 2300,         // Find resources with an id higher then 2300
+     * )
+     *
      * @return mixed
      */
     public function getList(
         array $range = null,
         array $filter = null,
         array $orderBy = null,
-        array $parent = null
+        array $parent = null,
+        array $longpoll = null
     ) {
+        $start      = time();
+        $timeout    = $this->getLongPollTimeout();
+        $timeLeft   = true;
+
         $mapper = $this->getMapper();
 
         if (!empty($parent)) {
@@ -317,6 +344,7 @@ abstract class AbstractRestfulController extends AbstractController
         $joins = $this->getDefaultJoins();
 
         $count = $mapper->count($filter, $joins);
+
         if ($range === null) {
             $range = array(
                 'begin' => 0,
@@ -336,12 +364,40 @@ abstract class AbstractRestfulController extends AbstractController
         if ($range['end'] > $count) {
             $range['end'] = $count;
         }
+
         $columnsFilter = $this->getAllowedColumnsFilter();
         if (null === $orderBy) {
             $orderBy = $this->getDefaultOrderBy();
         }
 
-        $results = $mapper->search($range, $filter, $orderBy, $joins, $columnsFilter, false);
+        if ($longpoll !== null) {
+            if (is_array($filter) === false) {
+                $filter = array();
+            }
+
+            $filter[] = new \Zend\Db\Sql\Predicate\Operator(
+                $longpoll['field'],
+                \Zend\Db\Sql\Predicate\Operator::OPERATOR_GREATER_THAN,
+                $longpoll['value']
+            );
+
+            set_time_limit($timeout + 10);
+        }
+
+        while ($timeLeft) {
+            $results = $mapper->search($range, $filter, $orderBy, $joins, $columnsFilter, false);
+
+            if ($longpoll === null || empty($results) === false) {
+                break;
+            }
+
+            $timeLeft = (bool) ((time() - $start) < $timeout);
+        }
+
+        if ($longpoll !== null && $timeLeft === false) {
+            $this->getResponse()->setStatusCode(500);
+            return array('error' => 'timeout');
+        }
 
         $this->getResponse()->getHeaders()->addHeaderLine(
             'Content-Range',
@@ -405,13 +461,13 @@ abstract class AbstractRestfulController extends AbstractController
         // TODO: filter return
         return $return;
     }
-    
+
     protected function validateParameters(&$data)
     {
         $parameters = $this->getAvailableParameters();
-        
+
 //        var_dump(get_called_class(), $parameters);
-        
+
         if (empty($parameters)) {
             $this->getResponse()->setStatusCode(412); // Precondition Failed
             return;
@@ -605,7 +661,7 @@ abstract class AbstractRestfulController extends AbstractController
         foreach ($controllers as $serviceName => $info) {
             // Get data that should be forwarded
             $dataForController  = array_intersect_key($data, $info['parameters']);
-            
+
             // Check if parameters are not only internal
             $onlyInternal = true;
             foreach($dataForController as $field => $parameter) {
@@ -617,7 +673,7 @@ abstract class AbstractRestfulController extends AbstractController
             if ($onlyInternal === true) {
                 continue;
             }
-            
+
             // Empty data is no use to forward
             if (empty($dataForController)) {
                 continue;
@@ -689,8 +745,8 @@ abstract class AbstractRestfulController extends AbstractController
         if ($result !== true) {
             return $result;
         }
-        
-        
+
+
         $select = $this->getMapper()
             ->search(array(0, 1), array(
                 'id' => $id,
@@ -701,7 +757,7 @@ abstract class AbstractRestfulController extends AbstractController
         }
         $entity = $select[0];
         $hydrator   = $this->getMapper()->getHydrator();
-        $hydrator->hydrate($data, $entity);                      
+        $hydrator->hydrate($data, $entity);
         try {
             if($this->getMapper()->save($entity) === false) {
                 return false;
@@ -829,24 +885,35 @@ abstract class AbstractRestfulController extends AbstractController
                 'resources=' . $range
             );
         }
+
         if (null !== ($filterBy = $request->getQuery('filterby'))) {
             $request->getHeaders()->addHeaderLine(
                 'X-Filter-By',
                 base64_decode($filterBy)
             );
         }
+
+        if (null !== ($longpoll = $request->getQuery('longpoll'))) {
+            $request->getHeaders()->addHeaderLine(
+                'X-Longpoll',
+                base64_decode($longpoll)
+            );
+        }
+
         if (null !== ($orderby = $request->getQuery('orderby'))) {
             $request->getHeaders()->addHeaderLine(
                 'X-Order-By',
                 base64_decode($orderby)
             );
         }
+
         if (null !== ($authorize = $request->getQuery('authorize'))) {
             $request->getHeaders()->addHeaderLine(
                 'Authorization',
                 base64_decode($authorize)
             );
         }
+
         if (null !== ($browserDigest = $request->getQuery('browserdigest'))) {
             $request->getHeaders()->addHeaderLine(
                 'X-Browser-Digest',
@@ -876,337 +943,373 @@ abstract class AbstractRestfulController extends AbstractController
      */
     public function onDispatch(MvcEvent $e)
     {
-        $routeMatch = $e->getRouteMatch();
-        $this->setRouteMatch($routeMatch);
+        try {
+            $routeMatch = $e->getRouteMatch();
+            $this->setRouteMatch($routeMatch);
 
-        if (!$routeMatch) {
-            throw new Exception\DomainException(
-                'Missing route matches; unsure how to retrieve action'
-            );
-        }
-
-        $request = $e->getRequest(); /*@var $request \Zend\Http\PhpEnvironment\Request*/
-        $action  = $routeMatch->getParam('action', false);
-        /*@var $headers \Zend\Http\Header\Accept*/
-        if ($action) {
-            // Handle arbitrary methods, ending in Action
-            $method = static::getMethodFromAction($action);
-            if (!method_exists($this, $method)) {
-                $method = 'notFoundAction';
-            }
-            $return = $this->$method();
-        } else {
-
-            $varyOptions = array(
-                'Accept',
-                'Accept-Encoding',
-                'Accept-Language',
-            );
-
-            $requestId = null;
-            if (null === ($requestId = $routeMatch->getParam('id'))) {
-                $varyOptions[] = 'Range';
-                $varyOptions[] = 'X-Order-By';
-                $varyOptions[] = 'X-Filter-By';
-            }
-
-            $range = null;
-            $filter = null;
-            $orderBy = null;
-            $parent = null;
-
-            if (
-                ($rangeHeader = $this->getRequest()->getHeader('range')) &&
-                ($rawRange = $rangeHeader->getFieldValue()) &&
-                preg_match('/^resources=([0-9]+)-([0-9]+)?/', $rawRange, $rangeMatches)
-            ) {
-                $range = array(
-                    'begin' => $rangeMatches[1],
-                    'end'   => (isset($rangeMatches[2]) ? $rangeMatches[2] : null),
+            if (!$routeMatch) {
+                throw new Exception\DomainException(
+                    'Missing route matches; unsure how to retrieve action'
                 );
             }
 
-            $filterPatterns = $this->getFilterPatterns();
-
-            $checkFilterPatterns = function($subject, $patterns) {
-                foreach ($patterns as $pattern) {
-                    if (preg_match("/{$pattern}/", $subject)) {
-                        return true;
-                    }
+            $request = $e->getRequest(); /*@var $request \Zend\Http\PhpEnvironment\Request*/
+            $action  = $routeMatch->getParam('action', false);
+            /*@var $headers \Zend\Http\Header\Accept*/
+            if ($action) {
+                // Handle arbitrary methods, ending in Action
+                $method = static::getMethodFromAction($action);
+                if (!method_exists($this, $method)) {
+                    $method = 'notFoundAction';
                 }
-                return false;
-            };
+                $return = $this->$method();
+            } else {
 
-            $createOperator = function($column, $operand, $value) {
-                if ($value === 'null') {
-                    $value = null;
-                }
-                switch ($operand) {
-                    case '!=':
-                    case '=':
-                        $not = $operand === '!=';
-                        if ((preg_match('/^([0-9]+)-([0-9]+)$/', $value, $matches))) {
-                            return ($not ?
-                                new NotBetween($column, $matches[1], $matches[2]) :
-                                new Between($column, $matches[1], $matches[2])
-                            );
-                        }
-                        if (preg_match('/^([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2})-([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2})$/', $value, $matches)) {
-                            return ($not ?
-                                new NotBetween($column, $matches[1], $matches[2]) :
-                                new Between($column, $matches[1], $matches[2])
-                            );
-                        }
-                        if (strpos($value, '|') !== false) {
-                            $values = explode('|', $value);
-                            return ($not ?
-                                new NotIn($column, $values) :
-                                new In($column, $values)
-                            );
-                        }
-                        if (strpos($value, '*') !== false) {
-                            $value = str_replace('*', '%', $value);
-                            return ($not ?
-                                new NotLike($column, $value) :
-                                new Like($column, $value)
-                            );
-                        }
-                        return new Operator($column, $operand, $value);
-                    case '>':
-                    case '<':
-                    case '>=':
-                    case '<=':
-                        return new Operator($column, $operand, (int)$value);
-                        break;
-
-                }
-                throw new \UnexpectedValueException(
-                    'Did not expect the operand "' . $operand .
-                    '", this has not been implemented.'
+                $varyOptions = array(
+                    'Accept',
+                    'Accept-Encoding',
+                    'Accept-Language',
+                    'X-Longpoll',
                 );
-            };
 
-            if (
-                ($filterByHeader = $this->getRequest()->getHeader('xfilterby')) &&
-                ($rawFilter = $filterByHeader->getFieldValue())
-            ) {
-                $filter = array();
-                $filterParts = explode(',', $rawFilter);
-                foreach ($filterParts as $filterPart) {
-                    if (preg_match('/^([a-z]{1}[a-z0-9_\.]*)(=|!=|>=|<=|>|<)([0-9]+-[0-9]+|[a-zA-Z0-9\*-_\|\s:]+)$/', $filterPart, $matches)) {
-                        $column  = $matches[1];
-                        $operand = $matches[2];
-                        $value   = $matches[3];
-                        //$value = $matches[4];
-                        if (
-                            !isset($filterPatterns[$column]) ||
-                            !$checkFilterPatterns($operand . $value, $filterPatterns[$column])
-                        ) {
-                            continue;
-                        }
-
-                        $filterParts = explode('.', $column);
-                        $pointer = &$filter;
-                        foreach ($filterParts as $part) {
-                            if (!isset($pointer[$part])) {
-                                $pointer[$part] = array();
-                            }
-                            $pointer = &$pointer[$part];
-                        }
-                        $pointer = $createOperator($part, $operand, $value);
-                    }
+                $requestId = null;
+                if (null === ($requestId = $routeMatch->getParam('id'))) {
+                    $varyOptions[] = 'Range';
+                    $varyOptions[] = 'X-Order-By';
+                    $varyOptions[] = 'X-Filter-By';
                 }
-            }
 
-            if (
-                ($orderByHeader = $this->getRequest()->getHeader('xorderby')) &&
-                ($rawOrder = $orderByHeader->getFieldValue())
-            ) {
-                $orderBy = array();
-                $orderParts = explode(',', $rawOrder);
-                foreach ($orderParts as $orderPart) {
-                    if (preg_match('/^([a-z]{1}[a-z0-9_]*)=(ASC|DESC)/i', $orderPart, $matches)) {
-                        $orderBy[$matches[1]] = strtoupper($matches[2]);
-                    } elseif (preg_match('/^([a-z]{1}[a-z0-9_.]*)=(ASC|DESC)/i', $orderPart, $matches)) {
-                        $matchParts = explode('.', $matches[1]);
-                        $pointer = &$orderBy;
-                        foreach ($matchParts as $part) {
-                            if (!isset($pointer[$part])) {
-                                $pointer[$part] = array();
-                            }
-                            $pointer = &$pointer[$part];
-                        }
-                        $pointer = strtoupper($matches[2]);
-                    }
+                $range    = null;
+                $filter   = null;
+                $orderBy  = null;
+                $parent   = null;
+                $longPoll = null;
+
+                $longpollHeader = $this->getRequest()->getHeader('xlongpoll');
+                if (
+                    $longpollHeader &&
+                    ($longpollValue = $longpollHeader->getFieldValue()) &&
+                    preg_match('/^([a-z]+)=([0-9]+)$/i', $longpollValue, $longpollMatches)
+                ) {
+                    $longPoll = array(
+                        'field' => $longpollMatches[1],
+                        'value' => $longpollMatches[2]
+                    );
                 }
-            }
 
-            if (
-                null !== ($parentCollection = $routeMatch->getParam('parent_collection')) &&
-                null !== ($parentId = $routeMatch->getParam('parent_id'))
-            ) {
-                $parent = array(
-                    'collection' => $parentCollection,
-                    'id'         => $parentId,
-                );
-            }
-            $this->getResponse()->getHeaders()->addHeaderLine(
-                'Vary',
-                implode(',', $varyOptions)
-            );
-            if ($this->verifyAuthentication($routeMatch)) {
-                switch (strtolower($request->getMethod())) {
-                    case 'get':
-                        if (null !== $requestId) {
-                            $action = 'get';
-                            $return = $this->get($requestId, $parent);
-                            $relations = $this->getRelations();
-                            foreach ($relations as $relation) {
-                                $return[$relation] = array(
-                                    'rel'  => 'collection/' . $relation,
-                                    'link' => $_SERVER['REQUEST_URI'] . '/' . $relation
+                if (
+                    ($rangeHeader = $this->getRequest()->getHeader('range')) &&
+                    ($rawRange = $rangeHeader->getFieldValue()) &&
+                    preg_match('/^resources=([0-9]+)-([0-9]+)?/', $rawRange, $rangeMatches)
+                ) {
+                    $range = array(
+                        'begin' => $rangeMatches[1],
+                        'end'   => (isset($rangeMatches[2]) ? $rangeMatches[2] : null),
+                    );
+                }
+
+                $filterPatterns = $this->getFilterPatterns();
+
+                $checkFilterPatterns = function($subject, $patterns) {
+                    foreach ($patterns as $pattern) {
+                        if (preg_match("/{$pattern}/", $subject)) {
+                            return true;
+                        }
+                    }
+                    return false;
+                };
+
+                $createOperator = function($column, $operand, $value) {
+                    if ($value === 'null') {
+                        $value = null;
+                    }
+                    switch ($operand) {
+                        case '!=':
+                        case '=':
+                            $not = $operand === '!=';
+                            if ((preg_match('/^([0-9]+)-([0-9]+)$/', $value, $matches))) {
+                                return ($not ?
+                                    new NotBetween($column, $matches[1], $matches[2]) :
+                                    new Between($column, $matches[1], $matches[2])
                                 );
                             }
+                            if (preg_match('/^([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2})-([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2})$/', $value, $matches)) {
+                                return ($not ?
+                                    new NotBetween($column, $matches[1], $matches[2]) :
+                                    new Between($column, $matches[1], $matches[2])
+                                );
+                            }
+                            if (strpos($value, '|') !== false) {
+                                $values = explode('|', $value);
+                                return ($not ?
+                                    new NotIn($column, $values) :
+                                    new In($column, $values)
+                                );
+                            }
+                            if (strpos($value, '*') !== false) {
+                                $value = str_replace('*', '%', $value);
+                                return ($not ?
+                                    new NotLike($column, $value) :
+                                    new Like($column, $value)
+                                );
+                            }
+                            return new Operator($column, $operand, $value);
+                        case '>':
+                        case '<':
+                        case '>=':
+                        case '<=':
+                            return new Operator($column, $operand, (int)$value);
                             break;
+
+                    }
+                    throw new \UnexpectedValueException(
+                        'Did not expect the operand "' . $operand .
+                        '", this has not been implemented.'
+                    );
+                };
+
+                if (
+                    ($filterByHeader = $this->getRequest()->getHeader('xfilterby')) &&
+                    ($rawFilter = $filterByHeader->getFieldValue())
+                ) {
+                    $filter = array();
+                    $filterParts = explode(',', $rawFilter);
+                    foreach ($filterParts as $filterPart) {
+                        if (preg_match('/^([a-z]{1}[a-z0-9_\.]*)(=|!=|>=|<=|>|<)([0-9]+-[0-9]+|[a-zA-Z0-9\*-_\|\s:]+)$/', $filterPart, $matches)) {
+                            $column  = $matches[1];
+                            $operand = $matches[2];
+                            $value   = $matches[3];
+                            //$value = $matches[4];
+                            if (
+                                !isset($filterPatterns[$column]) ||
+                                !$checkFilterPatterns($operand . $value, $filterPatterns[$column])
+                            ) {
+                                continue;
+                            }
+
+                            $filterParts = explode('.', $column);
+                            $pointer = &$filter;
+                            foreach ($filterParts as $part) {
+                                if (!isset($pointer[$part])) {
+                                    $pointer[$part] = array();
+                                }
+                                $pointer = &$pointer[$part];
+                            }
+                            $pointer = $createOperator($part, $operand, $value);
                         }
-                        $action = 'getList';
-                        $return = $this->getList($range, $filter, $orderBy, $parent);
-                        break;
-                    case 'post':
-                        $action = 'create';
-                        $return = $this->processPostData($request);
-                        break;
-                    case 'put':
-                        $action = 'update';
-                        $return = $this->processPutData($request, $routeMatch);
-                        break;
-                    case 'patch':
-                        $action = 'patch';
-                        $return = $this->processPatchData($request, $routeMatch);
-                        break;
-                    case 'delete':
-                        if (null === $requestId) {
-                            throw new Exception\DomainException('Missing identifier');
-                        }
-                        $action = 'delete';
-                        $return = $this->delete($requestId, $parent);
-                        break;
-                    case 'options':
-                        if (null !== $requestId) {
-                            $return = $this->getOptions($requestId, $parent);
-                            break;
-                        }
-                        $return = $this->getOptions(null, $parent);
-                        break;
-                    default:
-                        throw new Exception\DomainException('Invalid HTTP method!');
-                }
-
-                $routeMatch->setParam('action', $action);
-            }
-
-
-            $allowedOrigin = isset($_SERVER['HTTP_HOST']) ?
-                str_replace('api.', '', $_SERVER['HTTP_HOST']) : '*';
-
-            if (($originHeader = $this->getRequest()->getHeader('Origin'))) {
-                $allowedOrigin = $originHeader->getFieldValue();
-            }
-
-            $this->getResponse()->getHeaders()->addHeaderLine(
-                'Access-Control-Allow-Credentials', 'true'
-            );
-            $this->getResponse()->getHeaders()->addHeaderLine(
-                'Access-Control-Allow-Origin', $allowedOrigin
-            );
-            $this->getResponse()->getHeaders()->addHeaderLine(
-                'Access-Control-Allow-Methods',
-                'GET, POST, PUT, PATCH, HEAD, TRACE, OPTIONS'
-            );
-            $this->getResponse()->getHeaders()->addHeaderLine(
-                'Access-Control-Expose-Headers',
-                'WWW-Authenticate, Vary, Content-Range'
-            );
-            $this->getResponse()->getHeaders()->addHeaderLine(
-                'Access-Control-Allow-Headers',
-                'Accept, Authorization, Accept-Encoding, Accept-Language, Range, X-Browser-Digest, X-Filter-By, X-Order-By'
-            );
-
-            $viewModel = new \Zend\View\Model\JsonModel();
-
-            if (
-                empty($return) &&
-                $this->getResponse()->getStatusCode() < 400 &&
-                $this->getRequest()->getMethod() != 'OPTIONS'
-            ) {
-                $this->getResponse()->setStatusCode(204);
-            }
-
-            $trMetaData = null;
-            if ($this->getTunnelingEnabled()) {
-
-                $trMetaData = $this->getTunnelledResponsemetaData(
-                    $this->getResponse()
-                );
-
-                $wwwAuthenticate = $this->getResponse()->getHeaders()->get('WWW-Authenticate');
-                if ($wwwAuthenticate) {
-                    $this->getResponse()->getHeaders()->removeHeader($wwwAuthenticate[0]);
-                }
-            }
-
-            if (empty($return)) {
-                if (null !== $trMetaData) {
-                    $return = $trMetaData;
-                } else {
-                    return $this->getResponse();
-                }
-            } else {
-                if (null !== $trMetaData) {
-                    $return = array_merge($trMetaData, $return);
-                }
-                $accept         = $this->getRequest()->getHeader('accept')->getFieldValue();
-                $acceptList     = array();
-                $explodedAccept = explode(',', $accept);
-
-                foreach($explodedAccept as $explode) {
-                    $tmp            = explode(';', $explode);
-                    $acceptMime     = array_shift($tmp);
-                    $acceptList[]   = trim($acceptMime);
-                }
-
-                if (false !== $accept && in_array('*/*', $acceptList) === false) {
-                    if (in_array('application/json', $acceptList) === false) {
-                        $this->getResponse()->setStatusCode(406);
-                        return $this->getResponse();
-                        // TODO: Support more accept types
                     }
                 }
+
+                if (
+                    ($orderByHeader = $this->getRequest()->getHeader('xorderby')) &&
+                    ($rawOrder = $orderByHeader->getFieldValue())
+                ) {
+                    $orderBy = array();
+                    $orderParts = explode(',', $rawOrder);
+                    foreach ($orderParts as $orderPart) {
+                        if (preg_match('/^([a-z]{1}[a-z0-9_]*)=(ASC|DESC)/i', $orderPart, $matches)) {
+                            $orderBy[$matches[1]] = strtoupper($matches[2]);
+                        } elseif (preg_match('/^([a-z]{1}[a-z0-9_.]*)=(ASC|DESC)/i', $orderPart, $matches)) {
+                            $matchParts = explode('.', $matches[1]);
+                            $pointer = &$orderBy;
+                            foreach ($matchParts as $part) {
+                                if (!isset($pointer[$part])) {
+                                    $pointer[$part] = array();
+                                }
+                                $pointer = &$pointer[$part];
+                            }
+                            $pointer = strtoupper($matches[2]);
+                        }
+                    }
+                }
+
+                if (
+                    null !== ($parentCollection = $routeMatch->getParam('parent_collection')) &&
+                    null !== ($parentId = $routeMatch->getParam('parent_id'))
+                ) {
+                    $parent = array(
+                        'collection' => $parentCollection,
+                        'id'         => $parentId,
+                    );
+                }
+
+                $this->getResponse()->getHeaders()->addHeaderLine(
+                    'Vary',
+                    implode(',', $varyOptions)
+                );
+
+                if ($this->verifyAuthentication($routeMatch)) {
+                    switch (strtolower($request->getMethod())) {
+                        case 'get':
+                            if (null !== $requestId) {
+                                $action = 'get';
+                                $return = $this->get($requestId, $parent);
+                                $relations = $this->getRelations();
+                                foreach ($relations as $relation) {
+                                    $return[$relation] = array(
+                                        'rel'  => 'collection/' . $relation,
+                                        'link' => $_SERVER['REQUEST_URI'] . '/' . $relation
+                                    );
+                                }
+                                break;
+                            }
+
+                            $continue = true;
+
+                            // Verify if we can longpoll if it is a longpoll request
+                            if ($longPoll !== null && $this->getLongPollEnabled() === false) {
+                                $this->getResponse()->setStatusCode(417);
+                                $return = array('error' => 'Longpolling is not available for this collection');
+                                $continue = false;
+                            }
+
+                            // Only call getList when we're allowed to
+                            if ($continue) {
+                                $action = 'getList';
+                                $return = $this->getList($range, $filter, $orderBy, $parent, $longPoll);
+                            }
+
+                            break;
+                        case 'post':
+                            $action = 'create';
+                            $return = $this->processPostData($request);
+                            break;
+                        case 'put':
+                            $action = 'update';
+                            $return = $this->processPutData($request, $routeMatch);
+                            break;
+                        case 'patch':
+                            $action = 'patch';
+                            $return = $this->processPatchData($request, $routeMatch);
+                            break;
+                        case 'delete':
+                            if (null === $requestId) {
+                                throw new Exception\DomainException('Missing identifier');
+                            }
+                            $action = 'delete';
+                            $return = $this->delete($requestId, $parent);
+                            break;
+                        case 'options':
+                            if (null !== $requestId) {
+                                $return = $this->getOptions($requestId, $parent);
+                                break;
+                            }
+                            $return = $this->getOptions(null, $parent);
+                            break;
+                        default:
+                            throw new Exception\DomainException('Invalid HTTP method!');
+                    }
+
+                    $routeMatch->setParam('action', $action);
+                }
+
+
+                $allowedOrigin = isset($_SERVER['HTTP_HOST']) ?
+                    str_replace('api.', '', $_SERVER['HTTP_HOST']) : '*';
+
+                if (($originHeader = $this->getRequest()->getHeader('Origin'))) {
+                    $allowedOrigin = $originHeader->getFieldValue();
+                }
+
+                $this->getResponse()->getHeaders()->addHeaderLine(
+                    'Access-Control-Allow-Credentials', 'true'
+                );
+                $this->getResponse()->getHeaders()->addHeaderLine(
+                    'Access-Control-Allow-Origin', $allowedOrigin
+                );
+                $this->getResponse()->getHeaders()->addHeaderLine(
+                    'Access-Control-Allow-Methods',
+                    'GET, POST, PUT, PATCH, HEAD, TRACE, OPTIONS'
+                );
+                $this->getResponse()->getHeaders()->addHeaderLine(
+                    'Access-Control-Expose-Headers',
+                    'WWW-Authenticate, Vary, Content-Range'
+                );
+                $this->getResponse()->getHeaders()->addHeaderLine(
+                    'Access-Control-Allow-Headers',
+                    'Accept, Authorization, Accept-Encoding, Accept-Language, Range, X-Longpoll, X-Browser-Digest, X-Filter-By, X-Order-By'
+                );
+
+                $viewModel = new \Zend\View\Model\JsonModel();
+
+                if (
+                    empty($return) &&
+                    $this->getResponse()->getStatusCode() < 400 &&
+                    $this->getRequest()->getMethod() != 'OPTIONS'
+                ) {
+                    $this->getResponse()->setStatusCode(204);
+                }
+
+                $trMetaData = null;
+                if ($this->getTunnelingEnabled()) {
+
+                    $trMetaData = $this->getTunnelledResponsemetaData(
+                        $this->getResponse()
+                    );
+
+                    $wwwAuthenticate = $this->getResponse()->getHeaders()->get('WWW-Authenticate');
+                    if ($wwwAuthenticate) {
+                        $this->getResponse()->getHeaders()->removeHeader($wwwAuthenticate[0]);
+                    }
+                }
+
+                if (empty($return)) {
+                    if (null !== $trMetaData) {
+                        $return = $trMetaData;
+                    } else {
+                        return $this->getResponse();
+                    }
+                } else {
+                    if (null !== $trMetaData) {
+                        $return = array_merge($trMetaData, $return);
+                    }
+                    $accept         = $this->getRequest()->getHeader('accept')->getFieldValue();
+                    $acceptList     = array();
+                    $explodedAccept = explode(',', $accept);
+
+                    foreach($explodedAccept as $explode) {
+                        $tmp            = explode(';', $explode);
+                        $acceptMime     = array_shift($tmp);
+                        $acceptList[]   = trim($acceptMime);
+                    }
+
+                    if (false !== $accept && in_array('*/*', $acceptList) === false) {
+                        if (in_array('application/json', $acceptList) === false) {
+                            $this->getResponse()->setStatusCode(406);
+                            return $this->getResponse();
+                            // TODO: Support more accept types
+                        }
+                    }
+                }
+
+                // jsonp workaround for */* header..
+                if ($this->getRequest()->getQuery('callback') !== false) {
+                    // Enforce the callback to be called
+                    $viewModel->setJsonpCallback($this->getRequest()->getQuery('callback'));
+                }
+
+                // When tunneling for method, status and headers is enabled alwayw
+                // return status 200 for the tunnel client to be able to get the
+                // body.
+                if ($this->getTunnelingEnabled()) {
+                    $this->getResponse()->setStatusCode(200);
+                }
+                $viewModel->setVariables($return);
+
+                // Emit post-dispatch signal, passing:
+                // - return from method, request, response
+                // If a listener returns a response object, return it immediately
+                $e->setResult($viewModel);
+
+
+                $return = $viewModel;
             }
-
-            // jsonp workaround for */* header..
-            if ($this->getRequest()->getQuery('callback') !== false) {
-                // Enforce the callback to be called
-                $viewModel->setJsonpCallback($this->getRequest()->getQuery('callback'));
-            }
-
-            // When tunneling for method, status and headers is enabled alwayw
-            // return status 200 for the tunnel client to be able to get the
-            // body.
-            if ($this->getTunnelingEnabled()) {
-                $this->getResponse()->setStatusCode(200);
-            }
-            $viewModel->setVariables($return);
-
-            // Emit post-dispatch signal, passing:
-            // - return from method, request, response
-            // If a listener returns a response object, return it immediately
-            $e->setResult($viewModel);
-
-
-            $return = $viewModel;
+            return $return;
+        } catch (\Exception $e) {
+            echo '<pre>';
+            echo ($e->__toString());
+            exit;
         }
-        return $return;
     }
 
     protected function getTunnelledResponsemetaData(HTTPResponse $response)
@@ -1266,10 +1369,10 @@ abstract class AbstractRestfulController extends AbstractController
                 throw new Exception\DomainException('Missing identifier');
             }
         }
-        
+
         $content = $request->getContent();
         parse_str($content, $parsedParams);
-        
+
         return $this->update($id, $parsedParams);
     }
 
@@ -1296,10 +1399,55 @@ abstract class AbstractRestfulController extends AbstractController
         $this->response = $response;
         return $this;
     }
-    
+
+    /**
+     * Enable/Disable longpolling functionality for the GET request
+     * By default longpolling is disabled
+     *
+     * @param boolean $bool
+     * @return self
+     */
+    public function setLongPollEnabled($bool)
+    {
+        $this->longPollEnabled = $bool;
+        return $this;
+    }
+
+    /**
+     * Are we allowed to proceed with longpolling
+     *
+     * @return boolean
+     */
+    public function getLongPollEnabled()
+    {
+        return $this->longPollEnabled;
+    }
+
+    /**
+     * Set a timeout when we're closing the connection
+     *
+     * @param integer $timeout The timeout in seconds
+     * @return self
+     */
+    public function setLongPollTimeout($timeout)
+    {
+        $this->longPollTimeout = $timeout;
+        return $this;
+    }
+
+    /**
+     * Get the timeout when we should terminate the longpolling
+     *
+     * @return integer
+     */
+    public function getLongPollTimeout()
+    {
+        return $this->longPollTimeout;
+    }
+
     /**
     * This method will merge the parameters within the options
-    * 
+    *
     * Usage:
     *   //Retrieve default parameter
     *   $options[$method]['parameters'][] = 'parameter_key'
