@@ -315,7 +315,7 @@ abstract class AbstractRestfulController extends AbstractController
         }
 
         $joins = $this->getDefaultJoins();
-
+        
         $count = $mapper->count($filter, $joins);
         if ($range === null) {
             $range = array(
@@ -340,7 +340,7 @@ abstract class AbstractRestfulController extends AbstractController
         if (null === $orderBy) {
             $orderBy = $this->getDefaultOrderBy();
         }
-        
+
         $results = $mapper->search($range, $filter, $orderBy, $joins, $columnsFilter, false);
 
         $this->getResponse()->getHeaders()->addHeaderLine(
@@ -1129,7 +1129,7 @@ abstract class AbstractRestfulController extends AbstractController
             );
             $this->getResponse()->getHeaders()->addHeaderLine(
                 'Access-Control-Allow-Headers',
-                'Accept, Authorization, Accept-Encoding, Accept-Language, Range, X-Browser-Digest, X-Filter-By, X-Order-By'
+                'Accept, Authorization, Accept-Encoding, Accept-Language, Range, Expect, X-Browser-Digest, X-Filter-By, X-Order-By'
             );
 
             $viewModel = new \Zend\View\Model\JsonModel();
