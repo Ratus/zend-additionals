@@ -385,7 +385,14 @@ abstract class AbstractRestfulController extends AbstractController
         }
 
         while ($timeLeft) {
-            $results = $mapper->search($range, $filter, $orderBy, $joins, $columnsFilter, false);
+            $results = $mapper->search(
+                $range,
+                $filter,
+                $orderBy,
+                $joins,
+                $columnsFilter,
+                false
+            );
 
             if ($longpoll === null || empty($results) === false) {
                 break;
