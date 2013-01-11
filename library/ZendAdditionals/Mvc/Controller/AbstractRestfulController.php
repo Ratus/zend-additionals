@@ -342,7 +342,7 @@ abstract class AbstractRestfulController extends AbstractController
         }
 
         $joins = $this->getDefaultJoins();
-
+        
         $count = $mapper->count($filter, $joins);
 
         if ($range === null) {

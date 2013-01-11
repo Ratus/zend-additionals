@@ -239,8 +239,37 @@ abstract class AbstractMapper implements
         }
     }
 
+    /**
+     * Copy an array or object, using this method all objects inside will
+     * be clonsed instead of referenced.
+     *
+     * @param  array $data
+     * @return array
+     */
+    protected function copy($data) {
+        if (is_object($data)) {
+            return clone $data;
+        }
+        if (!is_array($data)) {
+            return $data;
+        }
+        $copy = array();
+        foreach($data as $key => $value) {
+            if (is_array($value)) {
+                $copy[$key] = $this->copy($value);
+            } elseif (is_object($value)) {
+                $copy[$key] = clone $value;
+            } else {
+                $copy[$key] = $value;
+            }
+        }
+        return $copy;
+    }
+
     public function count(array $filter = null, array $joins = null)
     {
+        // Copy the filter to avoid messing with referenced objects inside
+        $filter = $this->copy($filter);
         // @TODO: CACHE!!!
         $select = $this->getSelect();
 
@@ -306,7 +335,6 @@ abstract class AbstractMapper implements
             }
         }
 
-
         /*
          * When surfing through joins and going a level deeper a reference to
          * the current depth gets appended to this array to be able to go
@@ -337,7 +365,6 @@ abstract class AbstractMapper implements
                 ) {
                     unset($filterPointer[$previous[3]]);
                 }
-
                 continue;
             }
             /*
@@ -346,17 +373,27 @@ abstract class AbstractMapper implements
              * to start the nested loop.
              */
             if (is_array($var['value'])) {
-                $joinDepth[] = array(&$pointer, $ref, &$filterPointer, $var['key']);
+                $joinDepth[] = array(
+                    &$pointer,
+                    $ref,
+                    &$filterPointer,
+                    $var['key']
+                );
+
                 // Only join when we have some filters for the join
                 if (isset($filterPointer[$var['key']])) {
                     $ref = $this->addJoin(
                         $select,
                         $var['key'],
                         $ref,
-                        array(),
-                        $filterPointer[$var['key']]
+                        array(), // no need for columnsfilter
+                        (isset($filterPointer[$var['key']]) ?
+                            $filterPointer[$var['key']] :
+                            null
+                        )
                     );
                 }
+
                 /*@var $ref EntityAssociation*/
                 $pointer = &$pointer[$var['key']];
                 if (
@@ -377,7 +414,10 @@ abstract class AbstractMapper implements
                     $var['value'],
                     $ref,
                     array(),
-                    $filterPointer[$var['value']]
+                    (isset($filterPointer[$var['value']]) ?
+                        $filterPointer[$var['value']] :
+                        null
+                    )
                 );
             }
         }
@@ -385,11 +425,15 @@ abstract class AbstractMapper implements
         $where = new \Zend\Db\Sql\Where();
         $applyWhereFilter = false;
         if (is_array($filter)) {
-            foreach ($filter as $filterColumn => $operator) {
+            foreach ($filter as $key => $operator) {
+                if (is_array($operator)) { //Skip join conditions
+                    continue;
+                }
+
                 if (!($operator instanceof \Zend\Db\Sql\Predicate\PredicateInterface)) {
                     $value    = $operator;
                     $operator = new Operator();
-                    $operator->setLeft($filterColumn)->setRight($value);
+                    $operator->setLeft($key)->setRight($value);
                 }
                 $getIdentifier = 'getIdentifier';
                 $setIdentifier = 'setIdentifier';
@@ -399,8 +443,15 @@ abstract class AbstractMapper implements
                 }
                 // Prefix with table name because it's a where clause
                 // TODO: Jesper improve this part
-                if (strstr($operator->$getIdentifier(), $this->getTableName()) === false) {
-                    $operator->$setIdentifier($this->getTableName() . '.' . $operator->$getIdentifier());
+                if (
+                    strstr(
+                        $operator->$getIdentifier(),
+                        $this->getTableName()
+                    ) === false
+                ) {
+                    $operator->$setIdentifier(
+                        $this->getTableName() . '.' . $operator->$getIdentifier()
+                    );
                 }
                 $where->addPredicate($operator);
                 $applyWhereFilter = true;
@@ -411,8 +462,6 @@ abstract class AbstractMapper implements
         if ($applyWhereFilter) {
             $select->where($where);
         }
-
-//        echo $this->debugSql($select->getSqlString());
 
         return $this->getCount($select);
     }
@@ -436,6 +485,8 @@ abstract class AbstractMapper implements
         array $columnsFilter = null,
         $returnEntities = true
     ) {
+        // Copy the filter to avoid messing with referenced objects inside
+        $filter = $this->copy($filter);
         $limit = 1000;
         $offset = 0;
         if (isset($range['begin']) && $range['begin'] >= 0) {
@@ -443,11 +494,6 @@ abstract class AbstractMapper implements
         }
         if (isset($range['end']) && $range['end'] > $offset) {
             $limit = ((int)$range['end'] - $offset);
-        }
-        if (isset($_SESSION['dumpert'])) {
-            var_dump('LIMIT', $limit, 'OFFSET', $offset);
-            unset($_SESSION['dumpert']);
-            die();
         }
         $select = $this->getSelect();
         $select->limit($limit);
@@ -653,7 +699,6 @@ abstract class AbstractMapper implements
                 ) {
                     unset($filterPointer[$previous[4]]);
                 }
-
                 continue;
             }
             /*
@@ -674,19 +719,18 @@ abstract class AbstractMapper implements
                     $select,
                     $var['key'],
                     $ref,
-                    (
-                        $applyColumnsFilter ? (
-                            isset($columnsPointer[$var['key']]) ?
+                    ($applyColumnsFilter ?
+                        (isset($columnsPointer[$var['key']]) ?
                             $columnsPointer[$var['key']] :
                             array()
                         ) : null
                     ),
-                    (
-                        isset($filterPointer[$var['key']]) ?
+                    (isset($filterPointer[$var['key']]) ?
                         $filterPointer[$var['key']] :
                         null
                     )
                 );
+
                 /*@var $ref EntityAssociation*/
                 $pointer = &$pointer[$var['key']];
                 if (
@@ -713,15 +757,13 @@ abstract class AbstractMapper implements
                 $select,
                 $var['value'],
                 $ref,
-                (
-                    $applyColumnsFilter ? (
-                        isset($columnsPointer[$var['value']]) ?
+                ($applyColumnsFilter ?
+                    (isset($columnsPointer[$var['value']]) ?
                         $columnsPointer[$var['value']] :
                         array()
                     ) : null
                 ),
-                (
-                    isset($filterPointer[$var['value']]) ?
+                (isset($filterPointer[$var['value']]) ?
                     $filterPointer[$var['value']] :
                     null
                 )
