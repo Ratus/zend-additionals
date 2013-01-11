@@ -396,6 +396,7 @@ abstract class AbstractMapper implements
      * @param array $joins array('some_entity', 'other_entity', 'base_entity' => array('some_other_from_base'))
      * @param array $columnsFilter array('col_one', 'some_entity' => array('col_two'))
      * @param boolean $returnEntities By default return entities, set to false for an array
+     * @param array $groupBy array('column', 'join2' => array('column'))
      *
      * @return type
      */
@@ -405,7 +406,8 @@ abstract class AbstractMapper implements
         array $orderBy = null,
         array $joins = null,
         array $columnsFilter = null,
-        $returnEntities = true
+        $returnEntities = true,
+        array $groupBy = null
     ) {
         $limit = 1000;
         $offset = 0;
@@ -415,15 +417,11 @@ abstract class AbstractMapper implements
         if (isset($range['end']) && $range['end'] > $offset) {
             $limit = ((int)$range['end'] - $offset);
         }
-        if (isset($_SESSION['dumpert'])) {
-            var_dump('LIMIT', $limit, 'OFFSET', $offset);
-            unset($_SESSION['dumpert']);
-            die();
-        }
+
         $select = $this->getSelect();
         $select->limit($limit);
         $select->offset($offset);
-
+        
         $applyColumnsFilter = false;
         if (!empty($columnsFilter)) {
             $applyColumnsFilter = true;
@@ -572,6 +570,38 @@ abstract class AbstractMapper implements
             $select->columns($columns);
         }
 
+        if (isset($groupBy)) {
+            foreach ($groupBy as $key => $group) {
+                if (is_array($group) === false) {
+                    continue;
+                }   
+                var_dump($group);
+                foreach($group as $joinKey => $column) {
+                    if (array_key_exists($joinKey, $possibleXmlAttributeColumns)) {
+                        var_dump("array_key_exists({$joinKey})", $possibleXmlAttributeColumns);
+                        $columns[] = $joinKey;
+                        if (!$returnEntities) {
+                            $xmlAttributes[$joinKey] = (
+                                empty($column) ?
+                                $possibleXmlAttributeColumns[$joinKey] :
+                                $column
+                            );
+                        }
+                    } else {
+                        var_dump("!array_key_exists({$joinKey})", $possibleXmlAttributeColumns);
+                        $joinColumns[$joinKey] = $column;
+                    }
+                }
+                //array processen
+                //bij de laatste key heb je de entity association
+                //die heeft de allias die ervoor komt
+                
+                // resolve alias voor join 
+            }
+            
+            //$select->group($groupBy);
+        }
+        
         /*
          * When surfing through joins and going a level deeper a reference to
          * the current depth gets appended to this array to be able to go
@@ -726,7 +756,6 @@ abstract class AbstractMapper implements
         if ($applyWhereFilter) {
             $select->where($where);
         }
-
         $return = array();
         $result = $this->getResult($select);
         /*@var $result \ZendAdditionals\Db\ResultSet\JoinedHydratingResultSet*/
@@ -1102,7 +1131,7 @@ abstract class AbstractMapper implements
         if (!isset($mapper->relations[$entityIdentifier])) {
             throw new \UnexpectedValueException(
                 'The given associated entity identifier "' .
-                $entityIdentifier . '" is not defined in the relations!'
+                $entityIdentifier . '" is not defined in the relations of ' . get_class($this) . '!'
             );
         }
 

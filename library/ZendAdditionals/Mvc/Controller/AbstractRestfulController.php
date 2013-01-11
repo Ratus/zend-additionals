@@ -306,7 +306,8 @@ abstract class AbstractRestfulController extends AbstractController
         array $range = null,
         array $filter = null,
         array $orderBy = null,
-        array $parent = null
+        array $parent = null,
+        array $groupBy = null
     ) {
         $mapper = $this->getMapper();
 
@@ -316,7 +317,13 @@ abstract class AbstractRestfulController extends AbstractController
 
         $joins = $this->getDefaultJoins();
 
-        $count = $mapper->count($filter, $joins);
+        /*
+         * hack to fix count query.
+         * DO NOT COMMIT!
+         * --        $count = $mapper->count($filter, $joins);
+         * ++        $count = 10; //$mapper->count($filter, $joins);
+         * */
+        $count = 10; //$mapper->count($filter, $joins);
         if ($range === null) {
             $range = array(
                 'begin' => 0,
@@ -340,8 +347,7 @@ abstract class AbstractRestfulController extends AbstractController
         if (null === $orderBy) {
             $orderBy = $this->getDefaultOrderBy();
         }
-
-        $results = $mapper->search($range, $filter, $orderBy, $joins, $columnsFilter, false);
+        $results = $mapper->search($range, $filter, $orderBy, $joins, $columnsFilter, false, $groupBy);
 
         $this->getResponse()->getHeaders()->addHeaderLine(
             'Content-Range',
@@ -908,11 +914,13 @@ abstract class AbstractRestfulController extends AbstractController
                 $varyOptions[] = 'Range';
                 $varyOptions[] = 'X-Order-By';
                 $varyOptions[] = 'X-Filter-By';
+                $varyOptions[] = 'X-Group-By';
             }
 
             $range = null;
             $filter = null;
             $orderBy = null;
+            $groupBy = null;
             $parent = null;
 
             if (
@@ -1042,6 +1050,35 @@ abstract class AbstractRestfulController extends AbstractController
             }
 
             if (
+                ($filterByHeader = $this->getRequest()->getHeader('xgroupby')) &&
+                ($rawGroup = $filterByHeader->getFieldValue())
+            ) {
+                $groupBy = array();
+                if (preg_match_all('/([a-z]{1}[a-z0-9_\-\.]*),?/i', $rawGroup, $matches, PREG_SET_ORDER)) {
+                    foreach($matches as $match) {
+                        $groupByTmp = array();
+                        
+                        $matchParts = explode('.', $match[1]);
+                        $field = array_pop($matchParts);
+                        
+                        $pointer = &$groupByTmp;
+                        $max = $matchParts;
+                        
+                        foreach ($matchParts as $part) {
+                            if (!isset($pointer[$part])) {
+                                $pointer[$part] = array();
+                            }    
+                            $pointer = &$pointer[$part];         
+                        }
+                        
+                        $pointer = $field;
+                        
+                        $groupBy[] = $groupByTmp;
+                    }        
+                }
+            }
+            
+            if (
                 null !== ($parentCollection = $routeMatch->getParam('parent_collection')) &&
                 null !== ($parentId = $routeMatch->getParam('parent_id'))
             ) {
@@ -1070,7 +1107,7 @@ abstract class AbstractRestfulController extends AbstractController
                             break;
                         }
                         $action = 'getList';
-                        $return = $this->getList($range, $filter, $orderBy, $parent);
+                        $return = $this->getList($range, $filter, $orderBy, $parent, $groupBy);
                         break;
                     case 'post':
                         $action = 'create';
