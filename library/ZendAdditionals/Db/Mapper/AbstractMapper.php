@@ -335,10 +335,6 @@ abstract class AbstractMapper implements
             }
         }
 
-        //if (!empty($joins['region_translation_region']['region_translation'])) {
-//            $joins['region_translation_region']['region_translation'] =  $joins['region_translation_region']['region_translation'][0];
-//        }
-
         /*
          * When surfing through joins and going a level deeper a reference to
          * the current depth gets appended to this array to be able to go
@@ -1284,8 +1280,6 @@ abstract class AbstractMapper implements
      */
     protected function getResult(Select $select)
     {
-        //echo '<pre>';
-        //echo $this->debugSql($select->getSqlString());
         $this->initialize();
         $stmt = $this->getSlaveSql()->prepareStatementForSqlObject($select);
         $resultSet = new JoinedHydratingResultSet(
