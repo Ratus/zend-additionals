@@ -24,7 +24,8 @@
     "replace": {
         "ratus/ratus-cache": "self.version",
         "ratus/ratus-db": "self.version",
-        "ratus/ratus-stdlib": "self.version"
+        "ratus/ratus-stdlib": "self.version",
+        "ratus/ratus-ssh": "self.version"
     }
 }
 

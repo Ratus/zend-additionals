@@ -241,7 +241,7 @@ abstract class AbstractMapper implements
 
     /**
      * Copy an array or object, using this method all objects inside will
-     * be clonsed instead of referenced.
+     * be cloned instead of referenced.
      *
      * @param  array $data
      * @return array
@@ -254,7 +254,7 @@ abstract class AbstractMapper implements
             return $data;
         }
         $copy = array();
-        foreach($data as $key => $value) {
+        foreach ($data as $key => $value) {
             if (is_array($value)) {
                 $copy[$key] = $this->copy($value);
             } elseif (is_object($value)) {
@@ -474,6 +474,7 @@ abstract class AbstractMapper implements
      * @param array $joins array('some_entity', 'other_entity', 'base_entity' => array('some_other_from_base'))
      * @param array $columnsFilter array('col_one', 'some_entity' => array('col_two'))
      * @param boolean $returnEntities By default return entities, set to false for an array
+     * @param array $groupBy array('column', 'join2' => array('column'))
      *
      * @return type
      */
@@ -481,6 +482,7 @@ abstract class AbstractMapper implements
         array $range = null,
         array $filter = null,
         array $orderBy = null,
+        array $groupBy = null,
         array $joins = null,
         array $columnsFilter = null,
         $returnEntities = true
@@ -667,7 +669,6 @@ abstract class AbstractMapper implements
         if ($applyColumnsFilter && !empty($columns)) {
             $select->columns($columns);
         }
-
         /*
          * When surfing through joins and going a level deeper a reference to
          * the current depth gets appended to this array to be able to go
@@ -678,6 +679,8 @@ abstract class AbstractMapper implements
         $ref            = null;
         $columnsPointer = &$joinColumns;
         $filterPointer  = &$filter;
+        $orderByPointer = &$orderBy;
+        $groupByPointer = &$groupBy;
         while(true && is_array($joins)) {
             $var = each($pointer);
             if ($var === false) {
@@ -690,18 +693,20 @@ abstract class AbstractMapper implements
                 $pointer        = &$previous[0];
                 $ref            = $previous[1];
                 $columnsPointer = &$previous[2];
-                $filterPointer  = &$previous[3];
-
+                $orderByPointer = &$previous[3];
+                $groupByPointer = &$previous[4];
+                $filterPointer  = &$previous[5];
                 // When previous round a filterPointer has been created. Unset
                 // the record. Otherwise it will be added to the wheres
                 if (
-                    array_key_exists($previous[4], $filterPointer) &&
-                    empty($filterPointer[$previous[4]])
+                    array_key_exists($previous[6], $filterPointer) &&
+                    empty($filterPointer[$previous[6]])
                 ) {
-                    unset($filterPointer[$previous[4]]);
+                    unset($filterPointer[$previous[6]]);
                 }
                 continue;
             }
+
             /*
              * When the value is an array we want add a join based on the key,
              * store a reference to this join and set the pointer to this array
@@ -712,6 +717,8 @@ abstract class AbstractMapper implements
                     &$pointer,
                     $ref,
                     &$columnsPointer,
+                    &$orderByPointer,
+                    &$groupByPointer,
                     &$filterPointer,
                     $var['key']
                 );
@@ -752,9 +759,30 @@ abstract class AbstractMapper implements
                     $filterPointer[$var['key']] = array();
                     $filterPointer = &$filterPointer[$var['key']];
                 }
+                if (
+                    is_array($orderByPointer) &&
+                    isset($orderByPointer[$var['key']])
+                ) {
+                    $orderByPointer          = &$orderByPointer[$var['key']];
+                    $orderByPointer['alias'] = $ref->getAlias();
+                } else {
+                    $orderByPointer[$var['key']] = array();
+                    $orderByPointer              = &$orderByPointer[$var['key']];
+                }
+                if (
+                    is_array($groupByPointer) &&
+                    isset($groupByPointer[$var['key']])
+                ) {
+                    $groupByPointer['alias'] = $ref->getAlias();
+                    $groupByPointer          = &$groupByPointer[$var['key']];
+                } else {
+                    $groupByPointer[$var['key']] = array();
+                    $groupByPointer              = &$groupByPointer[$var['key']];
+                }
                 continue;
             }
-            $this->addJoin(
+
+            $res = $this->addJoin(
                 $select,
                 $var['value'],
                 $ref,
@@ -769,12 +797,163 @@ abstract class AbstractMapper implements
                     null
                 )
             );
+
+            if (isset($orderByPointer[$var['value']])) {
+                $orderByPointer[$var['value']]['alias'] = $res->getAlias();
+            }
+        }
+
+        $pointer = &$orderBy;
+        $order   = array();
+        $applied = false;
+
+        while (true && is_array($orderBy)) {
+            $keyValue = each($pointer);
+
+            if ($keyValue === false) {
+                if (count($joinDepth) === 0) {
+                    break;
+                }
+
+                $previous = array_pop($joinDepth);
+                $pointer  = &$previous['pointer'];
+                $applied  = $previous['applied'];
+                continue;
+            }
+
+            if (is_array($keyValue['value'])) {
+                // continue the loop
+                $joinDepth[] = array(
+                    'pointer' => &$pointer,
+                    'applied' => $applied,
+                );
+
+                $pointer = &$keyValue['value'];
+                $applied = false;
+                continue;
+            }
+
+            if ($applied === true) {
+                continue;
+            }
+
+            $applied = true;
+
+            // Clone pointer to other variable because of weird behaviour
+            $column         = $pointer;
+            $tableAlias     = null;
+            $columnAlias    = null;
+            $columnValue    = null;
+
+            if (!isset($column['alias'])) {
+                continue;
+            }
+
+            foreach ($column as $key => $value) {
+                if ($key === 'alias') {
+                    $tableAlias = $value;
+                    continue;
+                }
+
+                if (!is_array($value)) {
+                    $columnAlias = $key;
+                    $columnValue = $value;
+                    continue;
+                }
+            }
+
+            if (
+                $tableAlias !== null &&
+                $columnAlias !== null &&
+                $columnValue !== null
+            ) {
+                $order[$tableAlias . '.' . $columnAlias] = $columnValue;
+            }
+        }
+
+        $select->order($order);
+
+        $pointer = &$groupBy;
+        $group   = array();
+        $applied = false;
+
+        while (true && is_array($groupBy)) {
+            $keyValue = each($pointer);
+
+            if ($keyValue === false) {
+                if (count($joinDepth) === 0) {
+                    break;
+                }
+
+                $previous = array_pop($joinDepth);
+                $pointer = &$previous['pointer'];
+                $applied = $previous['applied'];
+                continue;
+            }
+
+            if (is_array($keyValue['value'])) {
+                // continue the loop
+                $joinDepth[] = array(
+                    'pointer' => &$pointer,
+                    'applied' => $applied,
+                );
+
+                $pointer = &$keyValue['value'];
+                $applied = false;
+                continue;
+            }
+
+            if ($applied === true) {
+                continue;
+            }
+
+            $applied = true;
+
+            // Clone pointer to other variable because of weird behaviour
+            $column         = $pointer;
+            $tableAlias     = null;
+            $columnAlias    = null;
+
+            if (!isset($column['alias'])) {
+                continue;
+            }
+
+            foreach ($column as $key => $value) {
+                if ($key === 'alias') {
+                    $tableAlias = $value;
+                    continue;
+                }
+
+                if (!is_array($value)) {
+                    $columnAlias = $value;
+                    continue;
+                }
+            }
+
+            if (
+                $tableAlias !== null &&
+                $columnAlias !== null
+            ) {
+                $group[] = $tableAlias . '.' . $columnAlias;
+            }
+        }
+
+        $select->group($group);
+
+        if (isset($range['begin']) && $range['begin'] >= 0) {
+            $select->offset((int)$range['begin']);
+            if (isset($range['end']) && $range['end'] > $range['begin']) {
+                $select->limit(((int)$range['end'] - (int)$range['begin'])+1);
+            }
         }
 
         $where = new \Zend\Db\Sql\Where();
         $applyWhereFilter = false;
         if (is_array($filter)) {
             foreach ($filter as $key => $operator) {
+                if ($operator === null) {
+                    $operator = new \Zend\Db\Sql\Predicate\IsNull($key);
+                }
                 if (is_array($operator)) { //Skip join conditions
                     continue;
                 }
@@ -811,7 +990,6 @@ abstract class AbstractMapper implements
         if ($applyWhereFilter) {
             $select->where($where);
         }
-
         $return = array();
         $result = $this->getResult($select);
         /*@var $result \ZendAdditionals\Db\ResultSet\JoinedHydratingResultSet*/
@@ -1102,8 +1280,6 @@ abstract class AbstractMapper implements
      */
     protected function getResult(Select $select)
     {
-        //echo '<pre>';
-        //echo $this->debugSql($select->getSqlString());
         $this->initialize();
         $stmt = $this->getSlaveSql()->prepareStatementForSqlObject($select);
         $resultSet = new JoinedHydratingResultSet(
@@ -1114,7 +1290,7 @@ abstract class AbstractMapper implements
         $resultSet->setEventManager($this->getEventManager());
 
         $associations = $this->getEntityAssociationsForSelect($select);
-        if(!empty($associations)) {
+        if (!empty($associations)) {
             $associations = array_reverse($associations, true);
             $resultSet->setAssociations($associations);
         }
@@ -1179,7 +1355,7 @@ abstract class AbstractMapper implements
                 PREG_SET_ORDER
             )
         ) {
-            foreach($matches as $match) {
+            foreach ($matches as $match) {
                 $sql = str_replace(
                     $match[0],
                     'SELECT' . str_replace(',', ",\n    ", $match[1]) . 'FROM',
@@ -1243,7 +1419,7 @@ abstract class AbstractMapper implements
         if (!isset($mapper->relations[$entityIdentifier])) {
             throw new \UnexpectedValueException(
                 'The given associated entity identifier "' .
-                $entityIdentifier . '" is not defined in the relations!'
+                $entityIdentifier . '" is not defined in the relations of ' . get_class($this) . '!'
             );
         }
 
@@ -1308,7 +1484,7 @@ abstract class AbstractMapper implements
             );
         }
 
-        if(isset($relation['extra_conditions'])) {
+        if (isset($relation['extra_conditions'])) {
             if (!is_array($relation['extra_conditions'])) {
                 throw new \UnexpectedValueException(
                     'extra_conditions should be an array for ' .
@@ -1316,7 +1492,7 @@ abstract class AbstractMapper implements
                 );
             }
 
-            foreach($relation['extra_conditions'] as $relation) {
+            foreach ($relation['extra_conditions'] as $relation) {
                 $this->addExtraJoin(
                     $relation,
                     $predicate,
@@ -1342,7 +1518,11 @@ abstract class AbstractMapper implements
         $joinRequiredByFilter = false;
         if ($this->getAllowFilters() && !empty($filters)) {
             foreach ($filters as $key => $operator) {
-                if (!($operator instanceof Predicate\PredicateInterface)) {
+                if (is_array($operator)) {
+                    continue;
+                }
+
+                if (!($operator instanceof \Zend\Db\Sql\Predicate\PredicateInterface)) {
                     $value    = $operator;
                     $operator = new Operator();
                     $operator->setLeft($key)->setRight($value);
@@ -2297,7 +2477,7 @@ abstract class AbstractMapper implements
 
         $isEmpty = true;
 
-        foreach($rowData as $data) {
+        foreach ($rowData as $data) {
             if ($data !== null && !is_object($data)) {
                 $isEmpty = false;
                 break;

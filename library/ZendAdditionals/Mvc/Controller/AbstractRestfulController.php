@@ -78,7 +78,6 @@ abstract class AbstractRestfulController extends AbstractController
      */
     protected $longPollTimeout = 600;
 
-
     protected $parameterFieldsExcludedFromOptionRequest = array(
         'foreign_key' => '',
     );
@@ -131,13 +130,13 @@ abstract class AbstractRestfulController extends AbstractController
     {
         $return = array();
 
-        foreach($allowedRequestTypes as $requestType) {
+        foreach ($allowedRequestTypes as $requestType) {
             if (isset($this->options[$requestType])) {
                 $return[$requestType] = $this->options[$requestType];
 
                 // Inject forward controller parameters
                 if (isset($return[$requestType]['controller_forward'])) {
-                    foreach($return[$requestType]['controller_forward'] as $controller) {
+                    foreach ($return[$requestType]['controller_forward'] as $controller) {
                          $return[$requestType]['parameters'] = array_merge(
                             $return[$requestType]['parameters'], $controller['parameters']
                         );
@@ -145,7 +144,7 @@ abstract class AbstractRestfulController extends AbstractController
                 }
 
                 // Strip off the keys which shouldnt be visible for the client
-                foreach($return[$requestType]['parameters'] as $key => &$parameter) {
+                foreach ($return[$requestType]['parameters'] as $key => &$parameter) {
                     if (isset($parameter['internal_usage']) && $parameter['internal_usage'] === true) {
                         unset($return[$requestType]['parameters'][$key]);
                         continue;
@@ -223,6 +222,20 @@ abstract class AbstractRestfulController extends AbstractController
     abstract protected function getFilterPatterns();
 
     /**
+     * Get an array of group patterns, these patterns will be used
+     * to match against the X-Group-By headers to prevent weird
+     * grouping to come through.
+     *
+     * @return array
+     */
+    protected function getGroupAllow()
+    {
+        throw new NotImplementedException(
+            'The method ' . __METHOD__ . ' must be implemented by class ' . get_called_class()
+        );
+    }
+
+    /**
      * Generate  and / or extend the current filter based on the parent information
      *
      * @param array $parent
@@ -244,7 +257,7 @@ abstract class AbstractRestfulController extends AbstractController
      *
      * @throws NotImplementedException
      */
-    protected function getUniqueIdentifier()
+    protected function getUniqueIdentifier($id)
     {
         throw new NotImplementedException(
             'The method ' . __METHOD__ . ' must be implemented by class ' . get_called_class()
@@ -325,12 +338,14 @@ abstract class AbstractRestfulController extends AbstractController
      * @return mixed
      */
     public function getList(
-        array $range = null,
-        array $filter = null,
-        array $orderBy = null,
-        array $parent = null,
+        array $range    = null,
+        array $filter   = null,
+        array $orderBy  = null,
+        array $groupBy  = null,
+        array $parent   = null,
         array $longpoll = null
     ) {
+
         $start      = time();
         $timeout    = $this->getLongPollTimeout();
         $timeLeft   = true;
@@ -342,7 +357,6 @@ abstract class AbstractRestfulController extends AbstractController
         }
 
         $joins = $this->getDefaultJoins();
-        
         $count = $mapper->count($filter, $joins);
 
         if ($range === null) {
@@ -389,6 +403,7 @@ abstract class AbstractRestfulController extends AbstractController
                 $range,
                 $filter,
                 $orderBy,
+                $groupBy,
                 $joins,
                 $columnsFilter,
                 false
@@ -441,15 +456,18 @@ abstract class AbstractRestfulController extends AbstractController
             'end'   => 1,
         );
 
-        $uniqueIdentifier          = $this->getUniqueIdentifier();
-        $filter[$uniqueIdentifier] = $id;
+        $uniqueIdentifier = $this->getUniqueIdentifier($id);
+        if (is_array($uniqueIdentifier)) {
+            $filter = array_merge($filter, $uniqueIdentifier);
+        }
 
-        $joins         = $this->getDefaultJoins();
-        $columnsFilter = $this->getAllowedColumnsFilter();
+        $joins            = $this->getDefaultJoins();
+        $columnsFilter    = $this->getAllowedColumnsFilter();
 
-        $results = $mapper->search(
+        $results          = $mapper->search(
             $range,
             $filter,
+            null,
             null,
             $joins,
             $columnsFilter,
@@ -504,7 +522,7 @@ abstract class AbstractRestfulController extends AbstractController
         }
 
         // Start validating parameters given
-        foreach($parameters as $field => $parameter) {
+        foreach ($parameters as $field => $parameter) {
             //array_key_exists returns true when a key is set, but the value is null
 //            $isSet = array_key_exists($field, $data);
             $isSet = isset($data[$field]);
@@ -641,7 +659,7 @@ abstract class AbstractRestfulController extends AbstractController
         $hydrator->hydrate($data, $entity);
 
         try {
-            if($this->getMapper()->save($entity) === false) {
+            if ($this->getMapper()->save($entity) === false) {
                 return false;
             }
         } Catch (\Zend\Db\Adapter\Exception\InvalidQueryException $e) {
@@ -671,7 +689,7 @@ abstract class AbstractRestfulController extends AbstractController
 
             // Check if parameters are not only internal
             $onlyInternal = true;
-            foreach($dataForController as $field => $parameter) {
+            foreach ($dataForController as $field => $parameter) {
                 if (empty($info['parameters'][$field]['internal_usage'])) {
                     $onlyInternal = false;
                 }
@@ -755,9 +773,11 @@ abstract class AbstractRestfulController extends AbstractController
 
 
         $select = $this->getMapper()
-            ->search(array(0, 1), array(
-                'id' => $id,
-            )
+            ->search(
+                array(0, 1),
+                array(
+                    'id' => $id,
+                )
         );
         if (!isset($select[0])) {
              return false;
@@ -766,7 +786,7 @@ abstract class AbstractRestfulController extends AbstractController
         $hydrator   = $this->getMapper()->getHydrator();
         $hydrator->hydrate($data, $entity);
         try {
-            if($this->getMapper()->save($entity) === false) {
+            if ($this->getMapper()->save($entity) === false) {
                 return false;
             }
         } Catch (\Zend\Db\Adapter\Exception\InvalidQueryException $e) {
@@ -983,11 +1003,13 @@ abstract class AbstractRestfulController extends AbstractController
                 $varyOptions[] = 'Range';
                 $varyOptions[] = 'X-Order-By';
                 $varyOptions[] = 'X-Filter-By';
+                $varyOptions[] = 'X-Group-By';
             }
 
             $range    = null;
             $filter   = null;
             $orderBy  = null;
+            $groupBy  = null;
             $parent   = null;
             $longPoll = null;
 
@@ -1130,6 +1152,40 @@ abstract class AbstractRestfulController extends AbstractController
             }
 
             if (
+                ($filterByHeader = $this->getRequest()->getHeader('xgroupby')) &&
+                ($rawGroup = $filterByHeader->getFieldValue())
+            ) {
+                $groupAllow = $this->getGroupAllow();
+
+                $groupBy = array();
+                if (preg_match_all('/([a-z]{1}[a-z0-9_\-\.]*),?/i', $rawGroup, $matches, PREG_SET_ORDER)) {
+                    foreach ($matches as $match) {
+                        $groupByTmp = array();
+                        if (!in_array($match[1], $groupAllow)) {
+                            continue;
+                        }
+
+
+                        $matchParts = explode('.', $match[1]);
+                        $field = array_pop($matchParts);
+                        $pointer = &$groupByTmp;
+                        $max = $matchParts;
+
+                        foreach ($matchParts as $part) {
+                            if (!isset($pointer[$part])) {
+                                $pointer[$part] = array();
+                            }
+                            $pointer = &$pointer[$part];
+                        }
+
+                        $pointer = $field;
+
+                        $groupBy = array_merge($groupBy, $groupByTmp);
+                    }
+                }
+            }
+
+            if (
                 null !== ($parentCollection = $routeMatch->getParam('parent_collection')) &&
                 null !== ($parentId = $routeMatch->getParam('parent_id'))
             ) {
@@ -1172,7 +1228,7 @@ abstract class AbstractRestfulController extends AbstractController
                         // Only call getList when we're allowed to
                         if ($continue) {
                             $action = 'getList';
-                            $return = $this->getList($range, $filter, $orderBy, $parent, $longPoll);
+                            $return = $this->getList($range, $filter, $orderBy, $groupBy, $parent, $longPoll);
                         }
 
                         break;
@@ -1273,7 +1329,7 @@ abstract class AbstractRestfulController extends AbstractController
                 $acceptList     = array();
                 $explodedAccept = explode(',', $accept);
 
-                foreach($explodedAccept as $explode) {
+                foreach ($explodedAccept as $explode) {
                     $tmp            = explode(';', $explode);
                     $acceptMime     = array_shift($tmp);
                     $acceptList[]   = trim($acceptMime);
