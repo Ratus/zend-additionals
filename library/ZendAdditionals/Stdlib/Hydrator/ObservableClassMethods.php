@@ -88,6 +88,19 @@ class ObservableClassMethods extends ClassMethods implements
     }
 
     /**
+     * Reinitialize the ObjectStorage (Can be handy with large imports :))
+     *
+     * @return self
+     */
+    public function resetObjectStorage()
+    {
+        $this->objectStorage = null;
+        $this->initializeEntityStorage();
+
+        return $this;
+    }
+
+    /**
      * Does this hydrator have the original data for the given entity?
      *
      * @param mixed $object
