@@ -1,0 +1,28 @@
+{
+    "name": "ratus/ratus-ssh",
+    "description": "provides ssh2 wrapper",
+    "keywords": [
+        "ratus",
+        "ssh",
+        "ssh2"
+    ],
+    "authors" : [
+        {
+             "name"     : "Jesper Dolieslager",
+             "email"    : "jesper@ratus.nl",
+             "homepage" : "http://www.ratus.nl"
+        }
+    ],
+    "autoload": {
+        "psr-0": {
+            "ZendAdditionals\\Ssh": ""
+        }
+    },
+    "target-dir": "ZendAdditionals/Ssh",
+    "require": {
+        "php"                      : ">=5.3.3",
+        "ext-ssh2"                 : ">= 0.9.0",
+        "zendframework/zend-cache" : "2.*"
+    }
+}
+
