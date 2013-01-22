@@ -940,13 +940,6 @@ abstract class AbstractMapper implements
 
         $select->group($group);
 
-        if (isset($range['begin']) && $range['begin'] >= 0) {
-            $select->offset((int)$range['begin']);
-            if (isset($range['end']) && $range['end'] > $range['begin']) {
-                $select->limit(((int)$range['end'] - (int)$range['begin'])+1);
-            }
-        }
-
         $where = new \Zend\Db\Sql\Where();
         $applyWhereFilter = false;
         if (is_array($filter)) {
