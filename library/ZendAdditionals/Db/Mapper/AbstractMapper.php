@@ -15,7 +15,7 @@ use ZendAdditionals\Db\ResultSet\JoinedHydratingResultSet;
 use Zend\Db\Adapter\AdapterAwareInterface;
 use Zend\ServiceManager\ServiceManagerAwareInterface;
 use Zend\ServiceManager\ServiceManager;
-use Zend\Db\Sql\Predicate\Predicate;
+use Zend\Db\Sql\Predicate;
 use Zend\Db\Sql\Predicate\Operator;
 use Zend\EventManager\EventManagerInterface;
 use Zend\EventManager\EventManager;
@@ -430,7 +430,7 @@ abstract class AbstractMapper implements
                     continue;
                 }
 
-                if (!($operator instanceof \Zend\Db\Sql\Predicate\PredicateInterface)) {
+                if (!($operator instanceof Predicate\PredicateInterface)) {
                     $value    = $operator;
                     $operator = new Operator();
                     $operator->setLeft($key)->setRight($value);
@@ -940,13 +940,6 @@ abstract class AbstractMapper implements
 
         $select->group($group);
 
-        if (isset($range['begin']) && $range['begin'] >= 0) {
-            $select->offset((int)$range['begin']);
-            if (isset($range['end']) && $range['end'] > $range['begin']) {
-                $select->limit(((int)$range['end'] - (int)$range['begin'])+1);
-            }
-        }
-
         $where = new \Zend\Db\Sql\Where();
         $applyWhereFilter = false;
         if (is_array($filter)) {
@@ -958,7 +951,7 @@ abstract class AbstractMapper implements
                     continue;
                 }
 
-                if (!($operator instanceof \Zend\Db\Sql\Predicate\PredicateInterface)) {
+                if (!($operator instanceof Predicate\PredicateInterface)) {
                     $value    = $operator;
                     $operator = new Operator();
                     $operator->setLeft($key)->setRight($value);
@@ -1479,8 +1472,8 @@ abstract class AbstractMapper implements
             $predicate->equalTo(
                 $entityAssociation->getAlias() . '.' . $foreignId,
                 $joinTableAlias . '.' . $myId,
-                Predicate::TYPE_IDENTIFIER,
-                Predicate::TYPE_IDENTIFIER
+                Predicate\Predicate::TYPE_IDENTIFIER,
+                Predicate\Predicate::TYPE_IDENTIFIER
             );
         }
 
@@ -1540,7 +1533,7 @@ abstract class AbstractMapper implements
                         $entityAssociation->getAlias() . '.' . $currentIdentifier
                     );
                 }
-                if (!($operator instanceof \Zend\Db\Sql\Predicate\PredicateInterface)) {
+                if (!($operator instanceof Predicate\PredicateInterface)) {
                     // Skip non predicates
                     continue;
                 }
@@ -1676,7 +1669,7 @@ abstract class AbstractMapper implements
      */
     protected function addExtraJoin(
         $extraJoin,
-        Predicate $predicate,
+        Predicate\Predicate $predicate,
         EntityAssociation $entityAssociation,
         $myJoinAlias
     ) {
@@ -1770,18 +1763,18 @@ abstract class AbstractMapper implements
 
         switch ($type) {
             case self::RELATION_TYPE_FOREIGN:
-                $type = Predicate::TYPE_IDENTIFIER;
+                $type = Predicate\Predicate::TYPE_IDENTIFIER;
                 $value = $foreignAlias.'.'.$value;
                 break;
             case self::RELATION_TYPE_MY:
-                $type = Predicate::TYPE_IDENTIFIER;
+                $type = Predicate\Predicate::TYPE_IDENTIFIER;
                 $value = $myAlias.'.'.$value;
                 break;
             case self::RELATION_TYPE_VALUE:
-                $type = Predicate::TYPE_VALUE;
+                $type = Predicate\Predicate::TYPE_VALUE;
                 break;
             case self::RELATION_TYPE_CALLBACK:
-                $type = Predicate::TYPE_VALUE;
+                $type = Predicate\Predicate::TYPE_VALUE;
 
                 if (!is_callable($callback)) {
                     throw new \UnexpectedValueException(
@@ -2003,6 +1996,73 @@ abstract class AbstractMapper implements
 /*      $hydrator->setChangesCommitted($entity);*/
 
         return $result;
+    }
+
+    /**
+     * Delete a list of entities
+     *
+     * @param array $entities
+     * @param ObservableStrategyInterface $hydrator
+     * @param string $tablePrefix
+     * @return \Zend\Db\Adapter\Driver\ResultInterface
+     */
+    public function deleteMultiple(
+        array $entities,
+        ObservableStrategyInterface $hydrator = null,
+        $tablePrefix = null
+    ) {
+        $where                  = array();
+        $useInQuery             = false;
+        $primaryTypeIdentified  = false;
+
+
+        foreach ($entities as $entity) {
+            $this->storeRelatedEntities($entity, $tablePrefix);
+
+            $primaryData = $this->getPrimaryData($this->entityToArray($entity, $hydrator));
+
+            if ($primaryTypeIdentified === false) {
+                $primaryTypeIdentified  = true;
+                $useInQuery = (bool) (count($primaryData) === 1);
+            }
+
+            // Simple one primary tables can use the IN query
+            if ($useInQuery === true) {
+                $value = each($primaryData);
+                $where[$value['key']][] = $value['value'];
+                continue;
+            }
+
+            // X-coss tables with n-primaries. Use full written wheres
+            $predicate = new Predicate\PredicateSet();
+            foreach($primaryData as $key => $value) {
+                $predicate->addPredicate(
+                    new Predicate\Operator(
+                        $key,
+                        Predicate\Operator::OPERATOR_EQUAL_TO,
+                        $value
+                    )
+                );
+            }
+
+            $where[] = $predicate;
+        }
+
+        $this->initialize();
+        $tableName = $this->getTableName();
+        if (!empty($tablePrefix)) {
+            $tableName = $tablePrefix . $tableName;
+        }
+
+        $sql = $this->getSql()->setTable($tableName);
+        $delete = $sql->delete();
+
+        $delete->where($where, Predicate\PredicateSet::OP_OR);
+
+        /** @var $statement \Zend\Db\Adapter\Driver\Pdo\Statement*/
+        $statement = $sql->prepareStatementForSqlObject($delete);
+
+        return $statement->execute();
     }
 
     protected function unsetRelatedEntityColumns(& $entityArray)
