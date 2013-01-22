@@ -2005,6 +2005,14 @@ abstract class AbstractMapper implements
         return $result;
     }
 
+    /**
+     * Delete a list of entities
+     *
+     * @param array $entities
+     * @param ObservableStrategyInterface $hydrator
+     * @param string $tablePrefix
+     * @return \Zend\Db\Adapter\Driver\ResultInterface
+     */
     public function deleteMultiple(
         array $entities,
         ObservableStrategyInterface $hydrator = null,
@@ -2017,6 +2025,7 @@ abstract class AbstractMapper implements
 
         foreach ($entities as $entity) {
             $this->storeRelatedEntities($entity, $tablePrefix);
+
             $primaryData = $this->getPrimaryData($this->entityToArray($entity, $hydrator));
 
             if ($primaryTypeIdentified === false) {
@@ -2057,14 +2066,10 @@ abstract class AbstractMapper implements
 
         $delete->where($where, Predicate\PredicateSet::OP_OR);
 
+        /** @var $statement \Zend\Db\Adapter\Driver\Pdo\Statement*/
         $statement = $sql->prepareStatementForSqlObject($delete);
-        /*@var $statement \Zend\Db\Adapter\Driver\Pdo\Statement*/
 
-        $result = $statement->execute();
-
-/*      $hydrator->setChangesCommitted($entity);*/
-
-        return $result;
+        return $statement->execute();
     }
 
     protected function unsetRelatedEntityColumns(& $entityArray)
