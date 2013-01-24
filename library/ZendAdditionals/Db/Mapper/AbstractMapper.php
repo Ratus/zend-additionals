@@ -2273,6 +2273,19 @@ abstract class AbstractMapper implements
     }
 
     /**
+     * Overwrite the default table name if necessary
+     *
+     * @param string $tableName
+     *
+     * @return AbstractMapper
+     */
+    public function setTableName($tableName)
+    {
+        $this->tableName = $tableName;
+        return $this;
+    }
+
+    /**
      * @return string
      */
     public function getTableName()

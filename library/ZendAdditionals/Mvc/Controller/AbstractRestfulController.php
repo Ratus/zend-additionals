@@ -78,9 +78,21 @@ abstract class AbstractRestfulController extends AbstractController
      */
     protected $longPollTimeout = 600;
 
+    /**
+     * The cooldown time in micro seconds to sleep between querying the database
+     *
+     * @var integer
+     */
+    protected $longPollCooldownTime = 500;
+
     protected $parameterFieldsExcludedFromOptionRequest = array(
         'foreign_key' => '',
     );
+
+    /**
+     * @var mixed $mapper
+     */
+    protected $mapperOverwrite = null;
 
     public function __construct()
     {
@@ -256,8 +268,12 @@ abstract class AbstractRestfulController extends AbstractController
      * when the restful api supports GET with an identifier
      *
      * @throws NotImplementedException
+     *
+     * @param string $identifierValue
+     *
+     * @return array A filter based on the identifier value (this filter must be compatible with search)
      */
-    protected function getUniqueIdentifier($id)
+    protected function getUniqueIdentifier($identifierValue)
     {
         throw new NotImplementedException(
             'The method ' . __METHOD__ . ' must be implemented by class ' . get_called_class()
@@ -292,6 +308,24 @@ abstract class AbstractRestfulController extends AbstractController
     protected function getDefaultOrderBy()
     {
         return null;
+    }
+
+    /**
+     * Overwrite the mapper used to load its sources from
+     *
+     * @param $mapper
+     */
+    public function overwriteMapper($mapper)
+    {
+        $this->mapperOverwrite = $mapper;
+    }
+
+    /**
+     * Reset the mapper overwrite returning to the default mapper
+     */
+    public function resetMapperOverwrite()
+    {
+        unset($this->mapperOverwrite);
     }
 
     /**
@@ -335,6 +369,8 @@ abstract class AbstractRestfulController extends AbstractController
      *     'value' => 2300,         // Find resources with an id higher then 2300
      * )
      *
+     * @param boolean $returnEntities Default false for restful requests
+     *
      * @return mixed
      */
     public function getList(
@@ -343,14 +379,19 @@ abstract class AbstractRestfulController extends AbstractController
         array $orderBy  = null,
         array $groupBy  = null,
         array $parent   = null,
-        array $longpoll = null
+        array $longpoll = null,
+        $returnEntities = false
     ) {
 
         $start      = time();
         $timeout    = $this->getLongPollTimeout();
         $timeLeft   = true;
 
-        $mapper = $this->getMapper();
+        $mapper = (
+            isset($this->mapperOverwrite) ?
+            $this->mapperOverwrite :
+            $this->getMapper()
+        );
 
         if (!empty($parent)) {
             $filter = $this->createParentFilter($parent, $filter);
@@ -370,7 +411,7 @@ abstract class AbstractRestfulController extends AbstractController
             $range['end'] = $this->getMaxResources();
         }
 
-        if ($range['begin'] > $count || $count <= 0) {
+        if (null === $longpoll && ($range['begin'] > $count || $count <= 0)) {
             $this->getResponse()->setStatusCode(204);
             return;
         }
@@ -384,17 +425,31 @@ abstract class AbstractRestfulController extends AbstractController
             $orderBy = $this->getDefaultOrderBy();
         }
 
-        if ($longpoll !== null) {
-            if (is_array($filter) === false) {
+        $coolDownTime = 500;
+
+        if (
+            is_array($longpoll) &&
+            isset($longpoll['field']) &&
+            isset($longpoll['value'])
+        ) {
+            $timeout = (
+                array_key_exists('timeout', $longpoll) ?
+                $longpoll['timeout'] :
+                $this->getLongPollTimeout()
+            );
+            $coolDownTime = (
+                array_key_exists('cooldown', $longpoll) ?
+                $longpoll['cooldown'] :
+                $this->getLongPollCooldownTime()
+            );
+            if (!is_array($filter)) {
                 $filter = array();
             }
-
             $filter[] = new \Zend\Db\Sql\Predicate\Operator(
                 $longpoll['field'],
                 \Zend\Db\Sql\Predicate\Operator::OPERATOR_GREATER_THAN,
                 $longpoll['value']
             );
-
             set_time_limit($timeout + 10);
         }
 
@@ -406,12 +461,14 @@ abstract class AbstractRestfulController extends AbstractController
                 $groupBy,
                 $joins,
                 $columnsFilter,
-                false
+                $returnEntities
             );
 
             if ($longpoll === null || empty($results) === false) {
                 break;
             }
+
+            usleep($coolDownTime);
 
             $timeLeft = (bool) ((time() - $start) < $timeout);
         }
@@ -444,7 +501,11 @@ abstract class AbstractRestfulController extends AbstractController
      */
     public function get($id, $parent = null)
     {
-        $mapper = $this->getMapper();
+        $mapper = (
+            isset($this->mapperOverwrite) ?
+            $this->mapperOverwrite :
+            $this->getMapper()
+        );
 
         $filter = array();
         if (!empty($parent)) {
@@ -481,8 +542,13 @@ abstract class AbstractRestfulController extends AbstractController
 
     protected function entityToArray($entity)
     {
-        $hydrator = $this->getMapper()->getHydrator();
-        $return = $hydrator->extractRecursive($entity);
+        $mapper = (
+            isset($this->mapperOverwrite) ?
+            $this->mapperOverwrite :
+            $this->getMapper()
+        );
+        $hydrator = $mapper->getHydrator();
+        $return   = $hydrator->extractRecursive($entity);
         // TODO: filter return
         return $return;
     }
@@ -602,18 +668,24 @@ abstract class AbstractRestfulController extends AbstractController
                 }
             }
 
+            $mapper = (
+                isset($this->mapperOverwrite) ?
+                $this->mapperOverwrite :
+                $this->getMapper()
+            );
+
             if (
                 $isSet &&
                 isset($parameter['foreign_key']) &&
                 empty($errors) // Only do DB interaction when no errors has been occured
             ) {
-                $relation = $this->getMapper()->getRelation(
+                $relation = $mapper->getRelation(
                     $parameter['foreign_key']['mapper'],
                     $parameter['foreign_key']['identifier']
                 );
 
-                $mapper = $this->getServiceLocator()->get($parameter['foreign_key']['mapper']);
-                if ($mapper->exists($relation['reference'][$field], $data[$field]) === false) {
+                $foreignMapper = $this->getServiceLocator()->get($parameter['foreign_key']['mapper']);
+                if ($foreignMapper->exists($relation['reference'][$field], $data[$field]) === false) {
                     $errors[] = array(
                         'error_message' => "Cannot find foreign record {$field}={$data[$field]}",
                     );
@@ -626,7 +698,7 @@ abstract class AbstractRestfulController extends AbstractController
                 isset($parameter['unique']) &&
                 $parameter['unique'] === true &&
                 empty($errors) && // Only do DB interaction when no errors has been occured
-                $this->getMapper()->exists($field, $data[$field])
+                $mapper->exists($field, $data[$field])
             ) {
                 $errors[] = array(
                     'error_message' => "Value {$data[$field]} does already exists",
@@ -653,13 +725,17 @@ abstract class AbstractRestfulController extends AbstractController
         if ($result !== true) {
             return $result;
         }
-
-        $entity     = clone $this->getMapper()->getEntityPrototype();
+        $mapper = (
+            isset($this->mapperOverwrite) ?
+            $this->mapperOverwrite :
+            $this->getMapper()
+        );
+        $entity     = clone $mapper->getEntityPrototype();
         $hydrator   = new ClassMethods();
         $hydrator->hydrate($data, $entity);
 
         try {
-            if ($this->getMapper()->save($entity) === false) {
+            if ($mapper->save($entity) === false) {
                 return false;
             }
         } Catch (\Zend\Db\Adapter\Exception\InvalidQueryException $e) {
@@ -740,53 +816,32 @@ abstract class AbstractRestfulController extends AbstractController
      */
     public function update($id, $data)
     {
-/*/
         $result = $this->validateParameters($data);
         if ($result !== true) {
             return $result;
         }
 
-        $mapper = $this->getServiceLocator()->get(\DatingProfile\Mapper\Registrations::SERVICE_NAME);
-        $entity = $mapper->getEntityPrototype();
-        $mapper->hydrator->hydrate($data, $entity);
-//        $entity     = clone $this->getMapper()->getEntityPrototype();
-        try {
-            if($mapper->save($entity) === false) {
-                return false;
-            }
-        } Catch (\Zend\Db\Adapter\Exception\InvalidQueryException $e) {
-            $this->getResponse()->setStatusCode(500);
-            $errors[] = array(
-                'error_message' => $e->getMessage(),
-                'sql_message' => $e->getPrevious()->getMessage(),
-            );
-            return $errors;
-        }
-
-        return $mapper->hydrator->extract($entity);
-
-/*/
-        $result = $this->validateParameters($data);
-        if ($result !== true) {
-            return $result;
-        }
+        $mapper = (
+            isset($this->mapperOverwrite) ?
+            $this->mapperOverwrite :
+            $this->getMapper()
+        );
 
 
-        $select = $this->getMapper()
-            ->search(
-                array(0, 1),
-                array(
-                    'id' => $id,
-                )
+        $select = $mapper->search(
+            array(0, 1),
+            array(
+                'id' => $id,
+            )
         );
         if (!isset($select[0])) {
              return false;
         }
         $entity = $select[0];
-        $hydrator   = $this->getMapper()->getHydrator();
+        $hydrator   = $mapper->getHydrator();
         $hydrator->hydrate($data, $entity);
         try {
-            if ($this->getMapper()->save($entity) === false) {
+            if ($mapper->save($entity) === false) {
                 return false;
             }
         } Catch (\Zend\Db\Adapter\Exception\InvalidQueryException $e) {
@@ -1485,7 +1540,7 @@ abstract class AbstractRestfulController extends AbstractController
      * Set a timeout when we're closing the connection
      *
      * @param integer $timeout The timeout in seconds
-     * @return self
+     * @return AbstractRestfulController
      */
     public function setLongPollTimeout($timeout)
     {
@@ -1501,6 +1556,29 @@ abstract class AbstractRestfulController extends AbstractController
     public function getLongPollTimeout()
     {
         return $this->longPollTimeout;
+    }
+
+    /**
+     * Set the long poll cooldown time in micro seconds
+     *
+     * @param integer The long poll cooldown time in micro seconds
+     *
+     * @return AbstractRestfulController
+     */
+    public function setLongPollCooldownTime($microSeconds)
+    {
+        $this->longPollCooldownTime = $microSeconds;
+        return $this;
+    }
+
+    /**
+     * Get the long poll cooldown time in micro seconds
+     *
+     * @return integer
+     */
+    public function getLongPollCooldownTime()
+    {
+        return $this->longPollCooldownTime;
     }
 
     /**
