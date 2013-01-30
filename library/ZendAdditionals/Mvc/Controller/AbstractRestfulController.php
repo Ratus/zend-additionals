@@ -463,7 +463,6 @@ abstract class AbstractRestfulController extends AbstractController
                 $columnsFilter,
                 $returnEntities
             );
-
             if ($longpoll === null || empty($results) === false) {
                 break;
             }
@@ -556,8 +555,6 @@ abstract class AbstractRestfulController extends AbstractController
     protected function validateParameters(&$data)
     {
         $parameters = $this->getAvailableParameters();
-
-//        var_dump(get_called_class(), $parameters);
 
         if (empty($parameters)) {
             $this->getResponse()->setStatusCode(412); // Precondition Failed
