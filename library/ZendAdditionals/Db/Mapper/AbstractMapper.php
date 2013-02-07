@@ -1831,7 +1831,7 @@ abstract class AbstractMapper implements
         $this->entityAssociationStorage->detach($select);
     }
 
-    protected function underscoreToCamelCase($underscored)
+    public function underscoreToCamelCase($underscored)
     {
         $underscored = strtolower($underscored);
         return preg_replace('/_(.?)/e',"strtoupper('$1')",$underscored);
