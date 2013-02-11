@@ -374,13 +374,14 @@ abstract class AbstractRestfulController extends AbstractController
      * @return mixed
      */
     public function getList(
-        array $range    = null,
-        array $filter   = null,
-        array $orderBy  = null,
-        array $groupBy  = null,
-        array $parent   = null,
-        array $longpoll = null,
-        $returnEntities = false
+        array $range         = null,
+        array $filter        = null,
+        array $orderBy       = null,
+        array $groupBy       = null,
+        array $parent        = null,
+        array $longpoll      = null,
+        $returnEntities      = false,
+        $ignoreColumnsFilter = false
     ) {
 
         $start      = time();
@@ -460,7 +461,7 @@ abstract class AbstractRestfulController extends AbstractController
                 $orderBy,
                 $groupBy,
                 $joins,
-                $columnsFilter,
+                ($ignoreColumnsFilter ? null : $columnsFilter),
                 $returnEntities
             );
             if ($longpoll === null || empty($results) === false) {
