@@ -1337,6 +1337,7 @@ abstract class AbstractMapper implements
     }
 
    protected function debugSql($sql) {
+        $sql = str_replace('"', '`', $sql);
         $sql = preg_replace('/[\r\n]/', '', $sql);
         $sql = preg_replace('/\s+/', ' ', $sql);
 
@@ -1540,6 +1541,13 @@ abstract class AbstractMapper implements
                 $joinRequiredByFilter = true;
                 $joinPredicate->addPredicate($operator);
             }
+        } else if ($this->getAllowFilters() === false && !empty($filters)){
+            $class = get_called_class();
+
+            throw new \RuntimeException(
+                "You tried to apply filters on a join. But {$class}::getAllowedFilters() returned false. ".
+                    "override {$class}::()getAllowedFilters and return true to allow filtering on a join"
+            );
         }
 
         $select->join(
