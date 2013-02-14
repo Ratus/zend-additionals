@@ -2012,7 +2012,7 @@ abstract class AbstractMapper implements
      * @param array $entities
      * @param ObservableStrategyInterface $hydrator
      * @param string $tablePrefix
-     * @return \Zend\Db\Adapter\Driver\ResultInterface
+     * @return \Zend\Db\Adapter\Driver\ResultInterface | boolean TRUE when $entities is empty
      */
     public function deleteMultiple(
         array $entities,
@@ -2023,6 +2023,10 @@ abstract class AbstractMapper implements
         $useInQuery             = false;
         $primaryTypeIdentified  = false;
 
+        // When no entities are given return, because otherwise all the records will be deleted.
+        if (empty($entities)) {
+            return true;
+        }
 
         foreach ($entities as $entity) {
             $this->storeRelatedEntities($entity, $tablePrefix);
