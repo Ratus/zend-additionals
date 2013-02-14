@@ -1337,6 +1337,7 @@ abstract class AbstractMapper implements
     }
 
    protected function debugSql($sql) {
+        $sql = str_replace('"', '`', $sql);
         $sql = preg_replace('/[\r\n]/', '', $sql);
         $sql = preg_replace('/\s+/', ' ', $sql);
 
@@ -1540,6 +1541,13 @@ abstract class AbstractMapper implements
                 $joinRequiredByFilter = true;
                 $joinPredicate->addPredicate($operator);
             }
+        } else if ($this->getAllowFilters() === false && !empty($filters)){
+            $class = get_called_class();
+
+            throw new \RuntimeException(
+                "You tried to apply filters on a join. But {$class}::getAllowedFilters() returned false. ".
+                    "override {$class}::()getAllowedFilters and return true to allow filtering on a join"
+            );
         }
 
         $select->join(
@@ -2004,7 +2012,7 @@ abstract class AbstractMapper implements
      * @param array $entities
      * @param ObservableStrategyInterface $hydrator
      * @param string $tablePrefix
-     * @return \Zend\Db\Adapter\Driver\ResultInterface
+     * @return \Zend\Db\Adapter\Driver\ResultInterface | boolean TRUE when $entities is empty
      */
     public function deleteMultiple(
         array $entities,
@@ -2015,6 +2023,10 @@ abstract class AbstractMapper implements
         $useInQuery             = false;
         $primaryTypeIdentified  = false;
 
+        // When no entities are given return, because otherwise all the records will be deleted.
+        if (empty($entities)) {
+            return true;
+        }
 
         foreach ($entities as $entity) {
             $this->storeRelatedEntities($entity, $tablePrefix);
