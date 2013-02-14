@@ -4,14 +4,14 @@ namespace ZendAdditionals\Mvc;
 abstract class AbstractPostProcessingModule
 {
     /**
-	 * @param \Zend\Mvc\MvcEvent $event
-	 */
-	public function onBootstrap($event)
-	{
-		$moduleManager = $event->getApplication()->getServiceManager()->get('modulemanager');
+     * @param \Zend\Mvc\MvcEvent $event
+     */
+    public function onBootstrap($event)
+    {
+        $moduleManager = $event->getApplication()->getServiceManager()->get('modulemanager');
         /* @var $moduleManager \Zend\ModuleManager\ModuleManager */
-		$sharedEvents = $moduleManager->getEventManager()->getSharedManager();
-		/* @var $sharedEvents \Zend\EventManager\SharedEventManager */
+        $sharedEvents = $moduleManager->getEventManager()->getSharedManager();
+        /* @var $sharedEvents \Zend\EventManager\SharedEventManager */
         $serviceManager = $event->getApplication()->getServiceManager();
         /* @var $serviceManager \Zend\ServiceManager\ServiceManager */
         if (!$serviceManager->has('JsonPostProcessor')) {
@@ -24,7 +24,7 @@ abstract class AbstractPostProcessingModule
             array($this, 'postProcess'),
             -50
         );
-		$sharedEvents->attach(
+        $sharedEvents->attach(
             'Zend\Mvc\Application',
             \Zend\Mvc\MvcEvent::EVENT_DISPATCH_ERROR,
             array($this, 'errorProcess'),
@@ -32,18 +32,18 @@ abstract class AbstractPostProcessingModule
         );
     }
 
-	/**
-	 * @param \Zend\Mvc\MvcEvent $event
-	 */
-	public function postProcess(\Zend\Mvc\MvcEvent $event)
-	{
-		$routeMatch     = $event->getRouteMatch();
+    /**
+     * @param \Zend\Mvc\MvcEvent $event
+     */
+    public function postProcess(\Zend\Mvc\MvcEvent $event)
+    {
+        $routeMatch     = $event->getRouteMatch();
 
         // Dont do stuff without a http routematch
         if (!($routeMatch instanceof \Zend\Mvc\Router\Http\RouteMatch)) {
             return;
         }
-		$formatter      = $routeMatch->getParam('formatter', false);
+        $formatter      = $routeMatch->getParam('formatter', false);
         $serviceManager = $event->getApplication()->getServiceManager();
 
         // When no formatter has been defined return
@@ -61,24 +61,27 @@ abstract class AbstractPostProcessingModule
         $postProcess = $serviceManager->get($postProcessor);
 
         $postProcess($event);
-	}
+    }
 
+    /**
+     * @param \Zend\Mvc\MvcEvent $event
+     */
     public function errorProcess(\Zend\Mvc\MvcEvent $event)
     {
         $eventParams = $event->getParams();
 
-		/** @var array $configuration */
-		$configuration = $event->getApplication()->getConfig();
+        /** @var array $configuration */
+        $configuration = $event->getApplication()->getConfig();
 
-		$vars = array();
-		if (isset($eventParams['exception'])) {
-			/** @var \Exception $exception */
-			$exception = $eventParams['exception'];
-			if ($configuration['view_manager']['display_exceptions']) {
-				$vars['error-message'] = $exception->getMessage();
-				$vars['error-trace'] = $exception->getTrace();
-			}
-		}
+        $vars = array();
+        if (isset($eventParams['exception'])) {
+            /** @var \Exception $exception */
+            $exception = $eventParams['exception'];
+            if ($configuration['view_manager']['display_exceptions']) {
+                $vars['error-message'] = $exception->getMessage();
+                $vars['error-trace'] = $exception->getTrace();
+            }
+        }
         $event->setResult($vars);
         $this->postProcess($event);
     }
