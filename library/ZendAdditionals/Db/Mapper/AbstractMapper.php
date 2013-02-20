@@ -1235,13 +1235,13 @@ abstract class AbstractMapper implements
         return $this->serviceManager;
     }
 	
-	/**
-	 * Alias for getServiceManager
-	 */
-	public function getServiceLocator()
-	{
-		return $this->getServiceManager();
-	}
+    /**
+     * Alias for getServiceManager
+     */
+    public function getServiceLocator()
+    {
+        return $this->getServiceManager();
+    }
 
     /**
      * Returns an array of column identifiers used for entities that are related
