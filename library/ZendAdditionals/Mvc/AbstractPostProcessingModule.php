@@ -2,7 +2,7 @@
 namespace ZendAdditionals\Mvc;
 
 abstract class AbstractPostProcessingModule
-{
+{    
     /**
      * @param \Zend\Mvc\MvcEvent $event
      */
@@ -10,28 +10,29 @@ abstract class AbstractPostProcessingModule
     {
         $moduleManager = $event->getApplication()->getServiceManager()->get('modulemanager');
         /* @var $moduleManager \Zend\ModuleManager\ModuleManager */
-        $sharedEvents = $moduleManager->getEventManager()->getSharedManager();
-        /* @var $sharedEvents \Zend\EventManager\SharedEventManager */
+        $events = $moduleManager->getEventManager()->getSharedManager();
+        /* @var $events \Zend\EventManager\SharedEventManager */
         $serviceManager = $event->getApplication()->getServiceManager();
         /* @var $serviceManager \Zend\ServiceManager\ServiceManager */
         if (!$serviceManager->has('JsonPostProcessor')) {
             $serviceManager->setInvokableClass('JsonPostProcessor', 'ZendAdditionals\Mvc\PostProcessor\Json');
         }
-
-        $sharedEvents->attach(
+        
+        $events->attach(
             'Zend\Mvc\Controller\AbstractActionController',
             \Zend\Mvc\MvcEvent::EVENT_DISPATCH,
             array($this, 'postProcess'),
             -50
         );
-        $sharedEvents->attach(
+        
+        $events->attach(
             'Zend\Mvc\Application',
             \Zend\Mvc\MvcEvent::EVENT_DISPATCH_ERROR,
             array($this, 'errorProcess'),
             -50
         );
     }
-
+    
     /**
      * @param \Zend\Mvc\MvcEvent $event
      */
@@ -59,7 +60,7 @@ abstract class AbstractPostProcessingModule
 
         // Call the post processor invokable with the event
         $postProcess = $serviceManager->get($postProcessor);
-
+        
         $postProcess($event);
     }
 
