@@ -22,7 +22,7 @@ class Memcache extends AbstractAdapter implements FlushableInterface
     /**
      * @var MemcacheResource
      */
-    protected function getMemcacheResource()
+    public function getMemcacheResource()
     {
         if ($this->memcacheResource !== null) {
             return $this->memcacheResource;
