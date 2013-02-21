@@ -20,6 +20,7 @@ use Zend\Db\Sql\Predicate\Operator;
 use Zend\EventManager\EventManagerInterface;
 use Zend\EventManager\EventManager;
 use ZendAdditionals\Db\Mapper\AttributeProperty;
+use ZendAdditionals\Db\Mapper\Exception;
 
 abstract class AbstractMapper implements
     ServiceManagerAwareInterface,
@@ -467,16 +468,72 @@ abstract class AbstractMapper implements
     }
 
     /**
-     *
-     * @param array $range array('begin' => 0, 'end' => 10)
-     * @param array $filter array('column' => 'value', 'join1' => array('column' => 'value'))
-     * @param array $orderBy array('column' => 'ASC', 'join2' => array('column' => 'DESC'))
-     * @param array $joins array('some_entity', 'other_entity', 'base_entity' => array('some_other_from_base'))
-     * @param array $columnsFilter array('col_one', 'some_entity' => array('col_two'))
+     * Fetch a single entity from the database this method is a shortcut
+     * for the search method and requires less parameters plus adds some
+     * extra checks to make sure one or no entity gets returned.
+     * 
+     * @param array   $filter array('column' => 'value', 'join1' => array('column' => 'value'))
+     * @param array   $joins array('some_entity', 'other_entity', 'base_entity' => array('some_other_from_base'))
+     * @param array   $columnsFilter array('col_one', 'some_entity' => array('col_two'))
      * @param boolean $returnEntities By default return entities, set to false for an array
-     * @param array $groupBy array('column', 'join2' => array('column'))
+     * 
+     * @return array|object|boolean false when nothing found
+     * 
+     * @throws Exception\GetFailedException
+     */
+    public function get(
+        array $filter        = null,
+        array $joins         = null,
+        array $columnsFilter = null,
+        $returnEntities      = true
+    ) {
+        try {
+            $result = $this->search(
+                null, 
+                $filter, 
+                null, 
+                null, 
+                $joins, 
+                $columnsFilter, 
+                $returnEntities
+            );
+            if (!is_array($result)) {
+                throw new \UnexpectedValueException(
+                    'Did not expect anything else then array!'
+                );
+            }
+            if (sizeof($result) > 1) {
+                throw new \UnexpectedValueException(
+                    'More then one result found based on current filter!'
+                );
+            }
+        } catch (\Exception $exception) {
+            throw new Exception\GetFailedException(
+                'Could not search, search failed!',
+                0,
+                $exception
+            );
+        }
+        return (
+            empty($result) ? 
+            false : 
+            $result[0]
+        );
+    }
+    
+    /**
+     * Search entities within the database, the result is an array of entities
+     * found or an empty array.
+     * 
+     * @param array   $range array('begin' => 0, 'end' => 10)
+     * @param array   $filter array('column' => 'value', 'join1' => array('column' => 'value'))
+     * @param array   $orderBy array('column' => 'ASC', 'join2' => array('column' => 'DESC'))
+     * @param array   $groupBy array('column', 'join2' => array('column'))
+     * @param array   $joins array('some_entity', 'other_entity', 'base_entity' => array('some_other_from_base'))
+     * @param array   $columnsFilter array('col_one', 'some_entity' => array('col_two'))
+     * @param boolean $returnEntities By default return entities, set to false for an array
      *
-     * @return type
+     * @return array
      */
     public function search(
         array $range = null,
@@ -845,10 +902,6 @@ abstract class AbstractMapper implements
             $columnAlias    = null;
             $columnValue    = null;
 
-            if (!isset($column['alias'])) {
-                continue;
-            }
-
             foreach ($column as $key => $value) {
                 if ($key === 'alias') {
                     $tableAlias = $value;
@@ -863,11 +916,15 @@ abstract class AbstractMapper implements
             }
 
             if (
-                $tableAlias !== null &&
                 $columnAlias !== null &&
                 $columnValue !== null
             ) {
-                $order[$tableAlias . '.' . $columnAlias] = $columnValue;
+                $orderKey = (
+                    !empty($tableAlias) ?
+                    "{$tableAlias}.{$columnAlias}" :
+                    $columnAlias
+                );
+                $order[$orderKey] = $columnValue;
             }
         }
 
@@ -914,10 +971,6 @@ abstract class AbstractMapper implements
             $tableAlias     = null;
             $columnAlias    = null;
 
-            if (!isset($column['alias'])) {
-                continue;
-            }
-
             foreach ($column as $key => $value) {
                 if ($key === 'alias') {
                     $tableAlias = $value;
@@ -930,11 +983,13 @@ abstract class AbstractMapper implements
                 }
             }
 
-            if (
-                $tableAlias !== null &&
-                $columnAlias !== null
-            ) {
-                $group[] = $tableAlias . '.' . $columnAlias;
+            if ($columnAlias !== null) {
+                $groupColumn = (
+                    !empty($tableAlias) ?
+                    "{$tableAlias}.{$columnAlias}" :
+                    $columnAlias
+                );
+                $group[] = $groupColumn;
             }
         }
 
@@ -990,6 +1045,9 @@ abstract class AbstractMapper implements
         while ($entity = $result->current($returnEntities)) {
             if (!$returnEntities && !empty($xmlAttributes)) {
                 foreach ($xmlAttributes as $xmlColumn => $filteredXmlFields) {
+                    if (null === $entity[$xmlColumn]) {
+                        continue;
+                    }
                     $xmlData = new \ZendAdditionals\Xml\Object($entity[$xmlColumn]);
                     $entity[$xmlColumn] = $xmlData->getValues($filteredXmlFields);
                 }
@@ -1185,7 +1243,7 @@ abstract class AbstractMapper implements
         }
 
         if (!$this->dbAdapter instanceof Adapter) {
-            throw new \Exception('No db adapter present');
+            throw new \Exception('No db adapter present for ' . get_class($this));
         }
 
         if (!$this->hydrator instanceof HydratorInterface) {

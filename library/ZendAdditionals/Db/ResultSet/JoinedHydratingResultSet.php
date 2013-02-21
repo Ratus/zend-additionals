@@ -38,7 +38,7 @@ class JoinedHydratingResultSet extends \Zend\Db\ResultSet\HydratingResultSet imp
         $data = $this->dataSource->current();
 
         // Return false when no data has been found
-        if (is_array($data) === false) {
+        if (!is_array($data)) {
             return false;
         }
 
@@ -81,7 +81,7 @@ class JoinedHydratingResultSet extends \Zend\Db\ResultSet\HydratingResultSet imp
                 // Call hydrator only when returning entities
                 if ($returnEntity) {
                     $prototype = clone $association->getPrototype();
-
+                    
                     // Hydrate the data
                     $eventContainer->setData(
                         $this->hydrator->hydrate(
