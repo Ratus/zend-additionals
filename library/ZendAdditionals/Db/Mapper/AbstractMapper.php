@@ -471,17 +471,17 @@ abstract class AbstractMapper implements
      * Fetch a single entity from the database this method is a shortcut
      * for the search method and requires less parameters plus adds some
      * extra checks to make sure one or no entity gets returned.
-     * 
+     *
      * @param array   $filter array('column' => 'value', 'join1' => array('column' => 'value'))
      * @param array   $joins array('some_entity', 'other_entity', 'base_entity' => array('some_other_from_base'))
      * @param array   $columnsFilter array('col_one', 'some_entity' => array('col_two'))
      * @param boolean $returnEntities By default return entities, set to false for an array
-     * 
+     *
      * @return array|object|boolean false when nothing found
-     * 
+     *
      * @throws Exception\GetFailedException
      */
-    public function get(
+    protected function get(
         array $filter        = null,
         array $joins         = null,
         array $columnsFilter = null,
@@ -489,12 +489,12 @@ abstract class AbstractMapper implements
     ) {
         try {
             $result = $this->search(
-                null, 
-                $filter, 
-                null, 
-                null, 
-                $joins, 
-                $columnsFilter, 
+                null,
+                $filter,
+                null,
+                null,
+                $joins,
+                $columnsFilter,
                 $returnEntities
             );
             if (!is_array($result)) {
@@ -515,16 +515,16 @@ abstract class AbstractMapper implements
             );
         }
         return (
-            empty($result) ? 
-            false : 
+            empty($result) ?
+            false :
             $result[0]
         );
     }
-    
+
     /**
      * Search entities within the database, the result is an array of entities
      * found or an empty array.
-     * 
+     *
      * @param array   $range array('begin' => 0, 'end' => 10)
      * @param array   $filter array('column' => 'value', 'join1' => array('column' => 'value'))
      * @param array   $orderBy array('column' => 'ASC', 'join2' => array('column' => 'DESC'))
@@ -1292,7 +1292,7 @@ abstract class AbstractMapper implements
     {
         return $this->serviceManager;
     }
-	
+
     /**
      * Alias for getServiceManager
      */
