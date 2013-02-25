@@ -44,7 +44,7 @@ class SessionManager extends \Zend\Session\SessionManager
             if (array_key_exists('__ZF2__', $_SESSION) === false) {
                 $data = array();
             } else {
-                $data = (array) $_SESSION['__ZF2__']->getArrayCopy();
+                $data = is_object($_SESSION['__ZF2__']) ? (array) $_SESSION['__ZF2__']->getArrayCopy() : array();
             }
 
             $storage->fromArray($data);
