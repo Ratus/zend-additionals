@@ -1,12 +1,14 @@
 <?php
 namespace ZendAdditionals\Mvc;
 
+use Zend\Mvc\MvcEvent;
+
 abstract class AbstractPostProcessingModule
 {    
     /**
      * @param \Zend\Mvc\MvcEvent $event
      */
-    public function onBootstrap($event)
+    public function onBootstrap(MvcEvent $event)
     {
         $moduleManager = $event->getApplication()->getServiceManager()->get('modulemanager');
         /* @var $moduleManager \Zend\ModuleManager\ModuleManager */
