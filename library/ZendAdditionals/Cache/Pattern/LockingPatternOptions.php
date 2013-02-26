@@ -9,6 +9,7 @@ class LockingPatternOptions extends \Zend\Cache\Pattern\PatternOptions
     protected $lockTime   = 5;
     protected $lockPrefix = 'lock_';
     protected $ttlBuffer  = 30;
+    protected $enabled    = false;
 
     public function setEnabled($enabled)
     {
