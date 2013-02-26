@@ -22,7 +22,7 @@ class Json
         $model->setTerminal(true);
         
         // Workaround for jquery callbacks over jsonp
-        $callback = $e->getRouteMatch()->getParam('callback');
+        $callback = $event->getRouteMatch()->getParam('callback');
         if (!empty($callback)) {
             $model->setJsonpCallback($callback);
         }
