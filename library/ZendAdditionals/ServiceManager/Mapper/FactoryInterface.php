@@ -2,8 +2,12 @@
 namespace ZendAdditionals\ServiceManager\Mapper;
 
 use Zend\ServiceManager\ServiceLocatorInterface;
-use ZendAdditionals\Db\Mapper\AbstractMapper;
 
+/**
+ * @category    ZendAdditionals
+ * @package     ServiceManager
+ * @subpackage  Mapper
+ */
 interface FactoryInterface extends \Zend\ServiceManager\FactoryInterface
 {
     /**
@@ -11,7 +15,7 @@ interface FactoryInterface extends \Zend\ServiceManager\FactoryInterface
      *
      * @param ServiceLocatorInterface $serviceLocator
      *
-     * @return AbstractMapper
+     * @return \ZendAdditionals\Db\Mapper\AbstractMapper
      */
     public function createMapper(ServiceLocatorInterface $serviceLocator);
 
