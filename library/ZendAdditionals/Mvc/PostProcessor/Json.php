@@ -14,6 +14,7 @@ class Json
             // we don't want to override the response!
             return;
         }
+        
         $model = new \Zend\View\Model\JsonModel();
         if (null !== $variables) {
             $model->setVariables($variables);
@@ -21,8 +22,9 @@ class Json
         $model->setTerminal(true);
         
         // Workaround for jquery callbacks over jsonp
-        if (isset($_REQUEST['callback'])) {
-            $model->setJsonpCallback($_REQUEST['callback']);
+        $callback = $event->getRouteMatch()->getParam('callback');
+        if (!empty($callback)) {
+            $model->setJsonpCallback($callback);
         }
         
         $event->setResult($model);
