@@ -6,28 +6,16 @@ use Zend\View\Exception;
 use Zend\View\Helper\AbstractHelper;
 use Zend\View\Model\ViewModel;
 
-use Custom\View\Helper\Custom as CustomViewHelper;
-
-
-
 /**
 *   @author     Dennis Duwel <dennis@ratus.nl>
 *   @package    ZendAdditionals
 *   @category   ZendAdditionals
 *   @subpackage View\Helper
 *
-*   @version    0.1 <initial>
-*   @since      29-10-2012
-*   @changed    29-10-2012
-*
-*   @uses Custom\View\Helper\Custom
-*   @uses Zend\View\Model\ViewModel
-*   @uses Zend\View\Helper\AbstractHelper
-*
 *   @todo build in cache
 *   @todo merge recursive
 */
-abstract class Widget extends CustomViewHelper
+abstract class Widget extends AbstractHelper
 {
     /** @var ViewModel $viewModel */
     protected $viewModel;
@@ -53,11 +41,10 @@ abstract class Widget extends CustomViewHelper
     /** @var ServiceManager */
     protected $serviceManager;
 
-    public function __construct()
-    {
-        //Construct the parent
-        parent::__construct(array());
-    }
+    /** 
+     * @var array 
+     */
+    protected $widgetConfig;
 
     /**
      * @return ServiceManager
@@ -146,6 +133,23 @@ abstract class Widget extends CustomViewHelper
     }
 
     /**
+     * @return array
+     */
+    public function getWidgetConfig() {
+        return $this->widgetConfig;
+    }
+
+    /**
+     * @param  array $widgetConfig
+     * @return Widget
+     */
+    public function setWidgetConfig(array $widgetConfig) {
+        $this->widgetConfig = $widgetConfig;
+        return $this;
+    }
+
+    
+    /**
      * @return ViewModel
      */
     public function getViewModel()
@@ -169,10 +173,10 @@ abstract class Widget extends CustomViewHelper
     *
     * @return string The rendered HTML
     */
-    public function __invoke($key, $default = '')
+    public function __invoke($name = null, $default = '')
     {
 
-        $this->setName($key);
+        $this->setName($name);
 
         // Get the custom config
         $this->initWidgetConfig();
@@ -204,44 +208,34 @@ abstract class Widget extends CustomViewHelper
     * Merges the default with the widgetname.
     * Sets the $this->config with the default and widgetname config merged
     *
-    * @return void
     * @throws Exception\RuntimeException
     */
     protected function initWidgetConfig()
     {
-        // Get and create the config from the custom
-        $config   = $this->getServiceManager()->get('Config');
-        $config   = $config['custom'];
-        $type     = $this->getType();
-        $name     = $this->getName();
+        $widgetType       = $this->getType();
+        $configIdentifier = $this->getName();
 
-        // The widgets config
-        if ( empty($config[$this->widgetskey]) ) {
+        $config = $this->getWidgetConfig();
+        
+        if (!is_array($config)) {
             throw new Exception\RuntimeException(
-                "Element 'widgets' was not found in the custom config or element is empty."
+                'Widget configuration not set for widget: ' . $widgetType
             );
-        }
-
-        $config = $config[$this->widgetskey];
-        // Get the config for the type widget
-        if (array_key_exists($type, $config)) {
-            $config = $config[$type];
-        } else {
-            throw new Exception\RuntimeException("Element '{$type}' was not found in ".
-            "subarray of '{$this->widgetskey}' in the custom config.");
         }
 
         //Get the defaults of the widget
         if (array_key_exists($this->defaultskey, $config)) {
             $defaults = $config[$this->defaultskey];
         } else {
-            throw new Exception\RuntimeException("Element '{$this->defaultskey}' was not"
-            ."found for the widgettype '{$type}'");
+            throw new Exception\RuntimeException(
+                "Element '{$this->defaultskey}' was not" . 
+                "found for the widgettype '{$widgetType}'"
+            );
         }
 
         // Get the specific values for this widget
-        if (array_key_exists($name, $config)) {
-            $widget = $config[$name];
+        if (array_key_exists($configIdentifier, $config)) {
+            $widget = $config[$configIdentifier];
         } else {
             $widget = array();
         }
@@ -252,7 +246,6 @@ abstract class Widget extends CustomViewHelper
 
         // Update the defaults with the widgetconfig
         $this->mergeRecursive($defaults, $widget);
-        //$this->checkParams($defaults, $config['musthaves']);
 
         $this->config = $defaults;
     }

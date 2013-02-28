@@ -28,7 +28,8 @@ class AttributeProperty extends AbstractMapper
     public function getPropertiesByAttributeId($id, $tablePrefix)
     {
         $select = $this->getSelect($tablePrefix.$this->tableName)
-            ->where(array('attribute_id' => $id));
+            ->where(array('attribute_id' => $id))
+            ->order('sort_order ASC');
 
         $entities = array();
 

@@ -7,7 +7,7 @@ namespace ZendAdditionals\Config;
  * @category    ZendAdditionals
  * @package     Config
  */
-trait ConfigExtension
+trait ConfigExtensionTrait
 {
     /**
      * {@inheritdoc}

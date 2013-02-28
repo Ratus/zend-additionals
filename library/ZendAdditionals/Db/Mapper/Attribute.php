@@ -42,7 +42,11 @@ class Attribute extends AbstractMapper
      *
      * @param string $tablePrefix
      *
-     * @return array
+     * @return array like
+     * array(
+     *     'by_label' => array<Attribute>,
+     *     'by_id'    => array<Attribute>,
+     * )
      */
     public function getAllAttributes($tablePrefix)
     {

@@ -169,6 +169,11 @@ abstract class AbstractMapper implements
         }
     }
 
+    public function getAttributeTablePrefix()
+    {
+        return $this->attributeRelations['table_prefix'];
+    }
+
     /**
      * @param array $xmlAttributeColumns
      *
@@ -1794,6 +1799,53 @@ abstract class AbstractMapper implements
                 );
                 break;
         }
+    }
+
+    /**
+     * Get a list of possible enumerations. When a label is provided only
+     * the values for that label get returned.
+     *
+     * @return array List of possible enumerations like:
+     * array(
+     *     'label' => array(
+     *         'val_1,
+     *         'val_2',
+     *         ...
+     *     ),
+     * ); or with label:
+     * array(
+     *     'val_1,
+     *     'val_2',
+     *     ...
+     * );
+     */
+    public function getEnumAttributes($label = null)
+    {
+        $attributeMapper = $this->getServiceManager()->get(Attribute::SERVICE_NAME);
+        /* @var $attributeMapper \ZendAdditionals\Db\Mapper\Attribute */
+        $attributePropertyMapper = $this->getServiceManager()->get(AttributeProperty::SERVICE_NAME);
+        /* @var $attributePropertyMapper \ZendAdditionals\Db\Mapper\AttributeProperty */
+        $attributes = $attributeMapper->getAllAttributes($this->getAttributeTablePrefix());
+        $return = array();
+        if (empty($attributes)) {
+            return $return;
+        }
+        foreach ($attributes['by_label'] as $attribute) {
+            if ($attribute->getType() !== 'enum') {
+                continue;
+            }
+            if (null !== $label && $label !== $attribute->getLabel()) {
+                continue;
+            }
+            $properties = $attributePropertyMapper->getPropertiesByAttributeId(
+                $attribute->getId(),
+                $this->getAttributeTablePrefix()
+            );
+            foreach ($properties as $property) {
+                $return[$attribute->getLabel()][] = $property->getLabel();
+            }
+        }
+        return (null !== $label && isset($return[$label])) ? $return[$label] : $return;
     }
 
     public function getAttributeIdByLabel($label, $tablePrefix)
