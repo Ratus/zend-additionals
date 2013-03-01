@@ -1,6 +1,8 @@
 <?php
 namespace ZendAdditionals\Config;
 
+use ZendAdditionals\StdLib\ArrayUtils;
+
 /**
  * Get a config item based on dotted string
  *
@@ -25,18 +27,10 @@ trait ConfigExtensionTrait
      */
     protected function getConfigItem($needle, $default = null)
     {
-        $parts = explode('.', $needle);
-
-        $value = $this->getServiceLocator()->get('Config');
-
-        foreach ($parts as $part) {
-            if (array_key_exists($part, $value) === false) {
-                return $default;
-            }
-
-            $value = $value[$part];
-        }
-
-        return $value;
+        return ArrayUtils::arrayTarget(
+            $needle,
+            $this->getServiceLocator()->get('Config'),
+            $default
+        );
     }
 }
