@@ -14,10 +14,9 @@ class FactoryContainer
     /**
      * Get a widget instance
      *
-     * @param HelperPluginManager $hpm
-     * @param AbstractWidget      $widget
-     * @param string              $configNamespace Dotted seperaed string to the widget config
-     *
+     * @param  HelperPluginManager $hpm
+     * @param  AbstractWidget      $widget
+     * @param  string              $configNamespace Dotted seperaed string to the widget config
      * @return AbstractWidget
      */
     protected static function widgetViewHelper(
