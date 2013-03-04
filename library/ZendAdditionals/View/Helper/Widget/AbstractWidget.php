@@ -6,12 +6,12 @@ use Zend\View\Helper\AbstractHelper;
 use Zend\View\Model\ViewModel;
 use Zend\ServiceManager\ServiceLocatorAwareInterface;
 
-abstract class AbstractWidget extends AbstractHelper implements 
+abstract class AbstractWidget extends AbstractHelper implements
     ServiceLocatorAwareInterface
 {
     use \ZendAdditionals\Config\ConfigExtensionTrait;
     use \Zend\ServiceManager\ServiceLocatorAwareTrait;
-    
+
     /** @var ViewModel $viewModel */
     protected $viewModel;
 
@@ -25,16 +25,16 @@ abstract class AbstractWidget extends AbstractHelper implements
     /** @var string */
     protected $widgetskey  = 'widgets';
 
-    /** 
-     * @var array 
+    /**
+     * @var array
      */
     protected $config;
-    
+
     /**
      * @var array
      */
     protected $widgetConfig;
-    
+
     /**
      * @var string
      */
@@ -66,7 +66,7 @@ abstract class AbstractWidget extends AbstractHelper implements
         $this->data = $data;
         return $this;
     }
-    
+
     /**
      * @return array
      */
@@ -82,14 +82,14 @@ abstract class AbstractWidget extends AbstractHelper implements
         $this->config = $config;
         return $this;
     }
-    
+
     /**
      * @return string
      */
     public function getConfigIdentifier() {
         return $this->configIdentifier;
     }
-    
+
     /**
      * @param  string $configIdentifier
      * @return MyWidget
@@ -105,24 +105,24 @@ abstract class AbstractWidget extends AbstractHelper implements
     * @return string The rendered HTML
     */
     public function __invoke(
-        $configIdentifier = 'default', 
+        $configIdentifier = 'default',
         array $parameters = null
     ) {
         // Set the configuration identifier
         $this->setConfigIdentifier($configIdentifier);
-        
+
         // Hydrate any given parameter
         $hydrator = new \Zend\Stdlib\Hydrator\ClassMethods();
         if (null !== $parameters) {
             $hydrator->hydrate($parameters, $this);
         }
-        
+
         // Initialize widget config
         $this->initConfig();
-        
+
         // Prepare MyWidget
         $this->prepare();
-        
+
         // Render MyWidget
         return $this->render();
     }
@@ -137,15 +137,15 @@ abstract class AbstractWidget extends AbstractHelper implements
     protected function initConfig()
     {
         $configIdentifier = $this->getConfigIdentifier();
-        
+
         $config = $this->getConfig();
-        
+
         if (!is_array($config)) {
             throw new Exception\RuntimeException(
                 'Widget configuration not set!'
             );
         }
-        
+
         //Get the defaults of the widget
         if (array_key_exists('default', $config)) {
             $defaultConfig = $config['default'];
@@ -165,17 +165,28 @@ abstract class AbstractWidget extends AbstractHelper implements
         if (empty($defaultConfig)) {
             return false;
         }
+
         $this->widgetConfig = \ZendAdditionals\Stdlib\ArrayUtils::mergeDistinct(
-            $defaultConfig, 
+            $defaultConfig,
             $identifiedConfig
         );
     }
-    
+
+    /**
+     * Get the merged widget config default
+     *
+     * @return array
+     */
+    protected function getWidgetConfig()
+    {
+        return $this->widgetConfig;
+    }
+
     /**
      * Overrides the widget config template
-     * 
+     *
      * @param string $template
-     * 
+     *
      * return MyWidget
      */
     protected function setTemplate($template)
@@ -195,13 +206,13 @@ abstract class AbstractWidget extends AbstractHelper implements
         $viewModel    = new ViewModel;
         $widgetConfig = $this->widgetConfig;
         $data         = $this->getData();
-        
+
         if (!isset($widgetConfig['template'])) {
             throw new Exception\RuntimeException(
                 'no rendering template was set'
             );
         }
-        
+
         $viewModel->setTemplate($widgetConfig['template']);
 
         if (!empty($data)) {
