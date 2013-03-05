@@ -77,19 +77,21 @@ class AttributeData extends AbstractMapper
         $tablePrefix        = $event->getParam('table_prefix');
         $parentRelationInfo = $event->getParam('parent_relation_info');
 
-       if (($entity instanceOf Entity\AttributeData) === false) {
-           return;
-       }
+        if (($entity instanceOf Entity\AttributeData) === false) {
+            return;
+        }
 
+        $attribute = $entity->getAttribute();
+        /** @var $attribute Entity\Attribute */
 
-       $attribute = $entity->getAttribute();
-       /** @var $attribute Entity\Attribute */
+        // Fetch attribute based on parent relation information
+        $attributeMapper = $this->getServiceManager()->get(Attribute::SERVICE_NAME);
 
         if (
             empty($parentRelationInfo) &&
             (
                 null === $attribute ||
-                $this->isEntityEmpty($attribute)
+                $attributeMapper->isEntityEmpty($attribute)
             )
         ) {
             throw new \UnexpectedValueException(
@@ -100,11 +102,9 @@ class AttributeData extends AbstractMapper
         if (
             !empty($parentRelationInfo) && (
                 null === $attribute ||
-                $this->isEntityEmpty($attribute)
+                $attributeMapper->isEntityEmpty($attribute)
             )
         ) {
-            // Fetch attribute based on parent relation information
-            $attributeMapper = $this->getServiceManager()->get(Attribute::SERVICE_NAME);
             $attribute = $attributeMapper->getAttributeByLabel(
                 $parentRelationInfo['extra_conditions'][0]['right']['value'][0],
                 $parentRelationInfo['extra_conditions'][0]['right']['value'][1]
@@ -146,7 +146,9 @@ class AttributeData extends AbstractMapper
             // TODO: check int
             // TODO: improve checks
             if (strlen($value) > $attribute->getLength()) {
-                throw new \Exception('au');
+                throw new \Exception(
+                    'The value: ' . $value . ' is longer then ' . $attribute->getLength()
+                );
             }
             if ($attribute->isRequired() && empty($value)) {
                 throw new \Exception('au2');

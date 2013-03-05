@@ -35,6 +35,9 @@ class Attribute extends AbstractMapper
             },
             25200
         );
+        foreach ($this->cachedAttributeData[$tablePrefix]['by_label'] as $attribute) {
+            $this->getHydrator()->setChangesCommitted($attribute);
+        }
     }
 
     /**

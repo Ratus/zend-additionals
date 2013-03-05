@@ -3,7 +3,7 @@ namespace ZendAdditionals\View\Helper\Widget;
 
 use Zend\View\Exception;
 use Zend\View\Helper\AbstractHelper;
-use Zend\View\Model\ViewModel;
+use Zend\View\Model;
 use Zend\ServiceManager\ServiceLocatorAwareInterface;
 
 abstract class AbstractWidget extends AbstractHelper implements
@@ -12,17 +12,19 @@ abstract class AbstractWidget extends AbstractHelper implements
     use \ZendAdditionals\Config\ConfigExtensionTrait;
     use \Zend\ServiceManager\ServiceLocatorAwareTrait;
 
-    /** @var ViewModel $viewModel */
-    protected $viewModel;
-
-
-    /** @var array $data */
+    /**
+     * @var array $data
+     */
     protected $data = array();
 
-    /** @var string */
+    /**
+     * @var string
+     */
     protected $defaultskey = 'defaults';
 
-    /** @var string */
+    /**
+     * @var string 
+     */
     protected $widgetskey  = 'widgets';
 
     /**
@@ -39,6 +41,11 @@ abstract class AbstractWidget extends AbstractHelper implements
      * @var string
      */
     protected $configIdentifier;
+
+    /**
+     * @var Model\ViewModel
+     */
+    protected $viewModel;
 
     /**
      * Initialize the data that can be used in the widget
@@ -120,6 +127,9 @@ abstract class AbstractWidget extends AbstractHelper implements
         // Initialize widget config
         $this->initConfig();
 
+        // Instantiate the viewModel
+        $this->viewModel = new Model\ViewModel;
+
         // Prepare MyWidget
         $this->prepare();
 
@@ -196,6 +206,15 @@ abstract class AbstractWidget extends AbstractHelper implements
     }
 
     /**
+     * @param Model\ModelInterface $child
+     * @param string               $captureTo
+     */
+    protected function addChild(Model\ModelInterface $child, $captureTo)
+    {
+        $this->viewModel->addChild($child, $captureTo);
+    }
+
+    /**
     * Sets the data to the viewmodel and renders
     *
     * @throws Exception\RuntimeException
@@ -203,7 +222,6 @@ abstract class AbstractWidget extends AbstractHelper implements
     */
     protected function render()
     {
-        $viewModel    = new ViewModel;
         $widgetConfig = $this->widgetConfig;
         $data         = $this->getData();
 
@@ -213,12 +231,12 @@ abstract class AbstractWidget extends AbstractHelper implements
             );
         }
 
-        $viewModel->setTemplate($widgetConfig['template']);
+        $this->viewModel->setTemplate($widgetConfig['template']);
 
         if (!empty($data)) {
-           $viewModel->setVariables($data);
+           $this->viewModel->setVariables($data);
         }
 
-        return $this->getView()->render($viewModel);
+        return $this->getView()->render($this->viewModel);
     }
 }
