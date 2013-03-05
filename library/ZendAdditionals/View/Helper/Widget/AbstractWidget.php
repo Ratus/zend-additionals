@@ -23,7 +23,7 @@ abstract class AbstractWidget extends AbstractHelper implements
     protected $defaultskey = 'defaults';
 
     /**
-     * @var string 
+     * @var string
      */
     protected $widgetskey  = 'widgets';
 
