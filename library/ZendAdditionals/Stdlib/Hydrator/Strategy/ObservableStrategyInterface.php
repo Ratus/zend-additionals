@@ -39,6 +39,14 @@ interface ObservableStrategyInterface
      * @return mixed
      */
     public function extractChanges($value);
+    
+    /**
+     * When hydrating the original data gets stored in spl object storage
+     * this method will set a flag to ignore this storage once while hydrating
+     *
+     * @return \ZendAdditionals\Stdlib\Hydrator\ObservableClassMethods
+     */
+    public function setIgnoreOriginalOnce();
 
     /**
      * When changes for a value have been committed to the original data source

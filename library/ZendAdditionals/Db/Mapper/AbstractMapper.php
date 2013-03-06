@@ -2218,6 +2218,11 @@ abstract class AbstractMapper implements
             );
             $associatedEntity = $entity->$getAssociatedEntity();
 
+            /* @var $relationServiceMapper AbstractMapper */
+            $relationServiceMapper = $this->getServiceManager()->get(
+                $relationInfo['mapper_service_name']
+            );
+
             /*
              * The associated entity is null when not added to the join when
              * selecting and the associated entity is empty when it has been
@@ -2226,15 +2231,10 @@ abstract class AbstractMapper implements
              */
             if (
                 is_null($associatedEntity) ||
-                $this->isEntityEmpty($associatedEntity)
+                $relationServiceMapper->isEntityEmpty($associatedEntity)
             ) {
                 continue;
             }
-
-            /* @var $relationServiceMapper AbstractMapper */
-            $relationServiceMapper = $this->getServiceManager()->get(
-                $relationInfo['mapper_service_name']
-            );
 
             // Check if the base entity has a relation to the associated entity
             $entityHasReferenceToAssociation = isset($relationInfo['reference']);
@@ -2326,7 +2326,6 @@ abstract class AbstractMapper implements
         $originalData = array();
 
         $changedData = $this->entityToArray($entity, $hydrator, true, $originalData);
-
 
         $this->unsetRelatedEntityColumns($changedData);
 
@@ -2608,18 +2607,23 @@ abstract class AbstractMapper implements
      *
      * @return boolean
      */
-    protected function isEntityEmpty($entity, $checkOriginalData = false)
+    public function isEntityEmpty($entity, $checkOriginalData = false)
     {
+        $prototype = $this->getEntityPrototype();
+        if (!($entity instanceof $prototype)) {
+            throw new \Exception(
+                'Only perform is entity ' . get_class($entity) . ' check on it\'s own mapper ' . get_class($prototype) . '!'
+            );
+        }
+
         $hydrator = $this->getHydrator();
 
-        $rowData = $checkOriginalData ?
-            $hydrator->extractOriginal($entity) :
-            $hydrator->extract($entity);
+        $originalData = $hydrator->extract($prototype);
+        $inputData = $hydrator->extract($entity);
 
         $isEmpty = true;
-
-        foreach ($rowData as $data) {
-            if ($data !== null && !is_object($data)) {
+        foreach ($originalData as $key => $value) {
+            if ($inputData[$key] !== $originalData[$key]) {
                 $isEmpty = false;
                 break;
             }

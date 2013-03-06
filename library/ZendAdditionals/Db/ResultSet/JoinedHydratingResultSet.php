@@ -7,6 +7,7 @@ use Zend\EventManager\EventManager;
 
 use ZendAdditionals\Db\EntityAssociation\EntityAssociation;
 use ZendAdditionals\Db\Entity;
+use ZendAdditionals\Stdlib\Hydrator\Strategy;
 
 class JoinedHydratingResultSet extends \Zend\Db\ResultSet\HydratingResultSet implements
     EventManagerAwareInterface
@@ -66,6 +67,7 @@ class JoinedHydratingResultSet extends \Zend\Db\ResultSet\HydratingResultSet imp
                 $alias           = $association->getAlias();
                 $entityData      = $this->shiftJoinData($alias, $data);
                 $entityClassName = get_class($association->getPrototype());
+                $entityMapper    = $association->getMapper();
 
                 // Save classname for the data injection phase
                 $entityClasses[$alias] = $entityClassName;
@@ -81,14 +83,21 @@ class JoinedHydratingResultSet extends \Zend\Db\ResultSet\HydratingResultSet imp
                 // Call hydrator only when returning entities
                 if ($returnEntity) {
                     $prototype = clone $association->getPrototype();
-                    
-                    // Hydrate the data
-                    $eventContainer->setData(
-                        $this->hydrator->hydrate(
-                            $eventContainer->getData(),
-                            $prototype
-                        )
+                    if ($this->hydrator instanceof Strategy\ObservableStrategyInterface) {
+                        $this->hydrator->setIgnoreOriginalOnce();
+                    }
+                    $obj = $this->hydrator->hydrate(
+                        $eventContainer->getData(),
+                        $prototype
                     );
+                    if (
+                        $this->hydrator instanceof Strategy\ObservableStrategyInterface &&
+                        false === $entityMapper->isEntityEmpty($obj)
+                    ) {
+                        $this->hydrator->setChangesCommitted($obj);
+                    }
+                    // Hydrate the data
+                    $eventContainer->setData($obj);
                 }
 
                 // Trigger postHydrate event

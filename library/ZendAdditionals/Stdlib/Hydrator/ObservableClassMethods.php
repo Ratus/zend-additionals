@@ -34,6 +34,8 @@ class ObservableClassMethods extends ClassMethods implements
      */
     protected $objectStorage;
 
+    protected $ignoreOriginalOnce = false;
+
     protected function initializeEntityStorage()
     {
         if ($this->objectStorage instanceof \SplObjectStorage) {
@@ -200,10 +202,29 @@ class ObservableClassMethods extends ClassMethods implements
     public function hydrate(array $data, $object)
     {
         $object = parent::hydrate($data, $object);
-        if (!empty($data) && !$this->hasOriginal($object)) {
+        if (
+            !$this->ignoreOriginalOnce &&
+            !empty($data) &&
+            !$this->hasOriginal($object)
+        ) {
             $this->getObjectStorage()->attach($object, $data); // store object relative to data
         }
+        if ($this->ignoreOriginalOnce) {
+            $this->ignoreOriginalOnce = false;
+        }
         return $object;
+    }
+
+    /**
+     * When hydrating the original data gets stored in spl object storage
+     * this method will set a flag to ignore this storage once while hydrating
+     *
+     * @return \ZendAdditionals\Stdlib\Hydrator\ObservableClassMethods
+     */
+    public function setIgnoreOriginalOnce()
+    {
+        $this->ignoreOriginalOnce = true;
+        return $this;
     }
 
     /**
