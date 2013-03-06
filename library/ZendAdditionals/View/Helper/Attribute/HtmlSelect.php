@@ -51,6 +51,7 @@ class HtmlSelect extends AbstractHelper implements ServiceLocatorAwareInterface
         $default           = null,
         $translationPrefix = null,
         $labelSuffix       = null,
+        $divWrapClass      = 'select',
         $escape            = true
     ) {
         $mapperServiceName = $this->getConfigItem(
@@ -100,6 +101,7 @@ class HtmlSelect extends AbstractHelper implements ServiceLocatorAwareInterface
             $attributes,
             $default,
             $labelSuffix,
+            $divWrapClass,
             $escape
         );
     }

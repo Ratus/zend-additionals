@@ -23,10 +23,11 @@ class HtmlSelect extends \Zend\View\Helper\AbstractHtmlElement implements
      */
     public function __invoke(
         array $items,
-        $attributes  = false,
-        $default     = null,
-        $labelSuffix = null,
-        $escape      = true
+        $attributes   = false,
+        $default      = null,
+        $labelSuffix  = null,
+        $divWrapClass = 'select',
+        $escape       = true
     ) {
         $eol     = self::EOL;
         $options = '';
@@ -47,6 +48,9 @@ class HtmlSelect extends \Zend\View\Helper\AbstractHtmlElement implements
         }
         $attributes = ($attributes ? $this->htmlAttribs($attributes) : '');
 
-        return "<select{$attributes}>{$eol}{$options}</select>{$eol}";
+        $return = "<select{$attributes}>{$eol}{$options}</select>{$eol}";
+        if (!empty($divWrapClass)) {
+            return "<div class='{$divWrapClass}'>{$return}</div>";
+        }
     }
 }

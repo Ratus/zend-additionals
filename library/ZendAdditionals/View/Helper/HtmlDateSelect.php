@@ -13,12 +13,13 @@ class HtmlDateSelect extends \Zend\View\Helper\AbstractHtmlElement implements
     use ServiceLocatorAwareTrait;
 
     public function __invoke(
-        $date            = null,
-        $attributes      = false,
-        $inputFormat     = 'Y-m-d',
-        $outputFormat    = null,
-        $minimumAage     = 18,
-        $maximumAge      = 120
+        $date         = null,
+        $attributes   = false,
+        $inputFormat  = 'Y-m-d',
+        $outputFormat = null,
+        $minimumAage  = 18,
+        $maximumAge   = 120,
+        $divWrapClass = 'select'
     ) {
         $translationPrefix = 'my_profile.helpers.htmldateselect.';
         $attributes = $attributes ?: array();
@@ -98,18 +99,31 @@ class HtmlDateSelect extends \Zend\View\Helper\AbstractHtmlElement implements
             $first = false;
         }
 
+        $wrapClassAppends = array(
+            'Y' => 'date_select_year',
+            'm' => 'date_select_month',
+            'd' => 'date_select_day',
+        );
+
         $formatParts = explode('-', $outputFormat);
         $return = '<div class="date_select date_select_' . $hiddenInputIdentifier . '">';
         $return .= '<input id="' . $hiddenInputIdentifier . '" type="hidden" value="' . $defaultValueString . '" ' . $this->htmlAttribs($attributes) . '/>';
-        foreach ($formatParts as $formatPart) {
+
+        for ($i = 0, $s = sizeof($formatParts); $i < $s; ++$i) {
+            $formatPart = $formatParts[$i];
             $htmlSelect = new HtmlSelect;
             $htmlSelect->setView($this->getView());
             $select = $selects[$formatPart];
             $return .= $htmlSelect(
                 $select,
                 $subAttributes[$formatPart],
-                $defaults[$formatPart]
+                $defaults[$formatPart],
+                null,
+                $divWrapClass . (!empty($divWrapClass) ? ' ' : '') . $wrapClassAppends[$formatPart]
             );
+            if (($i+1) < $s) {
+                $return .= '<div class="date_select_separator"></div>';
+            }
         }
 
         $return .=

@@ -120,7 +120,11 @@ class AttributeData extends AbstractMapper
 
         $value = $entity->getValue();
 
-        if ($attribute->getType() === 'enum') {
+        if ($attribute->getType() === 'enum' && null === $value) {
+            $entity->setAttributeProperty(null);
+            $entity->setValue(null);
+            $entity->setValueTmp(null);
+        } elseif ($attribute->getType() === 'enum') {
             $attributePropertyMapper = $this->getServiceManager()->get(AttributeProperty::SERVICE_NAME);
             /** @var $attributePropertyMapper AttributeProperty */
             $properties = $attributePropertyMapper->getPropertiesByAttributeId($attribute->getId(), $tablePrefix);

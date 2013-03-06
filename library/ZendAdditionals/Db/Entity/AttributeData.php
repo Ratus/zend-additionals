@@ -69,7 +69,7 @@ class AttributeData
         return $this->attributeProperty;
     }
 
-    public function setAttributeProperty(AttributeProperty $attributeProperty)
+    public function setAttributeProperty(AttributeProperty $attributeProperty = null)
     {
         $this->attributeProperty = $attributeProperty;
         return $this;
