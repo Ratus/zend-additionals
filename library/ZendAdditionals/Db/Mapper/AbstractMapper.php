@@ -527,6 +527,64 @@ abstract class AbstractMapper implements
     }
 
     /**
+     * Search for entities for given time
+     *
+     * @param integer $timeout      The amount of seconds to search
+     * @param integer $cooldown     Cooldownperiod between search queries (in microseconds)
+     * @param array   $range array('begin' => 0, 'end' => 10)
+     * @param array   $filter array('column' => 'value', 'join1' => array('column' => 'value'))
+     * @param array   $orderBy array('column' => 'ASC', 'join2' => array('column' => 'DESC'))
+     * @param array   $groupBy array('column', 'join2' => array('column'))
+     * @param array   $joins array('some_entity', 'other_entity', 'base_entity' => array('some_other_from_base'))
+     * @param array   $columnsFilter array('col_one', 'some_entity' => array('col_two'))
+     * @param boolean $returnEntities By default return entities, set to false for an array
+     *
+     * @return array|boolean    Return array on any response | FALSE on timeout
+     */
+    public function searchAndWait(
+        $timeout,
+        $cooldown            = 500,
+        array $range         = null,
+        array $filter        = null,
+        array $orderBy       = null,
+        array $groupBy       = null,
+        array $joins         = null,
+        array $columnsFilter = null,
+        $returnEntities      = true
+    ) {
+        $start = microtime(true);
+        $timeleft = true;
+
+        while($timeleft) {
+            $results = $this->search(
+                $range,
+                $filter,
+                $orderBy,
+                $groupBy,
+                $joins,
+                $columnsFilter,
+                $returnEntities
+            );
+
+            // Results found return
+            if (empty($results) === false) {
+                break;
+            }
+
+            // Sleep to unstress CPU
+            usleep($cooldown);
+
+            $timeleft = (bool) ((microtime(true) - $start) < $timeout);
+        }
+
+        if ($timeleft === false) {
+            return false;
+        }
+
+        return $results;
+    }
+
+    /**
      * Search entities within the database, the result is an array of entities
      * found or an empty array.
      *
