@@ -4,7 +4,7 @@ namespace ZendAdditionals\Mvc;
 use Zend\Mvc\MvcEvent;
 
 abstract class AbstractPostProcessingModule
-{    
+{
     /**
      * @param \Zend\Mvc\MvcEvent $event
      */
@@ -19,14 +19,14 @@ abstract class AbstractPostProcessingModule
         if (!$serviceManager->has('JsonPostProcessor')) {
             $serviceManager->setInvokableClass('JsonPostProcessor', 'ZendAdditionals\Mvc\PostProcessor\Json');
         }
-        
+
         $events->attach(
             'Zend\Mvc\Controller\AbstractActionController',
             \Zend\Mvc\MvcEvent::EVENT_DISPATCH,
             array($this, 'postProcess'),
             -50
         );
-        
+
         $events->attach(
             'Zend\Mvc\Application',
             \Zend\Mvc\MvcEvent::EVENT_DISPATCH_ERROR,
@@ -34,7 +34,7 @@ abstract class AbstractPostProcessingModule
             -50
         );
     }
-    
+
     /**
      * @param \Zend\Mvc\MvcEvent $event
      */
@@ -46,6 +46,7 @@ abstract class AbstractPostProcessingModule
         if (!($routeMatch instanceof \Zend\Mvc\Router\Http\RouteMatch)) {
             return;
         }
+
         $formatter      = $routeMatch->getParam('formatter', false);
         $serviceManager = $event->getApplication()->getServiceManager();
 
@@ -62,7 +63,7 @@ abstract class AbstractPostProcessingModule
 
         // Call the post processor invokable with the event
         $postProcess = $serviceManager->get($postProcessor);
-        
+
         $postProcess($event);
     }
 
@@ -71,6 +72,13 @@ abstract class AbstractPostProcessingModule
      */
     public function errorProcess(\Zend\Mvc\MvcEvent $event)
     {
+        $routeMatch     = $event->getRouteMatch();
+
+        // Dont do stuff without a http routematch
+        if (!($routeMatch instanceof \Zend\Mvc\Router\Http\RouteMatch)) {
+            return;
+        }
+
         $eventParams = $event->getParams();
 
         /** @var array $configuration */
