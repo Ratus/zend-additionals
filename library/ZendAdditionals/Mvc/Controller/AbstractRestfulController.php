@@ -452,10 +452,10 @@ abstract class AbstractRestfulController extends AbstractController
                 $longpoll['value']
             );
             set_time_limit($timeout + 10);
-        }
 
-        while ($timeLeft) {
-            $results = $mapper->search(
+            $results = $mapper->searchAndWait(
+                $timeout,
+                $coolDownTime,
                 $range,
                 $filter,
                 $orderBy,
@@ -464,18 +464,23 @@ abstract class AbstractRestfulController extends AbstractController
                 ($ignoreColumnsFilter ? null : $columnsFilter),
                 $returnEntities
             );
-            if ($longpoll === null || empty($results) === false) {
-                break;
+
+            if ($results === false) {
+                $this->getResponse()->setStatusCode(500);
+                return array('error' => 'timeout');
             }
 
-            usleep($coolDownTime);
-
-            $timeLeft = (bool) ((time() - $start) < $timeout);
-        }
-
-        if ($longpoll !== null && $timeLeft === false) {
-            $this->getResponse()->setStatusCode(500);
-            return array('error' => 'timeout');
+        } else {
+            $results = $mapper->search(
+                $coolDownTime,
+                $range,
+                $filter,
+                $orderBy,
+                $groupBy,
+                $joins,
+                ($ignoreColumnsFilter ? null : $columnsFilter),
+                $returnEntities
+            );
         }
 
         $this->getResponse()->getHeaders()->addHeaderLine(
