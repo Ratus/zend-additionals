@@ -49,6 +49,14 @@ class Url extends \Zend\View\Helper\Url
     }
 
     /**
+     * @return \Zend\Mvc\Router\RouteMatch
+     */
+    public function getRouteMatch()
+    {
+        return $this->routeMatch;
+    }
+
+    /**
      * Generates an url given the name of a route.
      *
      * @see    Zend\Mvc\Router\RouteInterface::assemble()
@@ -58,6 +66,7 @@ class Url extends \Zend\View\Helper\Url
         if (!isset($options['uri']) && $this->uri instanceof HttpUri) {
             $options['uri'] = $this->uri;
         }
+
         return parent::__invoke($name, $params, $options, $reuseMatchedParams);
     }
 }
