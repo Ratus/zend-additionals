@@ -128,7 +128,8 @@ class HtmlDateSelect extends \Zend\View\Helper\AbstractHtmlElement implements
 
         $return .=
             "<script type='text/javascript'>
-                $('.date_select_{$hiddenInputIdentifier}').find('select').change(
+                $('.date_select_{$hiddenInputIdentifier}').find('select').on(
+                    'change',
                     function() {";
 
         $namedFormats = array(
@@ -141,7 +142,8 @@ class HtmlDateSelect extends \Zend\View\Helper\AbstractHtmlElement implements
             var dateValues = new Array();";
         foreach ($inputFormatParts as $inputFormatPart) {
             $return .= "
-                dateValues[{$count}] = $(this).parent().find('select.date_select_{$namedFormats[$inputFormatPart]}').val();
+                console.log('select.date_select_{$namedFormats[$inputFormatPart]}');
+                dateValues[{$count}] = $(this).closest('div.date_select').find('select.date_select_{$namedFormats[$inputFormatPart]}').val();
             ";
             $count++;
         }
