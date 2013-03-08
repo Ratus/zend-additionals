@@ -142,7 +142,6 @@ class HtmlDateSelect extends \Zend\View\Helper\AbstractHtmlElement implements
             var dateValues = new Array();";
         foreach ($inputFormatParts as $inputFormatPart) {
             $return .= "
-                console.log('select.date_select_{$namedFormats[$inputFormatPart]}');
                 dateValues[{$count}] = $(this).closest('div.date_select').find('select.date_select_{$namedFormats[$inputFormatPart]}').val();
             ";
             $count++;
