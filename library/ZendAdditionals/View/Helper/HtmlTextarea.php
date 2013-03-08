@@ -36,7 +36,7 @@ class HtmlTextarea extends \Zend\View\Helper\AbstractHtmlElement implements
         }
         $attributes = ($attributes ? $this->htmlAttribs($attributes) : '');
 
-        $return = "<textarea{$attributes}>{$eol}{$options}</textarea>{$eol}";
+        $return = "<textarea{$attributes}>{$eol}{$content}</textarea>{$eol}";
         if (!empty($divWrapClass)) {
             return "<div class='{$divWrapClass}'><span></span>{$return}</div>";
         }
