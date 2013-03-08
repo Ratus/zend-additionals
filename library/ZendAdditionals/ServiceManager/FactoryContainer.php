@@ -2,7 +2,7 @@
 namespace ZendAdditionals\ServiceManager;
 
 use ZendAdditionals\View\Helper\Widget\AbstractWidget;
-use ZendAdditionals\StdLib\ArrayUtils;
+use ZendAdditionals\Stdlib\ArrayUtils;
 use Zend\View\HelperPluginManager;
 
 /**

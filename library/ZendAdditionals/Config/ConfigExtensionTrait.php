@@ -1,7 +1,7 @@
 <?php
 namespace ZendAdditionals\Config;
 
-use ZendAdditionals\StdLib\ArrayUtils;
+use ZendAdditionals\Stdlib\ArrayUtils;
 
 /**
  * Get a config item based on dotted string
