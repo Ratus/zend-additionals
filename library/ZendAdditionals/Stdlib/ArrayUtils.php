@@ -1,5 +1,5 @@
 <?php
-namespace ZendAdditionals\StdLib;
+namespace ZendAdditionals\Stdlib;
 
 class ArrayUtils extends \Zend\Stdlib\ArrayUtils
 {

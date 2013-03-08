@@ -1,5 +1,5 @@
 <?php
-namespace ZendAdditionals\StdLib;
+namespace ZendAdditionals\Stdlib;
 
 class StringUtils extends \Zend\Stdlib\StringUtils
 {
