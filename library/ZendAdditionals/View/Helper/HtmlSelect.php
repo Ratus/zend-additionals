@@ -31,6 +31,25 @@ class HtmlSelect extends \Zend\View\Helper\AbstractHtmlElement implements
     ) {
         $eol     = self::EOL;
         $options = '';
+
+        if (isset($attributes['helper_message']) && empty($default) && !empty($items)) {
+            $helper = array(
+                '' => $attributes['helper_message'],
+            );
+            $items = array_merge(
+                $helper, $items
+            );
+        }
+        if (empty($items)) {
+            // We have no items.. disable the select
+            $attributes['disabled'] = true;
+            if (isset($attributes['class'])) {
+                $attributes['class'] .= ' disabled';
+            } else {
+                $attributes['class'] = 'disabled';
+            }
+        }
+
         foreach ($items as $value => $item) {
             if (!empty($labelSuffix)) {
                 $item .= ' ' . $labelSuffix;
