@@ -15,7 +15,7 @@ class HtmlSelect extends \Zend\View\Helper\AbstractHtmlElement implements
      * Generates a 'Select' element.
      *
      * @param  array  $items       Array with the elements of the select
-     * @param  array  $attributes  Attributes for the select tag.
+     * @param  array  $attributes  Array with the attributes for the select tag.
      * @param  string $default     The default selected element
      * @param  string $labelSuffix Append suffix to the end of label
      * @param  bool   $escape      Escape the items.
@@ -58,18 +58,26 @@ class HtmlSelect extends \Zend\View\Helper\AbstractHtmlElement implements
                 $escaper = $this->view->plugin('escapeHtml');
                 $item    = $escaper($item);
             }
-            $selected = ($default == $value) ? " selected='selected'" : '';
-            $class = '';
-            if (empty($value)) {
-                $class = ' class="placeholder"';
+            $optionAttributes = array(
+                'value' => $value,
+            );
+            if ($default == $value) {
+                $optionAttributes['selected'] = 'selected';
             }
-            $options .= "<option{$class} value='{$value}'{$selected}>{$item}</option>{$eol}";
+            if (empty($value)) {
+                $optionAttributes['class'] = 'placeholder';
+            }
+            $optionAttributes = $this->htmlAttribs($optionAttributes);
+            $options .= "<option{$optionAttributes}>{$item}</option>{$eol}";
         }
         $attributes = ($attributes ? $this->htmlAttribs($attributes) : '');
 
         $return = "<select{$attributes}>{$eol}{$options}</select>{$eol}";
         if (!empty($divWrapClass)) {
-            return "<div class='{$divWrapClass}'><span></span><div class=\"arrow\"></div><div class=\"selectWrap\">{$return}</div></div>";
+            $return = "<div class='{$divWrapClass}'>{$eol}<span></span>{$eol}" .
+            "<div class=\"arrow\"></div>{$eol}<div class=\"selectWrap\">{$eol}" .
+            "{$return}</div>{$eol}</div>{$eol}";
         }
+        return $return;
     }
 }
