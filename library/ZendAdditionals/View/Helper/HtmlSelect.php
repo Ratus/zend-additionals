@@ -75,8 +75,8 @@ class HtmlSelect extends \Zend\View\Helper\AbstractHtmlElement implements
         $return = "<select{$attributes}>{$eol}{$options}</select>{$eol}";
         if (!empty($divWrapClass)) {
             $return = "<div class='{$divWrapClass}'>{$eol}<span></span>{$eol}" .
-            "<div class=\"arrow\"></div>{$eol}<div class=\"selectWrap\">{$eol} .
-            {$return}</div>{$eol}</div>{$eol}";
+            "<div class=\"arrow\"></div>{$eol}<div class=\"selectWrap\">{$eol}" .
+            "{$return}</div>{$eol}</div>{$eol}";
         }
         return $return;
     }
