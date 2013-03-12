@@ -488,6 +488,7 @@ abstract class AbstractMapper implements
      */
     protected function get(
         array $filter        = null,
+        array $groupBy       = null,
         array $joins         = null,
         array $columnsFilter = null,
         $returnEntities      = true
@@ -497,7 +498,7 @@ abstract class AbstractMapper implements
                 null,
                 $filter,
                 null,
-                null,
+                $groupBy,
                 $joins,
                 $columnsFilter,
                 $returnEntities
@@ -917,6 +918,10 @@ abstract class AbstractMapper implements
                     null
                 )
             );
+
+            if (isset($groupByPointer[$var['value']])) {
+                $groupByPointer[$var['value']]['alias'] = $res->getAlias();
+            }
 
             if (isset($orderByPointer[$var['value']])) {
                 $orderByPointer[$var['value']]['alias'] = $res->getAlias();
@@ -1465,7 +1470,7 @@ abstract class AbstractMapper implements
         return $return;
     }
 
-   protected function debugSql($sql) {
+    protected function debugSql($sql) {
         $sql = str_replace('"', '`', $sql);
         $sql = preg_replace('/[\r\n]/', '', $sql);
         $sql = preg_replace('/\s+/', ' ', $sql);
@@ -1643,6 +1648,9 @@ abstract class AbstractMapper implements
             foreach ($filters as $key => $operator) {
                 if (is_array($operator)) {
                     continue;
+                }
+                if ($operator === null) {
+                    $operator = new \Zend\Db\Sql\Predicate\IsNull($key);
                 }
 
                 if (!($operator instanceof \Zend\Db\Sql\Predicate\PredicateInterface)) {
