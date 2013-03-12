@@ -4,7 +4,7 @@ namespace ZendAdditionals\View\Helper;
 use Zend\ServiceManager\ServiceLocatorAwareInterface;
 
 /**
- * Helper for select element
+ * Helper for textarea element
  */
 class HtmlTextarea extends \Zend\View\Helper\AbstractHtmlElement implements
     ServiceLocatorAwareInterface
@@ -12,33 +12,30 @@ class HtmlTextarea extends \Zend\View\Helper\AbstractHtmlElement implements
     use \Zend\ServiceManager\ServiceLocatorAwareTrait;
 
     /**
-     * Generates a 'Select' element.
+     * Generates a 'Textarea' element.
      *
-     * @param  array  $contents       Array with the elements of the select
-     * @param  array  $attributes  Attributes for the select tag.
-     * @param  string $default     The default selected element
+     * @param  array  $contents    string with the contents of the textarea
+     * @param  array  $attributes  Attributes for the textarea tag.
      * @param  bool   $escape      Escape the contents.
-     * @return string The select XHTML.
+     * @return string The textarea XHTML.
      */
     public function __invoke(
         $content      = '',
         $attributes   = false,
-        $default      = null,
         $divWrapClass = 'textarea',
         $escape       = true
     ) {
-        $eol     = self::EOL;
-        $options = '';
+        $eol        = self::EOL;
 
         if ($escape) {
             $escaper = $this->view->plugin('escapeHtml');
-            $content    = $escaper($content);
+            $content = $escaper($content);
         }
         $attributes = ($attributes ? $this->htmlAttribs($attributes) : '');
-
-        $return = "<textarea{$attributes}>{$eol}{$content}</textarea>{$eol}";
+        $return     = "<span></span>{$eol}<textarea{$attributes}>{$content}</textarea>{$eol}";
         if (!empty($divWrapClass)) {
-            return "<div class='{$divWrapClass}'><span></span>{$return}</div>";
+            $return = "<div class='{$divWrapClass}'>{$eol}{$return}</div>{$eol}";
         }
+        return $return;
     }
 }
