@@ -1,6 +1,8 @@
 <?php
 namespace ZendAdditionals\Stdlib;
 
+use XMLWriter;
+
 class ArrayUtils extends \Zend\Stdlib\ArrayUtils
 {
     /**
@@ -60,5 +62,37 @@ class ArrayUtils extends \Zend\Stdlib\ArrayUtils
         }
 
         return $a;
+    }
+
+    /**
+     * Generate xml from an array
+     *
+     * @param array  $data The data to convert to xml
+     * @param string $root The name of the root element
+     *
+     * @return string The generated xml
+     */
+    public static function toXml(array $data, $root = 'data')
+    {
+        $writer = new XMLWriter('UTF-8');
+        $writer->openMemory();
+        $writer->setIndent(true);
+        $writer->setIndentString(str_repeat(' ', 4));
+
+        $writer->startDocument('1.0', 'UTF-8');
+        $writer->startElement($root);
+
+        foreach ($data as $sectionName => $value) {
+            if (!is_array($value)) {
+                $writer->writeElement($sectionName, (string) $value);
+            } else {
+                $this->addBranch($sectionName, $value, $writer);
+            }
+        }
+
+        $writer->endElement();
+        $writer->endDocument();
+
+        return $writer->outputMemory();
     }
 }
