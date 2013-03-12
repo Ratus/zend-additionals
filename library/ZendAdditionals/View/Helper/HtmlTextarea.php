@@ -14,7 +14,7 @@ class HtmlTextarea extends \Zend\View\Helper\AbstractHtmlElement implements
     /**
      * Generates a 'Textarea' element.
      *
-     * @param  array  $contents    string with the contents of the textarea
+     * @param  string $contents    string with the contents of the textarea
      * @param  array  $attributes  Attributes for the textarea tag.
      * @param  bool   $escape      Escape the contents.
      * @return string The textarea XHTML.
