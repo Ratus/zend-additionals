@@ -39,8 +39,11 @@ class HtmlSelect extends AbstractHelper implements ServiceLocatorAwareInterface
      * @param  string $entityIdentifier
      * @param  array  $attributes        Attributes for the select tag.
      * @param  string $default           The default selected element
-     * @param  string $labelSuffix       Append suffix to the end of label
      * @param  string $translationPrefix When set try to translate label with prefix
+     * @param  string $labelSuffix       Append suffix to the end of label
+     * @param  string $divWrapClass      Wraps a div around all created elements
+     *                                   The value is used for the classname
+     *                                   Set explicitly to null when no wrapper is wanted
      * @param  bool   $escape            Escape the items.
      * @return string The select XHTML.
      */
