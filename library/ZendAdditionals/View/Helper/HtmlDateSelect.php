@@ -24,9 +24,9 @@ class HtmlDateSelect extends \Zend\View\Helper\AbstractHtmlElement implements
      *                              the only format characters that are allowed are d, m and Y,
      *                              if it's set to null, it will be the same as the input
      * @param integer $minimumAge   integer with the minimum age, this makes sure you cannot select
-     *                              a year that is past the birthyear of someone with this age
+     *                              a year that is past the birthyear of someone of this age
      * @param integer $maximumAge   integer with the maximum age, this makes sure you cannot select
-     *                              a year that is before the birthyear of someone with this age
+     *                              a year that is before the birthyear of someone of this age
      * @param  string $divWrapClass Wraps a div around all created select elements
      *                              The value is used for the classname
      *                              Set explicitly to null when no wrapper is wanted
