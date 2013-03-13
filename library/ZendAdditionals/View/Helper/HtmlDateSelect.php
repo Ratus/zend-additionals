@@ -108,7 +108,7 @@ class HtmlDateSelect extends \Zend\View\Helper\AbstractHtmlElement implements
                 ($first ? '' : '-') .
                 "{$defaults[$formatPart]}"
             );
-            $first = false;
+            $first               = false;
         }
 
         $wrapClassAppends = array(
@@ -119,8 +119,8 @@ class HtmlDateSelect extends \Zend\View\Helper\AbstractHtmlElement implements
 
         $formatParts = explode('-', $outputFormat);
         $return      = '<div class="date_select date_select_' . $hiddenInputIdentifier . '">' .
-                       '<input id="' . $hiddenInputIdentifier . '" type="hidden" value="' . $defaultValueString .
-                       '" ' . $this->htmlAttribs($attributes) . '/>';
+            '<input id="' . $hiddenInputIdentifier . '" type="hidden" value="' .
+            $defaultValueString . '" ' . $this->htmlAttribs($attributes) . '/>';
 
         for ($i = 0, $s = sizeof($formatParts); $i < $s; ++$i) {
             $formatPart = $formatParts[$i];

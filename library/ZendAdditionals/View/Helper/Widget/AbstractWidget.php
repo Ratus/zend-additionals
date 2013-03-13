@@ -66,7 +66,7 @@ abstract class AbstractWidget extends AbstractHelper implements
      * Set the data that will be used in the widget
      *
      * @param array $data
-     * @return MyWidget
+     * @return AbstractWidget
      */
     public function setData(array $data)
     {
@@ -83,7 +83,7 @@ abstract class AbstractWidget extends AbstractHelper implements
 
     /**
      * @param  array $config
-     * @return MyWidget
+     * @return AbstractWidget
      */
     public function setConfig(array $config) {
         $this->config = $config;
@@ -99,7 +99,7 @@ abstract class AbstractWidget extends AbstractHelper implements
 
     /**
      * @param  string $configIdentifier
-     * @return MyWidget
+     * @return AbstractWidget
      */
     public function setConfigIdentifier($configIdentifier) {
         $this->configIdentifier = $configIdentifier;
@@ -107,10 +107,13 @@ abstract class AbstractWidget extends AbstractHelper implements
     }
 
     /**
-    * Invoke, function called to create the viewhelper
-    *
-    * @return string The rendered HTML
-    */
+     * Invoke, function called to create the viewhelper
+     *
+     * @param string $configIdentifier  string that refers to an array key in the config
+     * @param array  $parameters        parameters to hydrate
+     *
+     * @return string The rendered HTML
+     */
     public function __invoke(
         $configIdentifier = 'default',
         array $parameters = null
@@ -130,10 +133,10 @@ abstract class AbstractWidget extends AbstractHelper implements
         // Instantiate the viewModel
         $this->viewModel = new Model\ViewModel;
 
-        // Prepare MyWidget
+        // Prepare AbstractWidget
         $this->prepare();
 
-        // Render MyWidget
+        // Render AbstractWidget
         return $this->render();
     }
 
@@ -161,7 +164,7 @@ abstract class AbstractWidget extends AbstractHelper implements
             $defaultConfig = $config['default'];
         } else {
             throw new Exception\RuntimeException(
-                "Default config for widget not set!"
+                'Default config for widget not set!'
             );
         }
 
@@ -197,7 +200,7 @@ abstract class AbstractWidget extends AbstractHelper implements
      *
      * @param string $template
      *
-     * return MyWidget
+     * return AbstractWidget
      */
     protected function setTemplate($template)
     {

@@ -72,15 +72,15 @@ class HtmlSelect extends \Zend\View\Helper\AbstractHtmlElement implements
                 $optionAttributes['class'] = 'placeholder';
             }
             $optionAttributes = $this->htmlAttribs($optionAttributes);
-            $options .= "<option{$optionAttributes}>{$item}</option>{$eol}";
+            $options         .= "<option{$optionAttributes}>{$item}</option>{$eol}";
         }
         $attributes = ($attributes ? $this->htmlAttribs($attributes) : '');
 
-        $return = "<select{$attributes}>{$eol}{$options}</select>{$eol}";
+        $return     = "<select{$attributes}>{$eol}{$options}</select>{$eol}";
         if (!empty($divWrapClass)) {
             $return = "<div class='{$divWrapClass}'>{$eol}<span></span>{$eol}" .
-            "<div class=\"arrow\"></div>{$eol}<div class=\"selectWrap\">{$eol}" .
-            "{$return}</div>{$eol}</div>{$eol}";
+                "<div class=\"arrow\"></div>{$eol}<div class=\"selectWrap\">{$eol}" .
+                "{$return}</div>{$eol}</div>{$eol}";
         }
         return $return;
     }
