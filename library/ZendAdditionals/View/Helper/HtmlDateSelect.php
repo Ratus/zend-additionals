@@ -16,7 +16,7 @@ class HtmlDateSelect extends \Zend\View\Helper\AbstractHtmlElement implements
      * Generates three 'Select' elements based on a date and a date format.
      *
      * @param string  $date         string with a (birth)date according to the $inputFormat
-     * @param array   $attributes   array with attributes for a hidden div with the concatenated
+     * @param array   $attributes   array with attributes for a hidden input with the concatenated
      *                              date of birth value
      * @param string  $inputFormat  string with your input date format
      * @param string  $outputFormat string with your output date format
