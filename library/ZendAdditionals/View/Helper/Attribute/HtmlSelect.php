@@ -81,7 +81,8 @@ class HtmlSelect extends AbstractHelper implements ServiceLocatorAwareInterface
 
         $enumAttributes = $mapper->getEnumAttributes($label);
 
-        $select         = array();$translator = $this->pluginManager->get('translate');
+        $select         = array();
+        $translator     = $this->pluginManager->get('translate');
         $translate      = false;
         if (!empty($translationPrefix)) {
             $translate = true;
