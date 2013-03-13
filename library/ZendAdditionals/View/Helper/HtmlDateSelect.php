@@ -21,8 +21,8 @@ class HtmlDateSelect extends \Zend\View\Helper\AbstractHtmlElement implements
      * @param string  $inputFormat  string with your input date format,
      *                              the only format characters that are allowed are d, m and Y
      * @param string  $outputFormat string with your output date format,
-     *                              the only format characters that are allowed are d, m and Y
-     *                              you can leave it empty if it's the same as the input format
+     *                              the only format characters that are allowed are d, m and Y,
+     *                              if it's set to null, it will be the same as the input
      * @param integer $minimumAge   integer with the minimum age, this makes sure you cannot select
      *                              a year that is past the birthyear of someone with this age
      * @param integer $maximumAge   integer with the maximum age, this makes sure you cannot select
