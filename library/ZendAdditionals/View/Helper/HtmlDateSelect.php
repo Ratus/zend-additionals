@@ -42,7 +42,6 @@ class HtmlDateSelect extends \Zend\View\Helper\AbstractHtmlElement implements
         $maximumAge   = 120,
         $divWrapClass = 'select'
     ) {
-        $outputFormat = 'Y';
         $translationPrefix = 'my_profile.helpers.htmldateselect.';
         $attributes        = $attributes ?: array();
         $dateTime          = null;
