@@ -20,6 +20,7 @@ class HtmlTextarea extends \Zend\View\Helper\AbstractHtmlElement implements
      *                              The value is used for the classname
      *                              Set it explicitly to null when no wrapper is wanted
      * @param  bool   $escape       Escape the contents.
+     *
      * @return string The textarea  XHTML.
      */
     public function __invoke(

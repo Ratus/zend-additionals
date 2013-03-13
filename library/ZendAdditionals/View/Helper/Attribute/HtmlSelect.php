@@ -45,6 +45,7 @@ class HtmlSelect extends AbstractHelper implements ServiceLocatorAwareInterface
      *                                   The value is used for the classname
      *                                   Set explicitly to null when no wrapper is wanted
      * @param  bool   $escape            Escape the items.
+     *
      * @return string The select XHTML.
      */
     public function __invoke(

@@ -22,6 +22,7 @@ class HtmlSelect extends \Zend\View\Helper\AbstractHtmlElement implements
      *                              The value is used for the classname
      *                              Set it explicitly to null when no wrapper is wanted
      * @param  bool   $escape       Escape the items.
+     *
      * @return string The select XHTML.
      */
     public function __invoke(
