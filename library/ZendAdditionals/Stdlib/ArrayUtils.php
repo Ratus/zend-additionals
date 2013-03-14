@@ -96,18 +96,25 @@ class ArrayUtils extends \Zend\Stdlib\ArrayUtils
         return $writer->outputMemory();
     }
 
+    /**
+     * Convert an array to an \stdObject
+     * 
+     * @param mixed $data
+     *
+     * @return \stdObject
+     */
     public static function toObject($data) {
-		if (is_array($data)) {
-			/*
-			* Return array converted to object
-			* Using __FUNCTION__ (Magic constant)
-			* for recursive call
-			*/
-			return (object) array_map(__METHOD__, $data);
-		}
-		else {
-			// Return object
-			return $data;
-		}
-	}
+        if (is_array($data)) {
+            /*
+            * Return array converted to object
+            * Using __METHOD__ (Magic constant)
+            * for recursive call
+            */
+            return (object) array_map(__METHOD__, $data);
+        }
+        else {
+            // Return object
+            return $data;
+        }
+    }
 }
