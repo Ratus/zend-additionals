@@ -12,6 +12,27 @@ class HtmlDateSelect extends \Zend\View\Helper\AbstractHtmlElement implements
 {
     use ServiceLocatorAwareTrait;
 
+    /**
+     * Generates three 'Select' elements based on a date and a date format.
+     *
+     * @param string  $date         string with a (birth)date according to the $inputFormat
+     * @param array   $attributes   array with attributes for a hidden input with the concatenated
+     *                              date of birth value
+     * @param string  $inputFormat  string with your input date format,
+     *                              the only format characters that are allowed are d, m and Y
+     * @param string  $outputFormat string with your output date format,
+     *                              the only format characters that are allowed are d, m and Y,
+     *                              if it's set to null, it will be the same as the input
+     * @param integer $minimumAge   integer with the minimum age, this makes sure you cannot select
+     *                              a year that is past the birthyear of someone of this age
+     * @param integer $maximumAge   integer with the maximum age, this makes sure you cannot select
+     *                              a year that is before the birthyear of someone of this age
+     * @param  string $divWrapClass Wraps a div around all created select elements
+     *                              The value is used for the classname
+     *                              Set explicitly to null when no wrapper is wanted
+     *
+     * @return string The select XHTML.
+     */
     public function __invoke(
         $date         = null,
         $attributes   = false,
@@ -22,17 +43,11 @@ class HtmlDateSelect extends \Zend\View\Helper\AbstractHtmlElement implements
         $divWrapClass = 'select'
     ) {
         $translationPrefix = 'my_profile.helpers.htmldateselect.';
-        $attributes = $attributes ?: array();
-        $dateTime = null;
+        $attributes        = $attributes ?: array();
+        $dateTime          = null;
         if (!empty($date)) {
             $dateTime = \DateTime::createFromFormat($inputFormat, $date);
         }
-
-        $ngModelNames = array(
-            'Y',
-            'm',
-            'd'
-        );
 
         $maximumDate = new \DateTime();
         $minimumDate = new \DateTime();
@@ -66,12 +81,12 @@ class HtmlDateSelect extends \Zend\View\Helper\AbstractHtmlElement implements
         $translator = $this->getServiceLocator()->get('translate');
 
         for ($month = 1; $month <= 12; ++$month) {
-            $month = str_pad((string) $month, 2, '0', STR_PAD_LEFT);
+            $month                = str_pad((string) $month, 2, '0', STR_PAD_LEFT);
             $selects['m'][$month] = $month;
         }
 
         for ($day = 1; $day <= 31; ++$day) {
-            $day = str_pad((string) $day, 2, '0', STR_PAD_LEFT);
+            $day                = str_pad((string) $day, 2, '0', STR_PAD_LEFT);
             $selects['d'][$day] = $day;
         }
 
@@ -83,20 +98,19 @@ class HtmlDateSelect extends \Zend\View\Helper\AbstractHtmlElement implements
             $selects['Y'][$year] = (string) $year;
         }
 
-        $selects['Y'] = array_reverse($selects['Y'], true);
+        $selects['Y']       = array_reverse($selects['Y'], true);
+        $outputFormat       = $outputFormat ?: $inputFormat;
 
-        $outputFormat = $outputFormat ?: $inputFormat;
-
-        // Generate the hidden input variable based on the ng model names
-        $inputFormatParts = explode('-', $inputFormat);
+        // Generate the hidden input variable based on the inputFormat
+        $inputFormatParts   = explode('-', $inputFormat);
         $defaultValueString = '';
-        $first = true;
+        $first              = true;
         foreach ($inputFormatParts as $formatPart) {
             $defaultValueString .= (
                 ($first ? '' : '-') .
                 "{$defaults[$formatPart]}"
             );
-            $first = false;
+            $first               = false;
         }
 
         $wrapClassAppends = array(
@@ -106,15 +120,16 @@ class HtmlDateSelect extends \Zend\View\Helper\AbstractHtmlElement implements
         );
 
         $formatParts = explode('-', $outputFormat);
-        $return = '<div class="date_select date_select_' . $hiddenInputIdentifier . '">';
-        $return .= '<input id="' . $hiddenInputIdentifier . '" type="hidden" value="' . $defaultValueString . '" ' . $this->htmlAttribs($attributes) . '/>';
+        $return      = '<div class="date_select date_select_' . $hiddenInputIdentifier . '">' .
+            '<input id="' . $hiddenInputIdentifier . '" type="hidden" value="' .
+            $defaultValueString . '" ' . $this->htmlAttribs($attributes) . '/>';
 
         for ($i = 0, $s = sizeof($formatParts); $i < $s; ++$i) {
             $formatPart = $formatParts[$i];
             $htmlSelect = new HtmlSelect;
             $htmlSelect->setView($this->getView());
-            $select = $selects[$formatPart];
-            $return .= $htmlSelect(
+            $select     = $selects[$formatPart];
+            $return    .= $htmlSelect(
                 $select,
                 $subAttributes[$formatPart],
                 $defaults[$formatPart],
@@ -127,10 +142,11 @@ class HtmlDateSelect extends \Zend\View\Helper\AbstractHtmlElement implements
         }
 
         $return .=
-            "<script type='text/javascript'>
-                $('.date_select_{$hiddenInputIdentifier}').find('select').on(
-                    'change',
-                    function() {";
+            "<script type='text/javascript'>\n" .
+            "    $('.date_select_{$hiddenInputIdentifier}').find('select').on(\n" .
+            "        'change',\n" .
+            "        function() {\n" .
+            "            var dateValues = new Array();\n";
 
         $namedFormats = array(
             'Y' => 'year',
@@ -138,21 +154,20 @@ class HtmlDateSelect extends \Zend\View\Helper\AbstractHtmlElement implements
             'd' => 'day',
         );
         $count = 0;
-        $return .= "
-            var dateValues = new Array();";
         foreach ($inputFormatParts as $inputFormatPart) {
-            $return .= "
-                dateValues[{$count}] = $(this).closest('div.date_select').find('select.date_select_{$namedFormats[$inputFormatPart]}').val();
-            ";
+            $return .=
+                "            dateValues[{$count}] = $(this).closest('div.date_select').find('select.date_select_" .
+                "{$namedFormats[$inputFormatPart]}').val();\n";
             $count++;
         }
 
-        $return .= "
-            $('#{$hiddenInputIdentifier}').val(dateValues.join('-')).trigger('change');
-                    }
-                );
-            </script>";
+        $return .=
+            "            $('#{$hiddenInputIdentifier}').val(dateValues.join('-')).trigger('change');\n" .
+            "        }\n" .
+            "    );\n" .
+            "</script>\n" .
+            "</div>\n";
 
-        return $return . '</div>';
+        return $return;
     }
 }

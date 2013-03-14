@@ -39,9 +39,13 @@ class HtmlSelect extends AbstractHelper implements ServiceLocatorAwareInterface
      * @param  string $entityIdentifier
      * @param  array  $attributes        Attributes for the select tag.
      * @param  string $default           The default selected element
-     * @param  string $labelSuffix       Append suffix to the end of label
      * @param  string $translationPrefix When set try to translate label with prefix
+     * @param  string $labelSuffix       Append suffix to the end of label
+     * @param  string $divWrapClass      Wraps a div around all created elements
+     *                                   The value is used for the classname
+     *                                   Set explicitly to null when no wrapper is wanted
      * @param  bool   $escape            Escape the items.
+     *
      * @return string The select XHTML.
      */
     public function __invoke(
@@ -55,7 +59,7 @@ class HtmlSelect extends AbstractHelper implements ServiceLocatorAwareInterface
         $escape            = true
     ) {
         $mapperServiceName = $this->getConfigItem(
-            "view_helpers.htmlselect.attribute." .
+            'view_helpers.htmlselect.attribute.' .
             "entity_identifiers.{$entityIdentifier}"
         );
 
@@ -77,8 +81,9 @@ class HtmlSelect extends AbstractHelper implements ServiceLocatorAwareInterface
 
         $enumAttributes = $mapper->getEnumAttributes($label);
 
-        $select = array();$translator = $this->pluginManager->get('translate');
-        $translate = false;
+        $select         = array();
+        $translator     = $this->pluginManager->get('translate');
+        $translate      = false;
         if (!empty($translationPrefix)) {
             $translate = true;
         }
