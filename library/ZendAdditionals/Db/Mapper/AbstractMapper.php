@@ -2645,7 +2645,6 @@ abstract class AbstractMapper implements
                 $entityArray = $hydrator->extract($entity);
             }
             foreach ($this->serializedAttributeColumns as $column => $fields) {
-                error_log($column);
                 if (
                     array_key_exists($column, $entityArray) &&
                     !empty($entityArray[$column]) &&
