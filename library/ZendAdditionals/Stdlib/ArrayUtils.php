@@ -41,27 +41,34 @@ class ArrayUtils extends \Zend\Stdlib\ArrayUtils
      * If both values are arrays, they are merged together, else the value
      * of the second array overwrites the one of the first array.
      *
-     * @param  array $a
-     * @param  array $b
+     * @param  array $array1 Initial array to merge.
+     * @param  array $_      [optional] Variable list of arrays to recursively merge.
+     *
      * @return array
      */
-    public static function mergeDistinct(array $a, array $b)
+    public static function mergeDistinct(array $array1, array $_ = null)
     {
-        foreach ($b as $key => $value) {
-            if (array_key_exists($key, $a)) {
-                if (is_int($key) && !in_array($value, $a, true)) {
-                    $a[] = $value;
-                } elseif (is_array($value) && is_array($a[$key])) {
-                    $a[$key] = static::mergeDistinct($a[$key], $value);
+        $arrays = func_get_args();
+        array_shift($arrays);
+        if (empty($arrays)) {
+            return $array1;
+        }
+        foreach ($arrays as $b) {
+            foreach ($b as $key => $value) {
+                if (array_key_exists($key, $array1)) {
+                    if (is_int($key) && !in_array($value, $array1, true)) {
+                        $array1[] = $value;
+                    } elseif (is_array($value) && is_array($array1[$key])) {
+                        $array1[$key] = static::mergeDistinct($array1[$key], $value);
+                    } else {
+                        $array1[$key] = $value;
+                    }
                 } else {
-                    $a[$key] = $value;
+                    $array1[$key] = $value;
                 }
-            } else {
-                $a[$key] = $value;
             }
         }
-
-        return $a;
+        return $array1;
     }
 
     /**
@@ -98,7 +105,7 @@ class ArrayUtils extends \Zend\Stdlib\ArrayUtils
 
     /**
      * Convert an array to an \stdObject
-     * 
+     *
      * @param mixed $data
      *
      * @return \stdObject
