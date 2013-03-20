@@ -154,6 +154,13 @@ abstract class AbstractMapper implements
     protected $serializedAttributeColumns = array();
 
     /**
+     * Boolean indicating if debug events are enabled or not
+     *
+     * @var boolean
+     */
+    protected $debugEventsEnabled = false;
+
+    /**
      * Check if this mapper allows filtering be implemented.
      *
      * @return boolean
@@ -223,6 +230,29 @@ abstract class AbstractMapper implements
     {
         static::$eventManager = $eventManager;
         return $this;
+    }
+
+    /**
+     * Enable or disable debug events
+     *
+     * @param boolean $boolean
+     *
+     * @return AbstractMapper
+     */
+    public function setDebugEventsEnabled($boolean)
+    {
+        $this->debugEventsEnabled = (boolean) $boolean;
+        return $this;
+    }
+
+    /**
+     * Are the debug events enabled?
+     *
+     * @return boolean
+     */
+    public function getDebugEventsEnabled()
+    {
+        return $this->debugEventsEnabled;
     }
 
     /**
@@ -441,24 +471,39 @@ abstract class AbstractMapper implements
                     $operator = new Operator();
                     $operator->setLeft($key)->setRight($value);
                 }
-                $getIdentifier = 'getIdentifier';
-                $setIdentifier = 'setIdentifier';
-                if (method_exists($operator, 'getLeft')) {
+
+                $operators = array(
+                    $operator,
+                );
+
+                /**
+                 * We want to set aliases on operators within predicateset's as well..
+                 * for this reason an array of operator objects gets built.
+                 */
+                if ($operator instanceof Predicate\PredicateSet) {
+                    $operatorsArray = $operator->getPredicates();
+                    // array of arrays and every 2nd item is the operator?? well documented ehh..
+                    $operators = array();
+                    foreach ($operatorsArray as $operatorArray) {
+                        $operators[] = $operatorArray[1];
+                    }
+                }
+
+                foreach ($operators as &$item) {
                     $getIdentifier = 'getLeft';
                     $setIdentifier = 'setLeft';
+                    if (method_exists($item, 'getIdentifier')) {
+                        $getIdentifier = 'getIdentifier';
+                        $setIdentifier = 'setIdentifier';
+                    }
+                    $currentIdentifier = $item->$getIdentifier();
+                    if (strpos($currentIdentifier, '.') === false) {
+                        $item->$setIdentifier(
+                            $this->getTableName() . '.' . $currentIdentifier
+                        );
+                    }
                 }
-                // Prefix with table name because it's a where clause
-                // TODO: Jesper improve this part
-                if (
-                    strstr(
-                        $operator->$getIdentifier(),
-                        $this->getTableName()
-                    ) === false
-                ) {
-                    $operator->$setIdentifier(
-                        $this->getTableName() . '.' . $operator->$getIdentifier()
-                    );
-                }
+
                 $where->addPredicate($operator);
                 $applyWhereFilter = true;
             }
@@ -600,13 +645,14 @@ abstract class AbstractMapper implements
      * @return array
      */
     public function search(
-        array $range = null,
-        array $filter = null,
-        array $orderBy = null,
-        array $groupBy = null,
-        array $joins = null,
+        array $range         = null,
+        array $filter        = null,
+        array $orderBy       = null,
+        array $groupBy       = null,
+        array $joins         = null,
         array $columnsFilter = null,
-        $returnEntities = true
+        $returnEntities      = true,
+        $return              = true
     ) {
         // Copy the filter to avoid messing with referenced objects inside
         $filter = $this->copy($filter);
@@ -1079,24 +1125,39 @@ abstract class AbstractMapper implements
                     $operator = new Operator();
                     $operator->setLeft($key)->setRight($value);
                 }
-                $getIdentifier = 'getIdentifier';
-                $setIdentifier = 'setIdentifier';
-                if (method_exists($operator, 'getLeft')) {
+
+                $operators = array(
+                    $operator,
+                );
+
+                /**
+                 * We want to set aliases on operators within predicateset's as well..
+                 * for this reason an array of operator objects gets built.
+                 */
+                if ($operator instanceof Predicate\PredicateSet) {
+                    $operatorsArray = $operator->getPredicates();
+                    // array of arrays and every 2nd item is the operator?? well documented ehh..
+                    $operators = array();
+                    foreach ($operatorsArray as $operatorArray) {
+                        $operators[] = $operatorArray[1];
+                    }
+                }
+
+                foreach ($operators as &$item) {
                     $getIdentifier = 'getLeft';
                     $setIdentifier = 'setLeft';
+                    if (method_exists($item, 'getIdentifier')) {
+                        $getIdentifier = 'getIdentifier';
+                        $setIdentifier = 'setIdentifier';
+                    }
+                    $currentIdentifier = $item->$getIdentifier();
+                    if (strpos($currentIdentifier, '.') === false) {
+                        $item->$setIdentifier(
+                            $this->getTableName() . '.' . $currentIdentifier
+                        );
+                    }
                 }
-                // Prefix with table name because it's a where clause
-                // TODO: Jesper improve this part
-                if (
-                    strstr(
-                        $operator->$getIdentifier(),
-                        $this->getTableName()
-                    ) === false
-                ) {
-                    $operator->$setIdentifier(
-                        $this->getTableName() . '.' . $operator->$getIdentifier()
-                    );
-                }
+
                 $where->addPredicate($operator);
                 $applyWhereFilter = true;
             }
@@ -1106,11 +1167,33 @@ abstract class AbstractMapper implements
         if ($applyWhereFilter) {
             $select->where($where);
         }
-        $return = array();
+
+        // When debug events are enabled throw some additional events
+        // explicit for debugging purposes.
+        if ($this->getDebugEventsEnabled()) {
+            $this->getEventManager()->trigger(
+                'debug_select_sql_generated',
+                $this,
+                array(
+                    'sql' => $this->debugSql($select->getSqlString()),
+                )
+            );
+        }
+
+        $returnData = array();
         $result = $this->getResult($select);
         /*@var $result \ZendAdditionals\Db\ResultSet\JoinedHydratingResultSet*/
 
         while ($entity = $result->current($returnEntities)) {
+            if ($this->getDebugEventsEnabled()) {
+                $this->getEventManager()->trigger(
+                    'debug_select_current_result',
+                    $this,
+                    array(
+                        'current' => $entity,
+                    )
+                );
+            }
             if (!$returnEntities && !empty($xmlAttributes)) {
                 foreach ($xmlAttributes as $xmlColumn => $filteredXmlFields) {
                     if (null === $entity[$xmlColumn]) {
@@ -1140,11 +1223,22 @@ abstract class AbstractMapper implements
                     }
                 }
             }
-            $return[] = $entity;
+            $this->getEventManager()->trigger(
+                'search_result_fetched',
+                $this,
+                array(
+                    'entity'    => $entity,
+                    'is_entity' => $returnEntities,
+                )
+            );
+            if ($return) {
+                $returnData[] = $entity;
+            }
             $result->next();
         }
-
-        return $return;
+        if ($return) {
+            return $returnData;
+        }
     }
 
     public function exists($field, $value)
@@ -1659,17 +1753,36 @@ abstract class AbstractMapper implements
                     $operator->setLeft($key)->setRight($value);
                 }
 
-                $getIdentifier = 'getLeft';
-                $setIdentifier = 'setLeft';
-                if (method_exists($operator, 'getIdentifier')) {
-                    $getIdentifier = 'getIdentifier';
-                    $setIdentifier = 'setIdentifier';
+                $operators = array(
+                    $operator,
+                );
+
+                /**
+                 * We want to set aliases on operators within predicateset's as well..
+                 * for this reason an array of operator objects gets built.
+                 */
+                if ($operator instanceof Predicate\PredicateSet) {
+                    $operatorsArray = $operator->getPredicates();
+                    // array of arrays and every 2nd item is the operator?? well documented ehh..
+                    $operators = array();
+                    foreach ($operatorsArray as $operatorArray) {
+                        $operators[] = $operatorArray[1];
+                    }
                 }
-                $currentIdentifier = $operator->$getIdentifier();
-                if (strpos($currentIdentifier, '.') === false) {
-                    $operator->$setIdentifier(
-                        $entityAssociation->getAlias() . '.' . $currentIdentifier
-                    );
+
+                foreach ($operators as &$item) {
+                    $getIdentifier = 'getLeft';
+                    $setIdentifier = 'setLeft';
+                    if (method_exists($item, 'getIdentifier')) {
+                        $getIdentifier = 'getIdentifier';
+                        $setIdentifier = 'setIdentifier';
+                    }
+                    $currentIdentifier = $item->$getIdentifier();
+                    if (strpos($currentIdentifier, '.') === false) {
+                        $item->$setIdentifier(
+                            $entityAssociation->getAlias() . '.' . $currentIdentifier
+                        );
+                    }
                 }
                 if (!($operator instanceof Predicate\PredicateInterface)) {
                     // Skip non predicates
@@ -2042,8 +2155,12 @@ abstract class AbstractMapper implements
      *
      * @throws \Exception
      */
-    public function save($entity, $tablePrefix = null, array $parentRelationInfo = null)
-    {
+    public function save(
+        $entity,
+        $tablePrefix              = null,
+        array $parentRelationInfo = null,
+        $useTransaction           = true
+    ) {
         if ($this->getTablePrefixRequired() && empty($tablePrefix)) {
             throw new \UnexpectedValueException(
                 'This mapper requires a table prefix to ' .
@@ -2074,6 +2191,12 @@ abstract class AbstractMapper implements
         $hydrator = $this->getHydrator();
 
         $result = false;
+
+        if ($useTransaction) {
+            // Begin transaction
+            $this->getDbAdapter()->getDriver()->getConnection()->beginTransaction();
+        }
+
         if (
             $hydrator->hasOriginal($entity) &&
             !$this->isEntityEmpty($entity, true)
@@ -2081,6 +2204,11 @@ abstract class AbstractMapper implements
             $result = $this->update($entity, null, $hydrator, $tablePrefix);
         } else {
             $result = $this->insert($entity, $hydrator, $tablePrefix);
+        }
+
+        if ($useTransaction) {
+            // Commit changes to database
+            $this->getDbAdapter()->getDriver()->getConnection()->commit();
         }
 
         return $result;
@@ -2152,10 +2280,9 @@ abstract class AbstractMapper implements
 
         $hydrator->setChangesCommitted($entity);
 
-
         $this->storeRelatedEntities($entity, $tablePrefix);
 
-        return $this->save($entity, $tablePrefix);
+        return $this->save($entity, $tablePrefix, null, false);
     }
 
     public function delete(
@@ -2258,7 +2385,9 @@ abstract class AbstractMapper implements
         /** @var $statement \Zend\Db\Adapter\Driver\Pdo\Statement*/
         $statement = $sql->prepareStatementForSqlObject($delete);
 
-        return $statement->execute();
+        $result = $statement->execute();
+
+        return $result;
     }
 
     protected function unsetRelatedEntityColumns(& $entityArray)
@@ -2348,7 +2477,8 @@ abstract class AbstractMapper implements
             $relationServiceMapper->save(
                 $associatedEntity,
                 $tablePrefix,
-                $relationInfo
+                $relationInfo,
+                false
             );
 
             // Set id from associated entity into entity (if applicable)
@@ -2668,33 +2798,18 @@ abstract class AbstractMapper implements
      * original data for this entity is empty.
      *
      * @param object  $entity
-     * @param boolean $checkOriginalData
      *
      * @return boolean
      */
-    public function isEntityEmpty($entity, $checkOriginalData = false)
+    public function isEntityEmpty($entity)
     {
         $prototype = $this->getEntityPrototype();
         if (!($entity instanceof $prototype)) {
             throw new \Exception(
-                'Only perform is entity ' . get_class($entity) . ' check on it\'s own mapper ' . get_class($prototype) . '!'
+                'Only perform is entity ' . get_class($entity) .
+                ' check on it\'s own mapper ' . get_class($prototype) . '!'
             );
         }
-
-        $hydrator = $this->getHydrator();
-
-        $originalData = $hydrator->extract($prototype);
-        $inputData = $hydrator->extract($entity);
-
-        $isEmpty = true;
-        foreach ($originalData as $key => $value) {
-            if ($inputData[$key] !== $originalData[$key]) {
-                $isEmpty = false;
-                break;
-            }
-        }
-
-        return $isEmpty;
+        return ($prototype == $entity);
     }
 }
-
