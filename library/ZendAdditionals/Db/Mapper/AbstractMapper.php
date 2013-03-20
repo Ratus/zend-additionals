@@ -522,8 +522,9 @@ abstract class AbstractMapper implements
      * for the search method and requires less parameters plus adds some
      * extra checks to make sure one or no entity gets returned.
      *
-     * @param array   $filter array('column' => 'value', 'join1' => array('column' => 'value'))
-     * @param array   $joins array('some_entity', 'other_entity', 'base_entity' => array('some_other_from_base'))
+     * @param array   $filter  array('column' => 'value', 'join1' => array('column' => 'value'))
+     * @param array   $groupBy array('some_entity', 'other_entity', 'base_entity' => array('some_other_from_base'))
+     * @param array   $joins   array('some_entity', 'other_entity', 'base_entity' => array('some_other_from_base'))
      * @param array   $columnsFilter array('col_one', 'some_entity' => array('col_two'))
      * @param boolean $returnEntities By default return entities, set to false for an array
      *
