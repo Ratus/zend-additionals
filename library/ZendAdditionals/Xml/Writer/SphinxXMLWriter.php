@@ -3,16 +3,43 @@ namespace ZendAdditionals\Xml\Writer;
 
 class SphinxXMLWriter extends \XMLWriter
 {
-    private $fields      = array();
-    private $attributes  = array();
-    private $killStarted = false;
+    protected $fields      = array();
+    protected $attributes  = array();
+    protected $killStarted = false;
 
-    public function setFields($fields)
+    /**
+     * Set the schema fields for this feed, check the sphinx documentation
+     * for supported attributes. Fields are used for full text indexing.
+     *
+     * @param array $fields like:
+     * array(
+     *     'some_identifier',
+     *     'other_identifier',
+     * );
+     */
+    public function setFields(array $fields)
     {
         $this->fields = $fields;
     }
 
-    public function setAttributes($attributes)
+    /**
+     * Set the schema attributes for this feed, check the sphinx documentation
+     * for supported attributes.
+     *
+     * @param array $attributes like:
+     * array(
+     *     array(
+     *         'name'              => 'some_identifier',
+     *         'type'              => 'int',
+     *         'bits'              => 11,
+     *     ),
+     *     array(
+     *         'name'              => 'other_identifier',
+     *         'type'              => 'str2ordinal',
+     *     ),
+     * );
+     */
+    public function setAttributes(array $attributes)
     {
         $this->attributes = $attributes;
     }
@@ -22,7 +49,7 @@ class SphinxXMLWriter extends \XMLWriter
      *
      * @param array $document
      */
-    public function addDocument($document)
+    public function addDocument(array $document)
     {
         $this->startElement('sphinx:document');
         $this->writeAttribute('id', $document['id']);
@@ -45,14 +72,14 @@ class SphinxXMLWriter extends \XMLWriter
      *
      * {@see self::addDocument}
      */
-    public function outputDocument($document)
+    public function outputDocument(array $document)
     {
         $this->addDocument($document);
         print $this->outputMemory();
     }
 
     /**
-     * Prints $document
+     * Prints string $document
      */
     public function outputRawDocument($document)
     {
@@ -64,7 +91,7 @@ class SphinxXMLWriter extends \XMLWriter
      *
      * @param array $document
      */
-    public function addKill($document)
+    public function addKill(array $document)
     {
         if (!$this->killStarted) {
             $this->startElement('sphinx:killlist');
@@ -75,7 +102,12 @@ class SphinxXMLWriter extends \XMLWriter
         $this->endElement();
     }
 
-    public function outputKill($document)
+    /**
+     * Print killist entry for sphinx xml
+     *
+     * {@see self::addKill}
+     */
+    public function outputKill(array $document)
     {
         $this->addKill($document);
         print $this->outputMemory();
