@@ -4,7 +4,7 @@ namespace ZendAdditionals\Mvc\Controller;
 
 /**
  * @category   ZendAdditionals
- * @package    ZendAdditionals_Mvc
+ * @package    Mvc
  * @subpackage Controller
  */
 trait TraitAuthenticationController
@@ -39,7 +39,7 @@ trait TraitAuthenticationController
         }
         return $this->config;
     }
-    
+
     /**
      * @return integer
      */
@@ -84,7 +84,7 @@ trait TraitAuthenticationController
 
         return $controller;
     }
-    
+
     /**
      * @return RouteMatch | null
      */
@@ -92,7 +92,7 @@ trait TraitAuthenticationController
     {
         return $this->routeMatch;
     }
-    
+
     /**
      * This will be called on the onDispatch event
      *

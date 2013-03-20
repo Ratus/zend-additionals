@@ -3,8 +3,8 @@ namespace ZendAdditionals\Mvc\Controller;
 
 class AbstractActionController extends \Zend\Mvc\Controller\AbstractActionController
 {
-    use TraitAuthenticationController;
-    
+    use \ZendAdditionals\Mvc\Controller\TraitAuthenticationController;
+
     const REQUEST_GET       = 'GET',
           REQUEST_POST      = 'POST',
           REQUEST_HEAD      = 'HEAD',

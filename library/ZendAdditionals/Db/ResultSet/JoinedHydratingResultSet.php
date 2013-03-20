@@ -201,7 +201,6 @@ class JoinedHydratingResultSet extends \Zend\Db\ResultSet\HydratingResultSet imp
                 $entities[$alias]       = $eventParams['value'];
             }
         }
-
         return $entities['base'];
     }
 
