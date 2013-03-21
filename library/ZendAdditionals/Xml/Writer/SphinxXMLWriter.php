@@ -1,6 +1,8 @@
 <?php
 namespace ZendAdditionals\Xml\Writer;
 
+use ZendAdditionals\Stdlib\ArrayUtils;
+
 class SphinxXMLWriter extends \XMLWriter
 {
     protected $fields      = array();
@@ -13,11 +15,11 @@ class SphinxXMLWriter extends \XMLWriter
      *
      * @param array $fields like:
      * array(
-     *     array(
+     *     'some_identifier' => array(
      *         'name' => 'some_identifier',
      *         'attr' => 'string',          // optional
      *     ),
-     *     array(
+     *     'other_identifier' => array(
      *         'name' => 'other_identifier',
      *     ),
      * );
@@ -33,12 +35,12 @@ class SphinxXMLWriter extends \XMLWriter
      *
      * @param array $attributes like:
      * array(
-     *     array(
+     *     'some_identifier' => array(
      *         'name'              => 'some_identifier',
      *         'type'              => 'int',
      *         'bits'              => 11,
      *     ),
-     *     array(
+     *     'other_identifier' => array(
      *         'name'              => 'other_identifier',
      *         'type'              => 'string',
      *     ),
@@ -60,10 +62,18 @@ class SphinxXMLWriter extends \XMLWriter
         $this->writeAttribute('id', $document['id']);
 
         foreach ($document as $key => $value) {
+            // Check if a key/value pair should be converted to a timestamp
+            if (
+                'timestamp' === ArrayUtils::arrayTarget(
+                    "{$key}.type", $this->attributes
+                )
+            ) {
+                $value = strtotime($value);
+            }
             // Skip the id key since that is an element attribute
-            if ($key == 'id')
+            if ($key == 'id') {
                 continue;
-
+            }
             $this->startElement($key);
             $this->text($value);
             $this->endElement();
