@@ -13,8 +13,13 @@ class SphinxXMLWriter extends \XMLWriter
      *
      * @param array $fields like:
      * array(
-     *     'some_identifier',
-     *     'other_identifier',
+     *     array(
+     *         'name' => 'some_identifier',
+     *         'attr' => 'string',          // optional
+     *     ),
+     *     array(
+     *         'name' => 'other_identifier',
+     *     ),
      * );
      */
     public function setFields(array $fields)
@@ -35,7 +40,7 @@ class SphinxXMLWriter extends \XMLWriter
      *     ),
      *     array(
      *         'name'              => 'other_identifier',
-     *         'type'              => 'str2ordinal',
+     *         'type'              => 'string',
      *     ),
      * );
      */
@@ -128,14 +133,16 @@ class SphinxXMLWriter extends \XMLWriter
         // add fields to the schema
         foreach ($this->fields as $field) {
             $this->startElement('sphinx:field');
-            $this->writeAttribute('name', $field);
+            foreach ($field as $key => $value) {
+                $this->writeAttribute($key, $value);
+            }
             $this->endElement();
         }
 
         // add attributes to the schema
-        foreach ($this->attributes as $attributes) {
+        foreach ($this->attributes as $attribute) {
             $this->startElement('sphinx:attr');
-            foreach ($attributes as $key => $value) {
+            foreach ($attribute as $key => $value) {
                 $this->writeAttribute($key, $value);
             }
             $this->endElement();
