@@ -1,6 +1,8 @@
 <?php
 namespace ZendAdditionals\Xml\Writer;
 
+use ZendAdditionals\Stdlib\ArrayUtils;
+
 class SphinxXMLWriter extends \XMLWriter
 {
     protected $fields      = array();
@@ -13,8 +15,13 @@ class SphinxXMLWriter extends \XMLWriter
      *
      * @param array $fields like:
      * array(
-     *     'some_identifier',
-     *     'other_identifier',
+     *     'some_identifier' => array(
+     *         'name' => 'some_identifier',
+     *         'attr' => 'string',          // optional
+     *     ),
+     *     'other_identifier' => array(
+     *         'name' => 'other_identifier',
+     *     ),
      * );
      */
     public function setFields(array $fields)
@@ -28,14 +35,14 @@ class SphinxXMLWriter extends \XMLWriter
      *
      * @param array $attributes like:
      * array(
-     *     array(
+     *     'some_identifier' => array(
      *         'name'              => 'some_identifier',
      *         'type'              => 'int',
      *         'bits'              => 11,
      *     ),
-     *     array(
+     *     'other_identifier' => array(
      *         'name'              => 'other_identifier',
-     *         'type'              => 'str2ordinal',
+     *         'type'              => 'string',
      *     ),
      * );
      */
@@ -55,10 +62,18 @@ class SphinxXMLWriter extends \XMLWriter
         $this->writeAttribute('id', $document['id']);
 
         foreach ($document as $key => $value) {
+            // Check if a key/value pair should be converted to a timestamp
+            if (
+                'timestamp' === ArrayUtils::arrayTarget(
+                    "{$key}.type", $this->attributes
+                )
+            ) {
+                $value = strtotime($value);
+            }
             // Skip the id key since that is an element attribute
-            if ($key == 'id')
+            if ($key == 'id') {
                 continue;
-
+            }
             $this->startElement($key);
             $this->text($value);
             $this->endElement();
@@ -128,14 +143,16 @@ class SphinxXMLWriter extends \XMLWriter
         // add fields to the schema
         foreach ($this->fields as $field) {
             $this->startElement('sphinx:field');
-            $this->writeAttribute('name', $field);
+            foreach ($field as $key => $value) {
+                $this->writeAttribute($key, $value);
+            }
             $this->endElement();
         }
 
         // add attributes to the schema
-        foreach ($this->attributes as $attributes) {
+        foreach ($this->attributes as $attribute) {
             $this->startElement('sphinx:attr');
-            foreach ($attributes as $key => $value) {
+            foreach ($attribute as $key => $value) {
                 $this->writeAttribute($key, $value);
             }
             $this->endElement();

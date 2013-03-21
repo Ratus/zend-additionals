@@ -106,14 +106,23 @@ class ArrayUtils extends \Zend\Stdlib\ArrayUtils
     /**
      * Creates an xml document entity for a sphinx xml feed
      *
-     * @param array $data Must contain an 'id' field for the sphinx document id
-     *
+     * @param array $data       Must contain an 'id' field for the sphinx document id
+     * @param array $fields     {@see SphinxXMLWriter::setFields}
+     * @param array $attributes {@see SphinxXMLWriter::setAttributes}
      * @return string
      */
     public static function toSphinxXmlPipe2(
-        array $data
+        array $data,
+        array $fields     = null,
+        array $attributes = null
     ) {
         $writer = new \ZendAdditionals\Xml\Writer\SphinxXMLWriter('UTF-8');
+        if (!empty($fields)) {
+            $writer->setFields($fields);
+        }
+        if (!empty($attributes)) {
+            $writer->setAttributes($attributes);
+        }
         $writer->openMemory();
         $writer->setIndent(true);
         $writer->setIndentString(str_repeat(' ', 4));
