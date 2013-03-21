@@ -576,6 +576,10 @@ abstract class AbstractMapper implements
     /**
      * Search for entities for given time
      *
+     * @throws event search_and_wait_next_iteration For every next internal search
+     * this event gets thrown giving the ability to modify filters before the next
+     * search.
+     *
      * @param integer $timeout      The amount of seconds to search
      * @param integer $cooldown     Cooldownperiod between search queries (in microseconds)
      * @param array   $range array('begin' => 0, 'end' => 10)
@@ -599,10 +603,22 @@ abstract class AbstractMapper implements
         array $columnsFilter = null,
         $returnEntities      = true
     ) {
-        $start = microtime(true);
-        $timeleft = true;
+        $start       = microtime(true);
+        $timeleft    = true;
+        $firstSearch = true;
 
         while($timeleft) {
+
+            if (!$firstSearch) {
+                $this->getEventManager()->trigger(
+                    'search_and_wait_next_iteration',
+                    $this,
+                    array(
+                        'filter' => &$filter,
+                    )
+                );
+            }
+
             $results = $this->search(
                 $range,
                 $filter,
@@ -612,6 +628,8 @@ abstract class AbstractMapper implements
                 $columnsFilter,
                 $returnEntities
             );
+
+            $firstSearch = false;
 
             // Results found return
             if (empty($results) === false) {
