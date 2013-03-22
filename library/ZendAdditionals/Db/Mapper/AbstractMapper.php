@@ -2285,6 +2285,18 @@ abstract class AbstractMapper implements
 
         $statement = $sql->prepareStatementForSqlObject($insert);
 
+        // When debug events are enabled throw some additional events
+        // explicit for debugging purposes.
+        if ($this->getDebugEventsEnabled()) {
+            $this->getEventManager()->trigger(
+                'debug_save_sql_generated',
+                $this,
+                array(
+                    'sql' => $this->debugSql($insert->getSqlString()),
+                )
+            );
+        }
+
         /*@var $statement \Zend\Db\Adapter\Driver\Pdo\Statement*/
         $result = $statement->execute();
         /*@var $result \Zend\Db\Adapter\Driver\Pdo\Result*/
@@ -2569,6 +2581,18 @@ abstract class AbstractMapper implements
 
         $statement = $sql->prepareStatementForSqlObject($update);
         /*@var $statement \Zend\Db\Adapter\Driver\Pdo\Statement*/
+
+        // When debug events are enabled throw some additional events
+        // explicit for debugging purposes.
+        if ($this->getDebugEventsEnabled()) {
+            $this->getEventManager()->trigger(
+                'debug_save_sql_generated',
+                $this,
+                array(
+                    'sql' => $this->debugSql($update->getSqlString()),
+                )
+            );
+        }
 
         $result = $statement->execute();
 
