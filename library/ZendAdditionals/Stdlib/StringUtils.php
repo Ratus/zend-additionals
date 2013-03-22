@@ -63,4 +63,20 @@ class StringUtils extends \Zend\Stdlib\StringUtils
         }
         return false;
     }
+
+    /**
+     * Get a crc62 string from any string
+     *
+     * @param string $source
+     *
+     * @return string|boolean False on failure, base 62 string on success
+     */
+   public function crc62($source)
+   {
+       if (!is_string($source)) {
+           return false;
+       }
+       $int = \abs(\crc32($source));
+       return \gmp_strval(\gmp_init($int, 10), 62);
+   }
 }
