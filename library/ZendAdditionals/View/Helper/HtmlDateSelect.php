@@ -3,7 +3,7 @@ namespace ZendAdditionals\View\Helper;
 
 use \Zend\ServiceManager\ServiceLocatorAwareInterface;
 use \Zend\ServiceManager\ServiceLocatorAwareTrait;
-
+use ZendAdditionals\Stdlib\ArrayUtils;
 /**
  * Helper for date select elements
  */
@@ -34,14 +34,18 @@ class HtmlDateSelect extends \Zend\View\Helper\AbstractHtmlElement implements
      * @return string The select XHTML.
      */
     public function __invoke(
-        $date         = null,
-        $attributes   = false,
-        $inputFormat  = 'Y-m-d',
-        $outputFormat = null,
-        $minimumAage  = 18,
-        $maximumAge   = 120,
-        $divWrapClass = 'select'
+        $date           = null,
+        $attributes     = false,
+        $inputFormat    = 'Y-m-d',
+        $outputFormat   = null,
+        $minimumAage    = 18,
+        $maximumAge     = 120,
+        $divWrapClass   = 'select',
+        $subAttributeOverrides = null
     ) {
+        if (null === $subAttributeOverrides) {
+            $subAttributeOverrides = array();
+        }
         $translationPrefix = 'my_profile.helpers.htmldateselect.';
         $attributes        = $attributes ?: array();
         $dateTime          = null;
@@ -78,6 +82,8 @@ class HtmlDateSelect extends \Zend\View\Helper\AbstractHtmlElement implements
                 'change_target' => $hiddenInputIdentifier,
             ),
         );
+        $subAttributes = ArrayUtils::mergeDistinct($subAttributes, $subAttributeOverrides);
+
         $translator = $this->getServiceLocator()->get('translate');
 
         for ($month = 1; $month <= 12; ++$month) {

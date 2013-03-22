@@ -2,6 +2,7 @@
 namespace ZendAdditionals\View\Helper;
 
 use Zend\ServiceManager\ServiceLocatorAwareInterface;
+use ZendAdditionals\Stdlib\ArrayUtils;
 
 /**
  * Helper for select element
@@ -40,9 +41,7 @@ class HtmlSelect extends \Zend\View\Helper\AbstractHtmlElement implements
             $helper = array(
                 '' => $attributes['helper_message'],
             );
-            $items = array_merge(
-                $helper, $items
-            );
+            $items = ArrayUtils::mergeDistinct($helper, $items);
         }
         if (empty($items)) {
             // We have no items.. disable the select
@@ -55,7 +54,7 @@ class HtmlSelect extends \Zend\View\Helper\AbstractHtmlElement implements
         }
 
         foreach ($items as $value => $item) {
-            if (!empty($labelSuffix)) {
+            if (!empty($labelSuffix) && $value !== '') {
                 $item .= ' ' . $labelSuffix;
             }
             if ($escape) {
