@@ -161,6 +161,13 @@ abstract class AbstractMapper implements
     protected $debugEventsEnabled = false;
 
     /**
+     * The last errors that has been occured during query execution
+     *
+     * @var Collection\Error
+     */
+    protected $lastErrors;
+
+    /**
      * Check if this mapper allows filtering be implemented.
      *
      * @return boolean
@@ -541,7 +548,7 @@ abstract class AbstractMapper implements
     ) {
         try {
             $result = $this->search(
-                null,
+                array('begin' => 0, 'end' => 1),
                 $filter,
                 null,
                 $groupBy,
@@ -549,16 +556,19 @@ abstract class AbstractMapper implements
                 $columnsFilter,
                 $returnEntities
             );
+
             if (!is_array($result)) {
                 throw new \UnexpectedValueException(
                     'Did not expect anything else then array!'
                 );
             }
+
             if (sizeof($result) > 1) {
                 throw new \UnexpectedValueException(
                     'More then one result found based on current filter!'
                 );
             }
+
         } catch (\Exception $exception) {
             throw new Exception\GetFailedException(
                 'Could not search, search failed!',
@@ -566,6 +576,7 @@ abstract class AbstractMapper implements
                 $exception
             );
         }
+
         return (
             empty($result) ?
             false :
@@ -2162,6 +2173,16 @@ abstract class AbstractMapper implements
     }
 
     /**
+     * Return the last error that occured during query execution
+     *
+     * @return Collection\Error
+     */
+    public function getLastErrors()
+    {
+        return $this->lastErrors;
+    }
+
+    /**
      * Save the given entity
      *
      * @param object $entity
@@ -2170,7 +2191,8 @@ abstract class AbstractMapper implements
      * the relational info from the parent is passed thru.
      *
      * @return ResultInterface|bool Boolean true gets returned
-     * when there is nothing to update
+     * when there is nothing to update. FALSE on failure. Call getLastErrors() for error
+     * information
      *
      * @throws \Exception
      */
@@ -2209,25 +2231,48 @@ abstract class AbstractMapper implements
 
         $hydrator = $this->getHydrator();
 
-        $result = false;
+        $result           = false;
+        $this->lastErrors = new Collection\Error();
 
-        if ($useTransaction) {
-            // Begin transaction
-            $this->getDbAdapter()->getDriver()->getConnection()->beginTransaction();
-        }
+        try {
+            if ($useTransaction) {
+                // Begin transaction
+                $this->getDbAdapter()->getDriver()->getConnection()->beginTransaction();
+            }
 
-        if (
-            $hydrator->hasOriginal($entity) &&
-            !$this->isEntityEmpty($entity, true)
-        ) {
-            $result = $this->update($entity, null, $hydrator, $tablePrefix);
-        } else {
-            $result = $this->insert($entity, $hydrator, $tablePrefix);
-        }
+            if (
+                $hydrator->hasOriginal($entity) &&
+                !$this->isEntityEmpty($entity, true)
+            ) {
+                $result = $this->update($entity, null, $hydrator, $tablePrefix);
+            } else {
+                $result = $this->insert($entity, $hydrator, $tablePrefix);
+            }
 
-        if ($useTransaction) {
-            // Commit changes to database
-            $this->getDbAdapter()->getDriver()->getConnection()->commit();
+            if ($useTransaction) {
+                // Commit changes to database
+                $this->getDbAdapter()->getDriver()->getConnection()->commit();
+            }
+        } catch (\Zend\Db\Exception\ExceptionInterface $e) {
+            $error = new Entity\Error();
+            $error->setCode($e->getCode());
+            $error->setMessage($e->getMessage());
+
+            // set error
+            $this->lastErrors->append($error);
+
+            // Log every error that has been occured
+            while ($e = $e->getPrevious()) {
+                $error = new Entity\Error();
+                $error->setCode($e->getCode());
+                $error->setMessage($e->getMessage());
+
+                // set error
+                $this->lastErrors->append($error);
+            }
+
+            // Return false
+            return false;
         }
 
         return $result;
