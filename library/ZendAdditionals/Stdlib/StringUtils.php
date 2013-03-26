@@ -215,12 +215,12 @@ class StringUtils extends \Zend\Stdlib\StringUtils
     {
         $newline = $newline ?: static::detectNewlineType($document);
         if (preg_match(
-            '/<[a-zA-Z0-9-_]+\:[a-zA-Z0-9-_\s\=\"\']+?>(.+)?' . $newline . '/m',
+            '/<[a-zA-Z0-9\-_]+\:[a-zA-Z0-9\-_\s\=\"\']+?>(.+)?' . $newline . '/m',
             $document,
             $matches
         )) {
             $document = preg_replace(
-                '/<[a-zA-Z0-9-_]+\:[a-zA-Z0-9-_\s\=\"\']+?>(.+)?' . $newline . '/m',
+                '/<[a-zA-Z0-9\-_]+\:[a-zA-Z0-9\-_\s\=\"\']+?>(.+)?' . $newline . '/m',
                 '',
                 $document,
                 1
@@ -242,12 +242,12 @@ class StringUtils extends \Zend\Stdlib\StringUtils
     {
         $newline = $newline ?: static::detectNewlineType($document);
         if (preg_match(
-            '/^<\/[a-zA-Z0-9-_]+\:[a-zA-Z0-9-_\s\=\"\']+?>(.+)?(' . $newline . ')?/m',
+            '/^<\/[a-zA-Z0-9\-_]+\:[a-zA-Z0-9\-_\s\=\"\']+?>(.+)?(' . $newline . ')?/m',
             $document,
             $matches
         )) {
             $document = preg_replace(
-                '/^<\/[a-zA-Z0-9-_]+\:[a-zA-Z0-9-_\s\=\"\']+?>(.+)?(' . $newline . ')?/m',
+                '/^<\/[a-zA-Z0-9\-_]+\:[a-zA-Z0-9\-_\s\=\"\']+?>(.+)?(' . $newline . ')?/m',
                 '',
                 $document,
                 1
@@ -267,7 +267,7 @@ class StringUtils extends \Zend\Stdlib\StringUtils
     public static function prefixKeysOnXMLDocument($document, $prefix)
     {
         return preg_replace(
-            '/<(\/)?([a-zA-Z0-9-_]+)(\:[a-zA-Z0-9-_\s\=\"\']+)?>/',
+            '/<(\/)?([a-zA-Z0-9\-_]+)(\:[a-zA-Z0-9\-_\s\=\"\']+)?>/',
             '<$1' . $prefix . '.$2$3>',
             $document
         );
