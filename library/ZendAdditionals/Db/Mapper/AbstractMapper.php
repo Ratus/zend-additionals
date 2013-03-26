@@ -548,7 +548,7 @@ abstract class AbstractMapper implements
     ) {
         try {
             $result = $this->search(
-                array('begin' => 0, 'end' => 1),
+                null,
                 $filter,
                 null,
                 $groupBy,
