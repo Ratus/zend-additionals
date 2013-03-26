@@ -2271,6 +2271,8 @@ abstract class AbstractMapper implements
                 $this->lastErrors->append($error);
             }
 
+            $this->getDbAdapter()->getDriver()->getConnection()->rollback();
+
             // Return false
             return false;
         }
