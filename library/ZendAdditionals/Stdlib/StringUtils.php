@@ -268,7 +268,7 @@ class StringUtils extends \Zend\Stdlib\StringUtils
     {
         return preg_replace(
             '/<(\/)?([a-zA-Z0-9\-_]+)(\:[a-zA-Z0-9\-_\s\=\"\']+)?>/',
-            '<$1' . $prefix . '.$2$3>',
+            '<$1' . $prefix . '_$2$3>',
             $document
         );
     }
