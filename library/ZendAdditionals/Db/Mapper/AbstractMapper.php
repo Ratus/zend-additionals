@@ -3,8 +3,11 @@ namespace ZendAdditionals\Db\Mapper;
 
 use Zend\Db\Adapter\Adapter;
 use Zend\Db\Adapter\Driver\ResultInterface;
+use Zend\Db\Sql\Delete;
 use Zend\Db\Sql\Select;
+use Zend\Db\Sql\Update;
 use Zend\Db\Sql\Sql;
+use Zend\Db\Sql\AbstractSql;
 use Zend\Stdlib\Hydrator\HydratorInterface;
 use Zend\Stdlib\Hydrator\ClassMethods;
 use ZendAdditionals\Stdlib\Hydrator\ObservableClassMethods;
@@ -1563,6 +1566,32 @@ abstract class AbstractMapper implements
     }
 
     /**
+     * Get update query builder
+     *
+     * @param string|null $table
+     * @return Update
+     */
+    protected function getUpdate($table = null)
+    {
+        $table = $table ?: $this->getTableName();
+        $this->initialize();
+        return $this->getSql()->update($table);
+    }
+
+    /**
+     * Get delete query builder
+     *
+     * @param string|null $table
+     * @return Delete
+     */
+    protected function getDelete($table = null)
+    {
+        $table = $table ?: $this->getTableName();
+        $this->initialize();
+        return $this->getSql()->delete($table);
+    }
+
+    /**
      * @param Select $select
      * @return JoinedHydratingResultSet
      */
@@ -1629,6 +1658,18 @@ abstract class AbstractMapper implements
             $result->next();
         }
         return $return;
+    }
+
+    /**
+     * Execute raw statement
+     *
+     * @param AbstractSql $sql
+     * @return \Zend\Db\Adapter\Driver\ResultInterface
+     */
+    protected function query(AbstractSql $sql)
+    {
+        $statement = $this->getSql()->prepareStatementForSqlObject($sql);
+        return $statement->execute();
     }
 
     protected function debugSql($sql) {
