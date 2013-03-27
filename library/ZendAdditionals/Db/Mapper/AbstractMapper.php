@@ -17,6 +17,7 @@ use Zend\ServiceManager\ServiceManagerAwareInterface;
 use Zend\ServiceManager\ServiceManager;
 use Zend\Db\Sql\Predicate;
 use Zend\Db\Sql\Predicate\Operator;
+use Zend\Db\Sql\Expression;
 use Zend\EventManager\EventManagerInterface;
 use Zend\EventManager\EventManager;
 use ZendAdditionals\Db\Mapper\AttributeProperty;
@@ -582,6 +583,42 @@ abstract class AbstractMapper implements
             false :
             $result[0]
         );
+    }
+
+    /**
+     * Simple sum query
+     *
+     * @param array $fields         array('column', 'column2')
+     * @param array $where          array('column' => 'value',)
+     * @param object|NULL $entity   When object is given this object will hydrated with the value
+     *                              Otherwise an array will be returned
+     * @return object|array
+     */
+    protected function sum($fields, $where = array(), $entity = null)
+    {
+        // initialize where with select
+        $select = $this->getSelect()->where($where);
+
+        // Build columns filter.
+        $columns = array();
+        foreach ($fields as $field) {
+            $columns[$field] = new Expression("SUM({$field})");
+        }
+        $select->columns($columns);
+
+        // Fetch the results
+        $result = $this->getCurrent($select, false);
+
+        // Return array when no object has been given
+        if (is_object($entity) === false) {
+            return $result;
+        }
+
+        // Hydrate the results
+        $hydrator = new ClassMethods();
+        $hydrator->hydrate($result, $entity);
+
+        return $entity;
     }
 
     /**
