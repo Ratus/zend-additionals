@@ -77,6 +77,16 @@ class SphinxXMLWriter extends \XMLWriter
             $this->startElement($key);
             $this->text($value);
             $this->endElement();
+
+            if (
+                isset($this->fields[$key]) &&
+                isset($this->attributes["{$key}_crc"])
+            ) {
+                // We have a text field that we want to crc into the index
+                $this->startElement("{$key}_crc");
+                $this->text(crc32($value));
+                $this->endElement();
+            }
         }
 
         $this->endElement();
