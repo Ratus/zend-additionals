@@ -132,7 +132,7 @@ class AttributeData extends AbstractMapper
             $propertyFound = false;
             foreach($properties as $property) {
                 /** @var $property Entity\AttributeProperty */
-                if ($value === $property->getLabel()) {
+                if ($value == $property->getLabel()) {
                     $propertyFound = true;
                     $entity->setAttributeProperty($property);
                     $entity->setValue(null);
