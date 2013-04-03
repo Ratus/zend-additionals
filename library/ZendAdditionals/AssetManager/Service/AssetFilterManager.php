@@ -3,9 +3,13 @@ namespace ZendAdditionals\AssetManager\Service;
 
 use AssetManager\Exception;
 use Assetic\Asset\AssetInterface;
+use ZendAdditionals\Assetic\Asset\AssetCollection;
+use ZendAdditionals\Stdlib\ArrayUtils;
 
 class AssetFilterManager extends \AssetManager\Service\AssetFilterManager
 {
+    protected $splObjectStorage;
+
     /**
      * See if there are filters for the asset, and if so, set them.
      *
@@ -33,12 +37,14 @@ class AssetFilterManager extends \AssetManager\Service\AssetFilterManager
             'merge_before_filter' => false
         );
 
+        $lessVars = array();
+
         if (isset($filters['settings'])) {
             $settings = $filters['settings'];
             $filters  = $filters['filters'];
         }
 
-        if ($settings['merge_before_filter']) {
+        if ($settings['merge_before_filter'] && $asset instanceOf AssetCollection) {
             $newAsset = new \Assetic\Asset\StringAsset($asset->dump());
             $asset->clear();
             $asset->add($newAsset);
