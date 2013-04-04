@@ -10,10 +10,11 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
 LockingCacheAwareInterface
 {
     use LockingCacheAwareTrait;
+    
     /**
      * @var boolean
      */
-    protected $entityCacheEnabled = false;
+    protected $entityCacheEnabled = true;
 
     /**
      * List of default relating entities to include by default
