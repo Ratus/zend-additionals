@@ -6,38 +6,34 @@ use Zend\ServiceManager\ServiceLocatorAwareInterface;
 /**
  * Helper for textarea element
  */
-class HtmlTextarea extends \Zend\View\Helper\AbstractHtmlElement
+class HtmlInput extends \Zend\View\Helper\AbstractHtmlElement
 {
 
     /**
-     * Generates a 'Textarea' element.
+     * Generates a 'TextInput' element.
      *
-     * @param  string $contents     string with the contents of the textarea
-     * @param  array  $attributes   Attributes for the textarea tag.
+     * @param  array  $attributes   Attributes for the input tag.
      * @param  string $divWrapClass Wraps a div around all created elements within this method
      *                              The value is used for the classname
      *                              Set it explicitly to null when no wrapper is wanted
      * @param  bool   $escape       Escape the contents.
      *
-     * @return string The textarea  XHTML.
+     * @return string The input  XHTML.
      */
     public function __invoke(
-        $content      = '',
         $attributes   = false,
-        $divWrapClass = 'textarea',
+        $divWrapClass = 'input',
         $escape       = true
     ) {
         $eol        = self::EOL;
 
-        if ($escape) {
-            $escaper = $this->view->plugin('escapeHtml');
-            $content = $escaper($content);
-        }
         $attributes = ($attributes ? $this->htmlAttribs($attributes) : '');
-        $return     = "<span></span>{$eol}<textarea{$attributes}>{$content}</textarea>{$eol}";
+        $return     = "<span></span>{$eol}<input{$attributes} />{$eol}";
+
         if (!empty($divWrapClass)) {
             $return = "<div class='{$divWrapClass}'>{$eol}{$return}</div>{$eol}";
         }
+
         return $return;
     }
 }
