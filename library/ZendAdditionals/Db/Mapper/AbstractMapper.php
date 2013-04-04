@@ -9,7 +9,7 @@ use Zend\Db\Sql\Update;
 use Zend\Db\Sql\Sql;
 use Zend\Db\Sql\AbstractSql;
 use Zend\Stdlib\Hydrator\HydratorInterface;
-use Zend\Stdlib\Hydrator\ClassMethods;
+use ZendAdditionals\Stdlib\Hydrator\ClassMethods;
 use ZendAdditionals\Stdlib\Hydrator\ObservableClassMethods;
 use ZendAdditionals\Stdlib\Hydrator\Strategy\ObservableStrategyInterface;
 use ZendAdditionals\Db\Adapter\MasterSlaveAdapterInterface;
@@ -2651,6 +2651,58 @@ abstract class AbstractMapper implements
                 }
             }
         }
+    }
+
+    protected function setChangesCommittedOnRelatedEntities($entity)
+    {
+        $this->initialize();
+        foreach ($this->relations as $entityIdentifier => $relationInfo) {
+            $getAssociatedEntity = $this->underscoreToCamelCase(
+                'get_' . $entityIdentifier
+            );
+            $associatedEntity = $entity->$getAssociatedEntity();
+
+            /* @var $relationServiceMapper AbstractMapper */
+            $relationServiceMapper = $this->getServiceManager()->get(
+                $relationInfo['mapper_service_name']
+            );
+
+            /*
+             * The associated entity is null when not added to the join when
+             * selecting and the associated entity is empty when it has been
+             * added to the join but does not exist in the database
+             * (left outer join)
+             */
+            if (
+                is_null($associatedEntity) ||
+                $relationServiceMapper->isEntityEmpty($associatedEntity)
+            ) {
+                continue;
+            }
+
+            // Save the associated entity
+            $relationServiceMapper->setChangesCommitted($associatedEntity);
+        }
+    }
+
+    protected function setChangesCommitted($entity)
+    {
+        $this->setChangesCommittedOnRelatedEntities($entity);
+        if (
+            $this->isEntityEmpty($entity) ||
+            (
+                $entity instanceof \ZendAdditionals\Db\Entity\AttributeData &&
+                (
+                    null == $entity->getEntityId() ||
+                    null == $entity->getAttributeId()
+                )
+            )
+        ) {
+            // We want to skip committing changes on new AttributeData objects
+            // and empty entities
+            return;
+        }
+        $this->getHydrator()->setChangesCommitted($entity);
     }
 
     /**

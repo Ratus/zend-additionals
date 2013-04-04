@@ -10,9 +10,7 @@
 namespace ZendAdditionals\Stdlib\Hydrator;
 
 use ZendAdditionals\Stdlib\Hydrator\Strategy\ObservableStrategyInterface;
-use Zend\Stdlib\Hydrator\ClassMethods;
 use Zend\ServiceManager\ServiceManagerAwareInterface;
-use Zend\ServiceManager\ServiceLocatorInterface;
 use Zend\ServiceManager\ServiceManager;
 
 /**
@@ -157,7 +155,7 @@ class ObservableClassMethods extends ClassMethods implements
      */
     public function extractChanges($object)
     {
-        $extracted = parent::extract($object);
+        $extracted = $this->extract($object);
         if ($this->getObjectStorage()->contains($object)) {
             $storage = $this->getObjectStorage();
             return array_udiff_assoc(
@@ -190,7 +188,7 @@ class ObservableClassMethods extends ClassMethods implements
     public function setChangesCommitted($object)
     {
         $storage = $this->getObjectStorage();
-        $storage[$object] = parent::extract($object);
+        $storage[$object] = $this->extract($object);
         return true;
     }
 
