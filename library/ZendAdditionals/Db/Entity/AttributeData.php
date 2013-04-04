@@ -55,7 +55,7 @@ class AttributeData
         return $this->attributePropertyId;
     }
 
-    public function setAttributePropertyId($attributePropertyId)
+    public function setAttributePropertyId($attributePropertyId = null)
     {
         $this->attributePropertyId = $attributePropertyId;
         return $this;

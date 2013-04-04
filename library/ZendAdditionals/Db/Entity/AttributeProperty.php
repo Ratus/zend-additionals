@@ -34,7 +34,7 @@ class AttributeProperty
      * @param  Attribute $attribute
      * @return AttributeProperty
      */
-    public function setAttribute(Attribute $attribute)
+    public function setAttribute(Attribute $attribute = null)
     {
         $this->attribute = $attribute;
         return $this;

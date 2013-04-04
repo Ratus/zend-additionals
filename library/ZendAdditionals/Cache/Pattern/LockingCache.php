@@ -20,16 +20,42 @@ class LockingCache extends AbstractPattern
     protected $storage;
 
     /**
-     * Get a value or a list of values from memcached, false will be returned
-     * when the value is not available, if multiple keys are provided
-     * an array containing keys and values will be returned.
+     * Get multiple results from cache using one get statement.
      *
-     * @param mixed $key The key or an array of keys
-     * @param function $callback [optional] When provided and the data is not available
-     * the return of the callback function will be used to populate the data
-     * @param int $ttl
+     * @param array $keys Provide an array of keys, the array gets flipped and
+     * returned as is with inserted found values.
      *
-     * @return mixed The result, an array of results
+     * @return array Like:
+     * array(
+     *     'key'  => data
+     *     'key2' => data2
+     *     'key3' => 2      // key3 was on index #2 of the keys array, no data found!
+     * );
+     */
+    public function getMultiple(array $keys)
+    {
+        $return = array_flip($keys);
+        $results = $this->storage->getItems($keys);
+        foreach ($results as $key => $result) {
+            if (!$this->isExpired($result)) {
+                $return[$key] = $result['value'];
+            }
+        }
+        return $return;
+    }
+
+    /**
+     * Get a value from cache, false will be returned
+     * when the value is not available.
+     *
+     * @param mixed    $key      The key
+     * @param callable $callback [optional] When provided and the data is not
+     * available the return of the callback function will be used
+     * to populate the data
+     * @param int      $ttl      [optional] When a callback has been provided
+     * the default ttl for cache can be set optionally.
+     *
+     * @return mixed The result
      */
     public function get($key, $callback = null, $ttl = null)
     {

@@ -8,9 +8,9 @@ class ObjectUtils extends \Zend\Stdlib\ArrayUtils
     /**
      * Convert an object to an array
      *
-     * @param object           $data
-     * @param array            $map provide a prototype callback map like:
-     * @param AbstractHydrator $hydrator By default ClassMethods will be used
+     * @param object|array<object> $data
+     * @param array                $map provide a prototype callback map like:
+     * @param AbstractHydrator     $hydrator By default ClassMethods will be used
      * array(
      *      array(
      *          'prototype' => new \ZendAdditionals\Db\Entity\AttributeData,
@@ -18,18 +18,23 @@ class ObjectUtils extends \Zend\Stdlib\ArrayUtils
      *      ),
      *  ),
      *
-     * @return \stdObject
+     * @return array
      */
     public static function toArray(
-        $object,
+        $data,
         array $map = array(),
         AbstractHydrator $hydrator = null
     ) {
-        if (!is_object($object)) {
-            return $object;
+        if (is_array($data)) {
+            foreach ($data as &$element) {
+                $element = static::toArray($element, $map, $hydrator);
+            }
         }
-        $hydrator = $hydrator ?: new \Zend\Stdlib\Hydrator\ClassMethods;
-        $array = $hydrator->extract($object);
+        if (!is_object($data)) {
+            return $data;
+        }
+        $hydrator = $hydrator ?: new \ZendAdditionals\Stdlib\Hydrator\ClassMethods;
+        $array = $hydrator->extract($data);
         foreach ($map as $objectMapping) {
             foreach ($array as $key => &$value) {
                 if ($value instanceof $objectMapping['prototype']) {
@@ -40,5 +45,32 @@ class ObjectUtils extends \Zend\Stdlib\ArrayUtils
             }
         }
         return $array;
+    }
+
+    /**
+     * Transfer all data information from one object into another
+     * NOTE: objects must be uqual types
+     *
+     * @param object           $source
+     * @param object           $target
+     * @param AbstractHydrator $hydrator By default ClassMethods will be used
+     *
+     */
+    public static function transferData($source, $target, AbstractHydrator $hydrator = null)
+    {
+        if (!is_object($source) || !is_object($target) || !($source instanceof $target)) {
+            return false;
+        }
+        $hydrator   = $hydrator ?: new \ZendAdditionals\Stdlib\Hydrator\ClassMethods;
+        $sourceData = $hydrator->extract($source);
+        $targetData = $hydrator->extract($target);
+        foreach ($sourceData as $key => $value) {
+            if (is_object($value)) {
+                static::transferData($sourceData[$key], $targetData[$key]);
+            } else {
+                $targetData[$key] = $sourceData[$key];
+            }
+        }
+        $hydrator->hydrate($targetData, $target);
     }
 }
