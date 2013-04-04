@@ -1900,11 +1900,11 @@ abstract class AbstractMapper implements
                 $joinPredicate->addPredicate($operator);
             }
         } else if ($this->getAllowFilters() === false && !empty($filters)){
-            $class = get_called_class();
+            $class = get_class($this);
 
             throw new \RuntimeException(
-                "You tried to apply filters on a join. But {$class}::getAllowedFilters() returned false. ".
-                    "override {$class}::()getAllowedFilters and return true to allow filtering on a join"
+                "You tried to apply filters on a join. But {$class}::getAllowFilters() returned false. ".
+                    "override {$class}::getAllowFilters() and return true to allow filtering on a join"
             );
         }
 

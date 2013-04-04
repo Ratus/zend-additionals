@@ -7,11 +7,8 @@ use ZendAdditionals\Stdlib\ArrayUtils;
 /**
  * Helper for select element
  */
-class HtmlSelect extends \Zend\View\Helper\AbstractHtmlElement implements
-    ServiceLocatorAwareInterface
+class HtmlSelect extends \Zend\View\Helper\AbstractHtmlElement
 {
-    use \Zend\ServiceManager\ServiceLocatorAwareTrait;
-
     /**
      * Generates a 'Select' element.
      *
