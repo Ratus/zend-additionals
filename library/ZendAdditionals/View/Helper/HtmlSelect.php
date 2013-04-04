@@ -12,24 +12,26 @@ class HtmlSelect extends \Zend\View\Helper\AbstractHtmlElement
     /**
      * Generates a 'Select' element.
      *
-     * @param  array  $items        Array with the elements of the select
-     * @param  array  $attributes   Array with the attributes for the select tag.
-     * @param  string $default      The default selected element
-     * @param  string $labelSuffix  Append suffix to the end of label
-     * @param  string $divWrapClass Wraps a div around all created elements within this method
-     *                              The value is used for the classname
-     *                              Set it explicitly to null when no wrapper is wanted
-     * @param  bool   $escape       Escape the items.
+     * @param  array  $items            Array with the elements of the select
+     * @param  array  $attributes       Array with the attributes for the select tag.
+     * @param  string $default          The default selected element
+     * @param  string $labelSuffix      Append suffix to the end of label
+     * @param  string $divWrapClass     Wraps a div around all created elements within this method
+     *                                  The value is used for the classname
+     *                                  Set it explicitly to null when no wrapper is wanted
+     * @param  bool   $escape           Escape the items.
+     * @param  array  $optionAttributes Attributes for the options element. Use $items key as key
      *
      * @return string The select XHTML.
      */
     public function __invoke(
         array $items,
-        $attributes   = false,
-        $default      = null,
-        $labelSuffix  = null,
-        $divWrapClass = 'select',
-        $escape       = true
+        $attributes       = false,
+        $default          = null,
+        $labelSuffix      = null,
+        $divWrapClass     = 'select',
+        $escape           = true,
+        $optionAttributes = array()
     ) {
         $eol     = self::EOL;
         $options = '';
@@ -58,17 +60,32 @@ class HtmlSelect extends \Zend\View\Helper\AbstractHtmlElement
                 $escaper = $this->view->plugin('escapeHtml');
                 $item    = $escaper($item);
             }
-            $optionAttributes = array(
+
+            // Default param
+            $tmpOptionAttributes = array(
                 'value' => $value,
             );
+
+            // Set selected
             if ($default == $value) {
-                $optionAttributes['selected'] = 'selected';
+                $tmpOptionAttributes['selected'] = 'selected';
             }
+
+            // key => '' or key => 0 set class placeholder
             if (empty($value)) {
-                $optionAttributes['class'] = 'placeholder';
+                $tmpOptionAttributes['class'] = 'placeholder';
             }
-            $optionAttributes = $this->htmlAttribs($optionAttributes);
-            $options         .= "<option{$optionAttributes}>{$item}</option>{$eol}";
+
+            // Merge options given from the argument line
+            if (array_key_exists($value, $optionAttributes)) {
+                $tmpOptionAttributes = ArrayUtils::mergeDistinct(
+                    $optionAttributes[$value],
+                    $tmpOptionAttributes
+                );
+            }
+
+            $tmpOptionAttributes = $this->htmlAttribs($tmpOptionAttributes);
+            $options         .= "<option{$tmpOptionAttributes}>{$item}</option>{$eol}";
         }
         $attributes = ($attributes ? $this->htmlAttribs($attributes) : '');
 
