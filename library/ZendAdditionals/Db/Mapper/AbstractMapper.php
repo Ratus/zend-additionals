@@ -2356,6 +2356,14 @@ abstract class AbstractMapper implements
             return false;
         }
 
+        $this->getEventManager()->trigger(
+            'postSave',
+            $this,
+            array(
+                'entity' => $entity,
+            )
+        );
+
         return $result;
     }
 

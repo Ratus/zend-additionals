@@ -42,6 +42,31 @@ class AttributeData extends AbstractMapper
             'preSave',
             array($this, 'preSaveListener')
         );
+
+        $this->getEventManager()->attach(
+            'postSave',
+            array($this, 'postSaveListener')
+        );
+    }
+
+    /**
+     * Post save listener to inject values on saved attribute data objects
+     * when they are enum attributes. The values actually get unset during
+     * preSave.
+     */
+    public function postSaveListener(Event $event)
+    {
+        $entity = $event->getParam('entity');
+        if ($entity instanceof Entity\AttributeData) {
+            if (
+                $entity->getAttribute()->getType() === 'enum' &&
+                null !== $entity->getAttributeProperty()
+            ) {
+                $entity->setValue(
+                    $entity->getAttributeProperty()->getLabel()
+                );
+            }
+        }
     }
 
     public function postInjectEntityListener(Event $event)
