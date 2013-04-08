@@ -25,6 +25,7 @@ class IntUtils
 
     /**
      * Generate short hash based on a Prime
+     * Note: Choose high prime number for better security
      *
      * @param  integer $integer
      * @param  integer $prime
@@ -35,7 +36,7 @@ class IntUtils
     {
         $ceiling       = pow(62, $length);
         $base62Integer = ($integer * $prime) - floor($integer * $prime / $ceiling) * $ceiling;
-        $base62 = self::base62Encode($base62Integer);
+        $base62        = self::base62Encode($base62Integer);
 
         return str_pad($base62, $length, "0", STR_PAD_LEFT);
     }
