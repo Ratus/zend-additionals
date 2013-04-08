@@ -22,25 +22,36 @@ class ObjectUtils extends \Zend\Stdlib\ArrayUtils
      */
     public static function toArray(
         $data,
-        array $map = array(),
+        array $map     = array(),
+        array $filters = null,
         AbstractHydrator $hydrator = null
     ) {
-        if (is_array($data)) {
+        if (is_array($data) || $data instanceof \ArrayAccess) {
             foreach ($data as &$element) {
-                $element = static::toArray($element, $map, $hydrator);
+                $element = static::toArray($element, $map, $filters, $hydrator);
             }
+        }
+        if ($data instanceof \ArrayAccess) {
+            return (array) $data;
         }
         if (!is_object($data)) {
             return $data;
         }
         $hydrator = $hydrator ?: new \ZendAdditionals\Stdlib\Hydrator\ClassMethods;
         $array = $hydrator->extract($data);
+        if (null !== $filters) {
+            foreach ($filters as $instanceKey => $instanceFilter) {
+                if ($data instanceof $instanceKey) {
+                    $array = array_intersect_key($array, array_flip($instanceFilter));
+                }
+            }
+        }
         foreach ($map as $objectMapping) {
             foreach ($array as $key => &$value) {
                 if ($value instanceof $objectMapping['prototype']) {
                     $value = $value->{$objectMapping['callable']}();
                 } elseif (is_object($value)) {
-                    $value = static::toArray($value, $map, $hydrator);
+                    $value = static::toArray($value, $map, $filters, $hydrator);
                 }
             }
         }
