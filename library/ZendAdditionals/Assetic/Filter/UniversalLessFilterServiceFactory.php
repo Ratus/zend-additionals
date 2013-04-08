@@ -36,7 +36,6 @@ class UniversalLessFilterServiceFactory implements FactoryInterface
 
         return new UniversalLessFilter(
             $filter,
-            $locator->get('AssetManager\Service\AssetFilterManager'),
             ArrayUtils::arrayTarget('asset_manager.less_vars', $config, array())
         );
     }

@@ -13,11 +13,6 @@ class UniversalLessFilter implements FilterInterface
     protected $filter;
 
     /**
-     * @var AssetFilterManager
-     */
-    protected $assetFilterManager;
-
-    /**
      * @var array
      */
     protected $lessVars = array();
@@ -27,10 +22,9 @@ class UniversalLessFilter implements FilterInterface
      */
     protected $parsedVars;
 
-    public function __construct(FilterInterface $filter, AssetFilterManager $assetFilterManager, $lessVars = array())
+    public function __construct(FilterInterface $filter, $lessVars = array())
     {
         $this->filter             = $filter;
-        $this->assetFilterManager = $assetFilterManager;
         $this->lessVars           = $lessVars;
     }
 
