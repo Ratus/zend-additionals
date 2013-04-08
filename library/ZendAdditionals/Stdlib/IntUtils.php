@@ -11,7 +11,6 @@ class IntUtils
      */
     public static function base62Encode($integer)
     {
-        $ceiling   = 56800235584;   // pow(62,6)
         $baseChars = array_merge(range(48,57), range(65, 90), range(97,122));
 
         $string = '';
