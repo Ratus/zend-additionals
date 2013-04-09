@@ -472,7 +472,6 @@ abstract class AbstractRestfulController extends AbstractController
 
         } else {
             $results = $mapper->search(
-                $coolDownTime,
                 $range,
                 $filter,
                 $orderBy,
