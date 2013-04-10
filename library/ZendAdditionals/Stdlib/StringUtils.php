@@ -10,6 +10,20 @@ class StringUtils extends \Zend\Stdlib\StringUtils
     const NL_MAC = "\r";
 
     /**
+     * Normalize the path
+     *
+     * @param string $path
+     * @param string $directorySeparator
+     * @return string
+     */
+    public static function normalizeDirectorySeparator($path, $directorySeparator = null)
+    {
+        $directorySeparator = $directorySeparator ?: DIRECTORY_SEPARATOR;
+
+        return str_replace(array('/', '\\'), $directorySeparator, $path);
+    }
+
+    /**
      * Convert an underscored string to a camelcased string
      *
      * @param  string $underscored e.g.: get_some_value
