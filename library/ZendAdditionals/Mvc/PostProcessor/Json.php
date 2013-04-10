@@ -6,7 +6,7 @@ class Json
     public function __invoke(\Zend\Mvc\MvcEvent $event)
     {
         $variables = $event->getResult();
-        if (!is_array($variables) && null !== $variables) {
+        if (!($variables instanceof \ArrayAccess) && !is_array($variables) && null !== $variables) {
             // When a ViewModel or any other type of model has been returned
             // we don't want to override the response!
             return;
