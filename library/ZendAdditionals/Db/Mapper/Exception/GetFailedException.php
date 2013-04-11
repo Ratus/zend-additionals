@@ -1,4 +1,10 @@
 <?php
 namespace ZendAdditionals\Db\Mapper\Exception;
 
-class GetFailedException extends SearchFailedException {}
+/**
+ * @category    ZendAdditionals
+ * @package     Db
+ * @subpackage  Mapper\Exception
+ */
+class GetFailedException extends SearchFailedException
+{}

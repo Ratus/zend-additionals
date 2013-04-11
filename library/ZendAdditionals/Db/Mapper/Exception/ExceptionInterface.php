@@ -6,5 +6,5 @@ namespace ZendAdditionals\Db\Mapper\Exception;
  * @package     Db
  * @subpackage  Mapper\Exception
  */
-class SearchFailedException extends LogicException
+interface ExceptionInterface
 {}

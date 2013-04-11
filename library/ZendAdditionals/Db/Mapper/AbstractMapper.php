@@ -172,6 +172,13 @@ abstract class AbstractMapper implements
     protected $lastErrors;
 
     /**
+     * Keep track if we're in a transaction or not
+     *
+     * @var boolean
+     */
+    protected static $transactionStarted        = false;
+
+    /**
      * Check if this mapper allows filtering be implemented.
      *
      * @return boolean
@@ -2261,6 +2268,91 @@ abstract class AbstractMapper implements
     }
 
     /**
+     * Commit transaction
+     *
+     * @return void
+     * @throws Excception\LogicException
+     */
+    public function startTransaction()
+    {
+        if ($this->getTransactionStarted() === true) {
+            throw new Exception\LogicException('Transaction already started');
+        }
+
+        try {
+            $this->getDbAdapter()->getDriver()->getConnection()->beginTransaction();
+        } catch (\Zend\Db\Exception\ExceptionInterface $e) {
+            throw new Exception\LogicException(
+                'Something went wrong with starting the transaction',
+                null,
+                $e
+            );
+        }
+
+        self::$transactionStarted = true;
+    }
+
+    /**
+     * Commit transaction
+     *
+     * @return void
+     * @throws Excception\LogicException
+     */
+    public function rollback()
+    {
+        if ($this->getTransactionStarted() === false) {
+            throw new Exception\LogicException('Transaction has not been started');
+        }
+
+        try {
+            $this->getDbAdapter()->getDriver()->getConnection()->rollback();
+        } catch (\Zend\Db\Exception\ExceptionInterface $e) {
+            throw new Exception\LogicException(
+                'Something went wrong with rollback the transaction',
+                null,
+                $e
+            );
+        }
+
+        self::$transactionStarted = false;
+    }
+
+    /**
+     * Commit transaction
+     *
+     * @return void
+     * @throws Excception\LogicException
+     */
+    public function commit()
+    {
+        if ($this->getTransactionStarted() === false) {
+            throw new Exception\LogicException('Transaction has not been started');
+        }
+
+        try {
+            $this->getDbAdapter()->getDriver()->getConnection()->commit();
+        } catch (\Zend\Db\Exception\ExceptionInterface $e) {
+            throw new Exception\LogicException(
+                'Something went wrong with commiting the data',
+                null,
+                $e
+            );
+        }
+
+        self::$transactionStarted = false;
+    }
+
+    /**
+     * Returns if there is already a transaction running
+     *
+     * @return boolean
+     */
+    public function getTransactionStarted()
+    {
+        return self::$transactionStarted;
+    }
+
+    /**
      * Save the given entity
      *
      * @param object $entity
@@ -2309,13 +2401,14 @@ abstract class AbstractMapper implements
 
         $hydrator = $this->getHydrator();
 
-        $result           = false;
-        $this->lastErrors = new Collection\Error();
+        $result             = false;
+        $transactionStarted = false;
+        $this->lastErrors   = new Collection\Error();
 
         try {
-            if ($useTransaction) {
-                // Begin transaction
-                $this->getDbAdapter()->getDriver()->getConnection()->beginTransaction();
+            if ($useTransaction && $this->getTransactionStarted() === false) {
+                $this->startTransaction();
+                $transactionStarted = true;
             }
 
             if (
@@ -2327,9 +2420,9 @@ abstract class AbstractMapper implements
                 $result = $this->insert($entity, $hydrator, $tablePrefix);
             }
 
-            if ($useTransaction) {
-                // Commit changes to database
-                $this->getDbAdapter()->getDriver()->getConnection()->commit();
+            // Only commit when transaction has been triggered by us
+            if ($transactionStarted === true) {
+                $this->commit();
             }
         } catch (\Zend\Db\Exception\ExceptionInterface $e) {
             $error = new Entity\Error();
@@ -2348,8 +2441,10 @@ abstract class AbstractMapper implements
                 // set error
                 $this->lastErrors->append($error);
             }
-            if ($useTransaction) {
-                $this->getDbAdapter()->getDriver()->getConnection()->rollback();
+
+            // Only rollback when transaction has been triggered by us
+            if ($transactionStarted) {
+                $this->rollback();
             }
 
             // Return false
