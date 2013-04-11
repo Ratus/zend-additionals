@@ -1026,18 +1026,6 @@ abstract class AbstractMapper implements
                 continue;
             }
 
-            $columnFilterInput = ($applyColumnsFilter ?
-                (isset($columnsPointer[$var['value']]) ?
-                    $columnsPointer[$var['value']] :
-                    array()
-                ) : null
-            );
-
-            $filtersInput = (isset($filterPointer[$var['value']]) ?
-                $filterPointer[$var['value']] :
-                null
-            );
-
             $res = $this->addJoin(
                 $select,
                 $var['value'],
