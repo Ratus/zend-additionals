@@ -2333,7 +2333,7 @@ abstract class AbstractMapper implements
             $this->getDbAdapter()->getDriver()->getConnection()->commit();
         } catch (\Zend\Db\Exception\ExceptionInterface $e) {
             throw new Exception\LogicException(
-                'Something went wronf with commiting the data',
+                'Something went wrong with commiting the data',
                 null,
                 $e
             );
