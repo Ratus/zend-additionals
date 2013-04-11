@@ -8,4 +8,3 @@ namespace ZendAdditionals\Db\Mapper\Exception;
  */
 interface ExceptionInterface
 {}
-

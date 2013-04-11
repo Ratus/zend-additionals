@@ -2301,7 +2301,7 @@ abstract class AbstractMapper implements
             );
         }
 
-        self::$transactionStarted               = true;
+        self::$transactionStarted = true;
     }
 
     /**
@@ -2326,7 +2326,7 @@ abstract class AbstractMapper implements
             );
         }
 
-        self::$transactionStarted               = false;
+        self::$transactionStarted = false;
     }
 
     /**
@@ -2351,7 +2351,7 @@ abstract class AbstractMapper implements
             );
         }
 
-        self::$transactionStarted               = false;
+        self::$transactionStarted = false;
     }
 
     /**
