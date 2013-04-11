@@ -286,4 +286,67 @@ class StringUtils extends \Zend\Stdlib\StringUtils
             $document
         );
     }
+
+    /**
+     * Parse a domain or host or full url to get all necessary information
+     *
+     * @param string $source uri or host/domain
+     *
+     * @return array sample: (Only info found will get returned)
+     * array(11) {
+     *   ["scheme"]        => "http"
+     *   ["authority"]     => "user:pass@sub.level.nested.domain.com"
+     *   ["userinfo"]      => "user:pass"
+     *   ["username"]      => "user"
+     *   ["password"]      => "pass"
+     *   ["host"]          => "sub.level.nested.domain.com"
+     *   ["domain"]        => "sub.level.nested.domain.com"
+     *   ["ip"]            => "123.123.123.123"
+     *   ["port"]          => "123456"
+     *   ["path"]          => "/where/to/go"
+     *   ["query"]         => "bla=1"
+     *   ["domain_levels"] => array(5) {
+     *                          [0] => "com"
+     *                          [1] => "domain.com"
+     *                          [2] => "nested.domain.com"
+     *                          [3] => "level.nested.domain.com"
+     *                          [4] => "sub.level.nested.domain.com"
+     *                        }
+     *   ["sub_domains"]   => "sub.level.nested"
+     *   ["label"]         => "domain"
+     *   ["tld"]           => "com"
+     * }
+     */
+    public static function parseHost($source)
+    {
+        $return = array();
+        preg_match("~^(?:(?:(?P<scheme>[a-z][0-9a-z.+-]*?)://)?(?P<authority>(?:(?P<userinfo>(?P<username>(?:[\w.\~-]|(?:%[\da-f]{2})|[!$&'()*+,;=])*)?:(?P<password>(?:[\w.\~-]|(?:%[\da-f]{2})|[!$&'()*+,;=])*)?|(?:[\w.\~-]|(?:%[\da-f]{2})|[!$&'()*+,;=]|:)*?)@)?(?P<host>(?P<domain>(?:[a-z](?:[0-9a-z-]*(?:[0-9a-z]))?\.)+(?:[a-z](?:[0-9a-z-]*(?:[0-9a-z]))?))|(?P<ip>(?:25[0-5]|2[0-4]\d|[01]\d\d|\d?\d).(?:25[0-5]|2[0-4]\d|[01]\d\d|\d?\d).(?:25[0-5]|2[0-4]\d|[01]\d\d|\d?\d).(?:25[0-5]|2[0-4]\d|[01]\d\d|\d?\d)))(?::(?P<port>\d+))?(?=/|$)))?(?P<path>/?(?:(?:[\w.\~-]|(?:%[\da-f]{2})|[!$&'()*+,;=]|:|@)+/)*(?:(?:[\w.\~-]|(?:%[\da-f]{2})|[!$&'()*+,;=]|:|@)+/?)?)(?:\?(?P<query>(?:(?:[\w.\~-]|(?:%[\da-f]{2})|[!$&'()*+,;=]|:|@)|/|\?)*?))?(?:#(?P<fragment>(?:(?:[\w.\~-]|(?:%[\da-f]{2})|[!$&'()*+,;=]|:|@)|/|\?)*))?$~i", $source, $matches);
+        foreach ($matches as $key => $value) {
+            if (is_string($key) && !empty($key) && !empty($value)) {
+                $return[$key] = $value;
+            }
+        }
+        if (isset($return['host'])) {
+            // tld e.g. .com
+            $parts = explode('.', $return['host']);
+            $parts = array_reverse($parts);
+            $return['domain_levels'] = array();
+            $append = '';
+            foreach ($parts as $part) {
+                $return['domain_levels'][] = $part.$append;
+                $append = '.' . $part.$append;
+            }
+            $subDomains = $return['host'];
+            $domain     = $return['domain_levels'][1];
+            $subDomains = rtrim(strstr($subDomains, $domain, true), '.');
+            $return['sub_domains'] = $subDomains;
+            if (isset($parts[1])) {
+                $return['label'] = $parts[1];
+            }
+            if (isset($parts[0])) {
+                $return['tld'] = $parts[0];
+            }
+        }
+        return $return;
+    }
 }
