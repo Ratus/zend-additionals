@@ -105,7 +105,7 @@ LockingCacheAwareInterface
             );
         }
 
-        $getCall   = function() use ($id, $key) {
+        $getCall   = function() use ($id, $key, $filters) {
             return $this->get(
                 $filters,
                 null,
