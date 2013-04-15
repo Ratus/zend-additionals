@@ -178,6 +178,9 @@ abstract class AbstractMapper implements
      */
     protected static $transactionStarted        = false;
 
+
+    protected $saveRunning = false;
+
     /**
      * Check if this mapper allows filtering be implemented.
      *
@@ -2389,6 +2392,7 @@ abstract class AbstractMapper implements
             );
         }
 
+        // Presave event for hydrator purposes
         $this->getEventManager()->trigger(
             'preSave',
             $this,
@@ -2405,6 +2409,15 @@ abstract class AbstractMapper implements
         $transactionStarted = false;
         $this->lastErrors   = new Collection\Error();
 
+        $iLaunchedSave = false;
+        $insert        = false;
+
+        // Check if we started this save by setting and checking some booleans
+        if ($this->saveRunning === false) {
+            $this->saveRunning = true;
+            $iLaunchedSave     = true;
+        }
+
         try {
             if ($useTransaction && $this->getTransactionStarted() === false) {
                 $this->startTransaction();
@@ -2417,6 +2430,9 @@ abstract class AbstractMapper implements
             ) {
                 $result = $this->update($entity, null, $hydrator, $tablePrefix);
             } else {
+                if ($iLaunchedSave) {
+                    $insert = true;
+                }
                 $result = $this->insert($entity, $hydrator, $tablePrefix);
             }
 
@@ -2451,6 +2467,7 @@ abstract class AbstractMapper implements
             return false;
         }
 
+        // Post save event for hydration purposes
         $this->getEventManager()->trigger(
             'postSave',
             $this,
@@ -2458,6 +2475,20 @@ abstract class AbstractMapper implements
                 'entity' => $entity,
             )
         );
+
+        // When the save was launched by this save (recursion happens)
+        // we can trigger the event to say the entity got saved completely
+        if ($iLaunchedSave) {
+            $this->saveRunning = false;
+            $this->getEventManager()->trigger(
+                get_called_class() . '::entity_saved',
+                $this,
+                array(
+                    'entity'   => $entity,
+                    'inserted' => $insert,
+                )
+            );
+        }
 
         return $result;
     }

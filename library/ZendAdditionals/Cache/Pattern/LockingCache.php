@@ -35,6 +35,9 @@ class LockingCache extends AbstractPattern
     public function getMultiple(array $keys)
     {
         $return = array();
+        if (empty($keys)) {
+            return $return;
+        }
         $results = $this->storage->getItems($keys);
 
         foreach ($keys as $key) {
