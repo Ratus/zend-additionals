@@ -5,6 +5,9 @@ use ZendAdditionals\Cache\LockingCacheAwareInterface;
 use ZendAdditionals\Cache\LockingCacheAwareTrait;
 use Zend\Db\Sql\Predicate;
 use ZendAdditionals\Stdlib\ObjectUtils;
+use ZendAdditionals\Db\Mapper\Exception;
+use ZendAdditionals\Stdlib\StringUtils;
+use ZendAdditionals\Stdlib\ArrayUtils;
 
 abstract class AbstractCachedMapper extends AbstractMapper implements
 LockingCacheAwareInterface
@@ -18,7 +21,7 @@ LockingCacheAwareInterface
 
     /**
      * List of default relating entities to include by default
-     *
+     * NOTE: Changing this changes the cache keys
      * @var array
      */
     protected $entityCacheDefaultIncludes = array();
@@ -36,23 +39,77 @@ LockingCacheAwareInterface
     protected $entityCacheObjectStorage = array();
 
     /**
+     * Contains a list of extra identifiers tracked for this entity
+     * NOTE: Changing this changes the cache keys
+     * @var array
+     */
+    protected $entityCacheTrackedIdentifiers = array();
+
+    /**
+     * In here add some default filters
+     * @var array
+     */
+    protected $entityCacheDefaultFilters = array();
+
+    public function __construct()
+    {
+        parent::__construct();
+        $this->attachToEntitySaved();
+    }
+
+    /**
      * Fetch a specific entity by the primary identifier. When entity caching
      * has been enabled on the mapper all items will be stored within cache
      * and saved to cache when modified.
      *
      * @param  integer $id
-     * @return object
+     * @return object|false
+     */
+    public function fetchEntityBy($identifier, $id)
+    {
+        $result = $this->fetchEntityCollectionBy($identifier, array($id));
+        if (isset($result[$id])) {
+            if ($result[$id] instanceof \ArrayIterator) {
+                throw new Exception\LogicException(
+                    'FetchEntityBy expects only one result to be found!, ' .
+                    'a collection was found!'
+                );
+            }
+            return $result[$id];
+        }
+        return false;
+    }
+
+    /**
+     * Fetch a specific entity by the primary identifier. When entity caching
+     * has been enabled on the mapper all items will be stored within cache
+     * and saved to cache when modified.
+     *
+     * @param  integer $id
+     * @return object|false
      */
     public function fetchEntityById($id)
     {
-        $key       = get_called_class() . "_entity_{$id}";
+        $key       = $this->getEntityCacheKey($id);
         $fromCache = true;
         $result    = false;
-        $getCall   = function() use ($id) {
+
+        $filters    = array(
+            'id' => $id,
+        );
+
+        if (!empty($this->entityCacheDefaultFilters)) {
+            $filters = ArrayUtils::mergeDistinct(
+                $filters,
+                $this->entityCacheDefaultFilters
+            );
+        }
+
+        $getCall   = function() use ($id, $key) {
             return $this->get(
-                    array(
-                    'id' => $id,
-                    ), null, $this->entityCacheDefaultIncludes
+                $filters,
+                null,
+                $this->entityCacheDefaultIncludes
             );
         };
 
@@ -82,30 +139,81 @@ LockingCacheAwareInterface
     }
 
     /**
+     * A cache key prefix based on the lass instance, default includes
+     * and tracking identifiers
+     *
+     * @return string
+     */
+    protected function getCacheKeyPrefix()
+    {
+        $trackingAndDefaultIncludes = '4df4545ece_incl:' . strtolower(
+                implode('|', $this->entityCacheDefaultIncludes) . ';trck:' .
+                implode('|', $this->entityCacheTrackedIdentifiers) . ';'
+        );
+        return get_called_class() . '::' . $trackingAndDefaultIncludes;
+    }
+
+    /**
+     * Generates a cache key for identifiers tracked for this cache
+     *
+     * @param  string $identifier
+     * @param  string $identifierValue
+     *
+     * @return string
+     */
+    protected function getIdentifierCacheKeyForEntityIds($identifier, $identifierValue)
+    {
+        return $this->getCacheKeyPrefix() . '_ids_by_' . $identifier . '_' . $identifierValue;
+    }
+
+    /**
+     * Generates a cache key for a given entity id
+     *
+     * @param  string $id
+     *
+     * @return string
+     */
+    protected function getEntityCacheKey($id)
+    {
+        return $this->getCacheKeyPrefix() . "_entity_{$id}";
+    }
+
+    /**
      * Fetch a collection of entities by a list of identifiers with the
      * given identifier type.
      *
      * @param string $identifier
      * @param array  $identifiers
-     * 
-     * @return \ArrayIterator
+     *
+     * @return array<\ArrayIterator> like:
+     * array(
+     *     '12345' => <Entity>,
+     *     '23456' => <EntityCollection>,
+     * ),
      */
     public function fetchEntityCollectionBy(
         $identifier,
         array $identifiers
     ) {
+        if (!in_array($identifier, $this->entityCacheTrackedIdentifiers)) {
+            throw new \Exception(
+                'To use cached entities with differend identifiers ' .
+                'the identifier "' . $identifier . '" key must ' .
+                'be added to the tracked identifiers array!'
+            );
+        }
         $ids                 = array();
         $notFoundIdentifiers = array();
-        $keyPrefix           = get_called_class() .
-                               '_ids_by_' . $identifier . '_';
-
         if ($this->entityCacheEnabled && $identifier !== 'id') {
             $keys = array();
             $reverseKeys = array();
             foreach ($identifiers as $identifierValue) {
-                $keys[$identifierValue] = "{$keyPrefix}{$identifierValue}";
-                $reverseKeys["{$keyPrefix}{$identifierValue}"]
-                                        = $identifierValue;
+                $keys[$identifierValue] = $this
+                ->getIdentifierCacheKeyForEntityIds(
+                    $identifier,
+                    $identifierValue
+                );
+                $reverseKeys[$keys[$identifierValue]] = $identifierValue;
             }
             $results = $this->getLockingCache()->getMultiple($keys);
             foreach ($results as $key => $result) {
@@ -124,11 +232,19 @@ LockingCacheAwareInterface
         }
 
         if (!empty($notFoundIdentifiers)) {
+            $filters = array(
+                new Predicate\In($identifier, $notFoundIdentifiers)
+            );
+
+            if (!empty($this->entityCacheDefaultFilters)) {
+                $filters = ArrayUtils::mergeDistinct(
+                    $filters,
+                    $this->entityCacheDefaultFilters
+                );
+            }
             $results = $this->search(
                 null,
-                array(
-                    new Predicate\In($identifier, $notFoundIdentifiers)
-                ),
+                $filters,
                 null,
                 null,
                 null,
@@ -139,15 +255,11 @@ LockingCacheAwareInterface
             $toCache = array();
             foreach ($results as $result) {
                 if ($this->entityCacheEnabled) {
-                    $key = "{$keyPrefix}{$result[$identifier]}";
-                    if (isset($toCache[$key])) {
-                        $toCache[$key] = array(
-                            $toCache[$key],
-                            $result['id'],
-                        );
-                    } else {
-                        $toCache[$key] = $result['id'];
-                    }
+                    $key = $this->getIdentifierCacheKeyForEntityIds(
+                        $identifier,
+                        $result[$identifier]
+                    );
+                    $toCache[$key][]  = $result['id'];
                 }
                 $ids[] = $result['id'];
             }
@@ -166,23 +278,18 @@ LockingCacheAwareInterface
             }
         }
 
-        $transform = function ($letters) {
-            return strtoupper($letters[1]);
-        };
-        $getIdentifier = preg_replace_callback(
-            '/_([a-z])/',
-            $transform,
-            "get_{$identifier}"
-        );
-
-        $return = array();
+        $getIdentifier = StringUtils::underscoreToCamelCase("get_{$identifier}");
+        $return        = array();
 
         $entities = $this->fetchEntityCollectionByIds($ids);
         foreach ($entities as $entity) {
             $identifierValue = $entity->$getIdentifier();
             if (!isset($return[$identifierValue])) {
                 $return[$identifierValue] = $entity;
-            } elseif (is_array($return[$identifierValue])) {
+            } elseif (
+                is_array($return[$identifierValue]) ||
+                $return[$identifierValue] instanceof \ArrayIterator
+            ) {
                 $return[$identifierValue][] = $entity;
             } else {
                 $return[$identifierValue] = new \ArrayIterator(
@@ -193,7 +300,6 @@ LockingCacheAwareInterface
                 );
             }
         }
-
         return $return;
     }
 
@@ -211,12 +317,11 @@ LockingCacheAwareInterface
         $notFoundIds = array();
 
         if ($this->entityCacheEnabled) {
-            $keyPrefix = get_called_class() . '_entity_';
             $keys        = array();
             $reverseKeys = array();
             foreach ($ids as $id) {
-                $keys[$id] = "{$keyPrefix}{$id}";
-                $reverseKeys["{$keyPrefix}{$id}"] = $id;
+                $keys[$id] = $this->getEntityCacheKey($id);
+                $reverseKeys[$keys[$id]] = $id;
             }
             $results = $this->getLockingCache()->getMultiple($keys);
             foreach ($results as $key => $result) {
@@ -232,21 +337,30 @@ LockingCacheAwareInterface
         }
 
         if (!empty($notFoundIds)) {
+            $filters = array(
+                new Predicate\In('id', $notFoundIds)
+            );
+
+            if (!empty($this->entityCacheDefaultFilters)) {
+                $filters = ArrayUtils::mergeDistinct(
+                    $filters,
+                    $this->entityCacheDefaultFilters
+                );
+            }
+
             $entities = $this->search(
                 array(
                     'begin' => 0,
                     'end'   => sizeof($notFoundIds)
                 ),
-                array(
-                    new Predicate\In('id', $notFoundIds)
-                ),
+                $filters,
                 null,
                 null,
                 $this->entityCacheDefaultIncludes
             );
             foreach ($entities as $entity) {
                 if ($this->entityCacheEnabled) {
-                    $key = "{$keyPrefix}{$entity->getId()}";
+                    $key = $this->getEntityCacheKey($entity->getId());
                     if ($this->getLockingCache()->getLock($key)) {
                         $this->getLockingCache()->set(
                             $key,
@@ -262,6 +376,47 @@ LockingCacheAwareInterface
         return new \ArrayIterator($list);
     }
 
+    protected function attachToEntitySaved()
+    {
+        $this->getEventManager()->attach(
+            get_called_class() . '::entity_saved',
+            function(\Zend\EventManager\Event $event) {
+                $entity   = $event->getParam('entity');
+                $inserted = $event->getParam('inserted');
+                if (
+                    $this->entityCacheEnabled &&
+                    $inserted &&
+                    !empty($this->entityCacheTrackedIdentifiers)
+                ) {
+                    // Track new id's to known identifiers
+                    foreach (
+                        $this->entityCacheTrackedIdentifiers as $trackedIdentifier
+                    ) {
+                        $get = StringUtils::underscoreToCamelCase(
+                            "get_{$trackedIdentifier}"
+                        );
+                        $value = $entity->$get();
+                        if (null !== $value) {
+                            $key = $this->getIdentifierCacheKeyForEntityIds(
+                                $trackedIdentifier,
+                                $value
+                            );
+                            $trackedIds = $this->getLockingCache()->get($key);
+                            if (
+                                is_array($trackedIds) &&
+                                $this->getLockingCache()->getLock($key)
+                            ) {
+                                $trackedIds[] = $entity->getId();
+                                $this->getLockingCache()->set($key, $trackedIds);
+                                $this->getLockingCache()->releaseLock($key);
+                            }
+                        }
+                    }
+                }
+            }
+        );
+    }
+
     /**
      * When entity caching has been enabled on the mapper all
      * items will be stored within cache and saved to cache when modified.
@@ -274,8 +429,9 @@ LockingCacheAwareInterface
         array $parentRelationInfo = null,
               $useTransaction     = true
     ) {
-        if ($this->entityCacheEnabled) {
-            $key = get_called_class() . "_entity_{$entity->getId()}";
+        $insert = (null === $entity->getId());
+        if ($this->entityCacheEnabled && null !== $entity->getId()) {
+            $key = $this->getEntityCacheKey($entity->getId());
             if (isset($this->entityCacheObjectStorage[$key])) {
                 $original = unserialize($this->entityCacheObjectStorage[$key]);
                 $this->setChangesCommitted($original);
@@ -292,14 +448,33 @@ LockingCacheAwareInterface
         if (
             false !== $result &&
             $this->entityCacheEnabled &&
-            $this->getLockingCache()->getLock($key)
+            null !== $entity->getId()
         ) {
-            $this->getLockingCache()->set(
-                $key,
-                $entity,
-                $this->entityCacheTtl
-            );
-            $this->getLockingCache()->releaseLock($key);
+            $key = $this->getEntityCacheKey($entity->getId());
+            $inComplete = false;
+            foreach ($this->entityCacheDefaultIncludes as $defaultInclude) {
+                $getInclude = StringUtils::underscoreToCamelCase("get_{$defaultInclude}");
+                if (null === $entity->$getInclude()) {
+                    $inComplete = true;
+                }
+            }
+            if (!$inComplete && $this->getLockingCache()->getLock($key)) {
+                $this->getLockingCache()->set(
+                    $key,
+                    $entity,
+                    $this->entityCacheTtl
+                );
+                $this->getLockingCache()->releaseLock($key);
+                $this->entityCacheObjectStorage[$key] = serialize($entity);
+            }
+            if ($inComplete && $this->getLockingCache()->getLock($key)) {
+                // We must check and unset previous data from cache..
+                $this->getLockingCache()->del($key);
+                if (isset($this->entityCacheObjectStorage[$key])) {
+                    unset($this->entityCacheObjectStorage[$key]);
+                }
+                $this->getLockingCache()->releaseLock($key, true);
+            }
         }
         return $result;
     }
