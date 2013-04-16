@@ -68,14 +68,14 @@ LockingCacheAwareInterface
     public function fetchEntityBy($identifier, $id)
     {
         $result = $this->fetchEntityCollectionBy($identifier, array($id));
-        if (isset($result[$id])) {
-            if ($result[$id] instanceof \ArrayIterator) {
+        if (isset($result[$id]) && $result[$id] instanceof \ArrayIterator) {
+            if ($result[$id]->count() > 1) {
                 throw new Exception\LogicException(
                     'FetchEntityBy expects only one result to be found!, ' .
                     'a collection was found!'
                 );
             }
-            return $result[$id];
+            return $result[$id][0];
         }
         return false;
     }
@@ -203,7 +203,7 @@ LockingCacheAwareInterface
      *
      * @return array<\ArrayIterator> like:
      * array(
-     *     '12345' => <Entity>,
+     *     '12345' => <EntityCollection>,
      *     '23456' => <EntityCollection>,
      * ),
      */
@@ -301,20 +301,23 @@ LockingCacheAwareInterface
         foreach ($entities as $entity) {
             $identifierValue = $entity->$getIdentifier();
             if (!isset($return[$identifierValue])) {
+                $return[$identifierValue] = new \ArrayIterator();
+            }
+            /*if (!isset($return[$identifierValue])) {
                 $return[$identifierValue] = $entity;
             } elseif (
                 is_array($return[$identifierValue]) ||
                 $return[$identifierValue] instanceof \ArrayIterator
-            ) {
+            ) {*/
                 $return[$identifierValue][] = $entity;
-            } else {
+            /*} else {
                 $return[$identifierValue] = new \ArrayIterator(
                     array(
                         $return[$identifierValue],
                         $entity
                     )
                 );
-            }
+            }*/
         }
         return $return;
     }
