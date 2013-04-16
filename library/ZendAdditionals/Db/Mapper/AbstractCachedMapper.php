@@ -146,11 +146,27 @@ LockingCacheAwareInterface
      */
     protected function getCacheKeyPrefix()
     {
-        $trackingAndDefaultIncludes = '4df4545ece_incl:' . strtolower(
-                implode('|', $this->entityCacheDefaultIncludes) . ';trck:' .
-                implode('|', $this->entityCacheTrackedIdentifiers) . ';'
-        );
-        return get_called_class() . '::' . $trackingAndDefaultIncludes;
+        $defaultFilterKeys = array_keys($this->entityCacheDefaultFilters);
+        $cacheIdentificationKey = get_called_class() . '::';
+        if (!empty($this->entityCacheDefaultIncludes)) {
+            $cacheIdentificationKey .= 'include:' . strtolower(
+                implode('|', $this->entityCacheDefaultIncludes)
+            ) . ';';
+        }
+        if (!empty($this->entityCacheTrackedIdentifiers)) {
+            $cacheIdentificationKey .= 'track:' . strtolower(
+                implode('|', $this->entityCacheTrackedIdentifiers)
+            ) . ';';
+        }
+        if (!empty($defaultFilterKeys)) {
+            $cacheIdentificationKey .= 'filter:' . strtolower(
+                implode('|', $defaultFilterKeys)
+            ) . ';';
+        }
+        $crc = crc32($cacheIdentificationKey);
+        // Convert to unsigned integer string
+        sscanf($crc, "%u", $crc);
+        return $crc;
     }
 
     /**
@@ -313,7 +329,7 @@ LockingCacheAwareInterface
      */
     public function fetchEntityCollectionByIds(array $ids)
     {
-        $list = array_flip($ids);
+        $list        = array();
         $notFoundIds = array();
 
         if ($this->entityCacheEnabled) {
@@ -413,6 +429,93 @@ LockingCacheAwareInterface
                         }
                     }
                 }
+
+                if (
+                    $this->entityCacheEnabled &&
+                    null !== $entity->getId()
+                ) {
+                    $key = $this->getEntityCacheKey($entity->getId());
+                    // We always want to store into cache, this can become
+                    // false depending on the following checks..
+                    $storeIntoCache = true;
+                    if (
+                        !isset($this->entityCacheObjectStorage[$key]) &&
+                        !empty($this->entityCacheDefaultFilters)
+                    ) {
+                        /**
+                         * Don't store because we did not load this entity
+                         * yet using the entity cache.. we don't know if this
+                         * entity matches our default entity cache filters
+                         */
+                        $storeIntoCache = false;
+                    } elseif (
+                        isset($this->entityCacheObjectStorage[$key]) &&
+                        !empty($this->entityCacheDefaultFilters)
+                    ) {
+                        /**
+                         * We need to verify if any of the default filtered
+                         * columns has been modified in comparison with the
+                         * data already available within cache. If so the
+                         * entity must be removed from cache for the filters
+                         * to re-validate the entity.
+                         */
+                        $original          = unserialize(
+                            $this->entityCacheObjectStorage[$key]
+                        );
+                        $defaultFilterKeys = array_keys(
+                            $this->entityCacheDefaultFilters
+                        );
+                        foreach ($defaultFilterKeys as $filterKey) {
+                            $methodGet = StringUtils::underscoreToCamelCase(
+                                "get_{$filterKey}"
+                            );
+                            if ($original->$methodGet() !== $entity->$methodGet()) {
+                                $storeIntoCache = false;
+                            }
+                        }
+                    }
+                    /**
+                     * When default entity includes have been configured
+                     * the entity should only be stored within cache when all of
+                     * these includes have been set. Normally when loading through
+                     * cache this is always the case, however when new entities
+                     * get added this is not always true.
+                     */
+                    foreach ($this->entityCacheDefaultIncludes as $defaultInclude) {
+                        $getInclude = StringUtils::underscoreToCamelCase(
+                            "get_{$defaultInclude}"
+                        );
+                        if (null === $entity->$getInclude()) {
+                            $storeIntoCache = false;
+                        }
+                    }
+                    if (
+                        $storeIntoCache &&
+                        $this->getLockingCache()->getLock($key)
+                    ) {
+                        $this->getLockingCache()->set(
+                            $key,
+                            $entity,
+                            $this->entityCacheTtl
+                        );
+                        $this->getLockingCache()->releaseLock($key);
+                        $this->entityCacheObjectStorage[$key] = serialize($entity);
+                    }
+
+                    if (
+                        false === $storeIntoCache &&
+                        $this->getLockingCache()->getLock($key)
+                    ) {
+                        // We must check and unset previous data from cache..
+                        $var = $this->getLockingCache()->get($key);
+                        $this->getLockingCache()->del($key);
+                        $var = $this->getLockingCache()->get($key);
+                        if (isset($this->entityCacheObjectStorage[$key])) {
+                            unset($this->entityCacheObjectStorage[$key]);
+                        }
+                        $this->getLockingCache()->releaseLock($key, true);
+                    }
+                }
             }
         );
     }
@@ -439,43 +542,11 @@ LockingCacheAwareInterface
                 $entity = &$original;
             }
         }
-        $result = parent::save(
+        return parent::save(
             $entity,
             $tablePrefix,
             $parentRelationInfo,
             $useTransaction
         );
-        if (
-            false !== $result &&
-            $this->entityCacheEnabled &&
-            null !== $entity->getId()
-        ) {
-            $key = $this->getEntityCacheKey($entity->getId());
-            $inComplete = false;
-            foreach ($this->entityCacheDefaultIncludes as $defaultInclude) {
-                $getInclude = StringUtils::underscoreToCamelCase("get_{$defaultInclude}");
-                if (null === $entity->$getInclude()) {
-                    $inComplete = true;
-                }
-            }
-            if (!$inComplete && $this->getLockingCache()->getLock($key)) {
-                $this->getLockingCache()->set(
-                    $key,
-                    $entity,
-                    $this->entityCacheTtl
-                );
-                $this->getLockingCache()->releaseLock($key);
-                $this->entityCacheObjectStorage[$key] = serialize($entity);
-            }
-            if ($inComplete && $this->getLockingCache()->getLock($key)) {
-                // We must check and unset previous data from cache..
-                $this->getLockingCache()->del($key);
-                if (isset($this->entityCacheObjectStorage[$key])) {
-                    unset($this->entityCacheObjectStorage[$key]);
-                }
-                $this->getLockingCache()->releaseLock($key, true);
-            }
-        }
-        return $result;
     }
 }
