@@ -303,21 +303,7 @@ LockingCacheAwareInterface
             if (!isset($return[$identifierValue])) {
                 $return[$identifierValue] = new \ArrayIterator();
             }
-            /*if (!isset($return[$identifierValue])) {
-                $return[$identifierValue] = $entity;
-            } elseif (
-                is_array($return[$identifierValue]) ||
-                $return[$identifierValue] instanceof \ArrayIterator
-            ) {*/
-                $return[$identifierValue][] = $entity;
-            /*} else {
-                $return[$identifierValue] = new \ArrayIterator(
-                    array(
-                        $return[$identifierValue],
-                        $entity
-                    )
-                );
-            }*/
+            $return[$identifierValue][] = $entity;
         }
         return $return;
     }
