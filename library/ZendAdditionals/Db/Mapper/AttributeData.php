@@ -182,6 +182,11 @@ class AttributeData extends AbstractMapper
             if ($attribute->isRequired() && empty($value)) {
                 throw new \Exception('au2');
             }
+
+            if ($attribute->isModerationRequired()) {
+                $entity->setValueTmp($value);
+                $entity->setValue(null);
+            }
         }
     }
 
