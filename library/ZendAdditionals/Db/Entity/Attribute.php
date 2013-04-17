@@ -123,7 +123,7 @@ class Attribute
      * @param boolean $required
      * @return Attribute
      */
-    public function setRequired($required)
+    public function setIsRequired($required)
     {
         $this->required = $required;
 
@@ -133,7 +133,7 @@ class Attribute
     /**
      * @return boolean
      */
-    public function getRequired()
+    public function isRequired()
     {
         return $this->required;
     }
@@ -142,7 +142,7 @@ class Attribute
      * @param boolean $moderationRequired
      * @return Attribute
      */
-    public function setModerationRequired($moderationRequired)
+    public function setIsModerationRequired($moderationRequired)
     {
         $this->moderationRequired = $moderationRequired;
 
@@ -152,7 +152,7 @@ class Attribute
     /**
      * @return boolean
      */
-    public function getModerationRequired()
+    public function isModerationRequired()
     {
         return $this->moderationRequired;
     }
