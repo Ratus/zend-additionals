@@ -8,6 +8,8 @@ use ZendAdditionals\Stdlib\ObjectUtils;
 use ZendAdditionals\Db\Mapper\Exception;
 use ZendAdditionals\Stdlib\StringUtils;
 use ZendAdditionals\Stdlib\ArrayUtils;
+use Zend\EventManager\Event;
+use Zend\Stdlib\ErrorHandler;
 
 abstract class AbstractCachedMapper extends AbstractMapper implements
 LockingCacheAwareInterface
@@ -394,12 +396,14 @@ LockingCacheAwareInterface
     {
         $this->getEventManager()->attach(
             get_called_class() . '::entity_pre_save',
-            function(\Zend\EventManager\Event $event) {
+            function(Event $event) {
                 $entity = $event->getParam('entity');
                 if ($this->entityCacheEnabled && null !== $entity->getId()) {
                     $key = $this->getEntityCacheKey($entity->getId());
                     if (isset($this->entityCacheObjectStorage[$key])) {
+                        ErrorHandler::start();
                         $original = unserialize($this->entityCacheObjectStorage[$key]);
+                        ErrorHandler::stop(true);
                         $this->setChangesCommitted($original);
                         ObjectUtils::transferData($entity, $original);
                         return $original;
@@ -417,7 +421,7 @@ LockingCacheAwareInterface
     {
         $this->getEventManager()->attach(
             get_called_class() . '::entity_saved',
-            function(\Zend\EventManager\Event $event) {
+            function(Event $event) {
                 $entity   = $event->getParam('entity');
                 $inserted = $event->getParam('inserted');
                 if (
@@ -486,9 +490,11 @@ LockingCacheAwareInterface
                          * entity must be removed from cache for the filters
                          * to re-validate the entity.
                          */
+                        ErrorHandler::start();
                         $original          = unserialize(
                             $this->entityCacheObjectStorage[$key]
                         );
+                        ErrorHandler::stop(true);
                         $defaultFilterKeys = array_keys(
                             $this->entityCacheDefaultFilters
                         );
