@@ -8,6 +8,8 @@ use ZendAdditionals\Stdlib\ObjectUtils;
 use ZendAdditionals\Db\Mapper\Exception;
 use ZendAdditionals\Stdlib\StringUtils;
 use ZendAdditionals\Stdlib\ArrayUtils;
+use Zend\EventManager\Event;
+use Zend\Stdlib\ErrorHandler;
 
 abstract class AbstractCachedMapper extends AbstractMapper implements
 LockingCacheAwareInterface
@@ -51,9 +53,13 @@ LockingCacheAwareInterface
      */
     protected $entityCacheDefaultFilters = array();
 
+    /**
+     * {@inheritdoc}
+     */
     public function __construct()
     {
         parent::__construct();
+        $this->attachToEntityPreSave();
         $this->attachToEntitySaved();
     }
 
@@ -381,11 +387,41 @@ LockingCacheAwareInterface
         return new \ArrayIterator($list);
     }
 
+    /**
+     * Attach to the entity_pre_save event triggered from the AbstractMapper
+     * Here we have to check with the instance cache to make the AbstractMapper
+     * aware of already committed changes
+     */
+    protected function attachToEntityPreSave()
+    {
+        $this->getEventManager()->attach(
+            get_called_class() . '::entity_pre_save',
+            function(Event $event) {
+                $entity = $event->getParam('entity');
+                if ($this->entityCacheEnabled && null !== $entity->getId()) {
+                    $key = $this->getEntityCacheKey($entity->getId());
+                    if (isset($this->entityCacheObjectStorage[$key])) {
+                        ErrorHandler::start();
+                        $original = unserialize($this->entityCacheObjectStorage[$key]);
+                        ErrorHandler::stop(true);
+                        $this->setChangesCommitted($original);
+                        ObjectUtils::transferData($entity, $original);
+                        return $original;
+                    }
+                }
+            }
+        );
+    }
+
+    /**
+     * Attach to the entity_saved event triggered from the AbstractMapper
+     * Here we can decide if and how to cache the specific entity
+     */
     protected function attachToEntitySaved()
     {
         $this->getEventManager()->attach(
             get_called_class() . '::entity_saved',
-            function(\Zend\EventManager\Event $event) {
+            function(Event $event) {
                 $entity   = $event->getParam('entity');
                 $inserted = $event->getParam('inserted');
                 if (
@@ -426,7 +462,13 @@ LockingCacheAwareInterface
                     $key = $this->getEntityCacheKey($entity->getId());
                     // We always want to store into cache, this can become
                     // false depending on the following checks..
-                    $storeIntoCache = true;
+                    $storeIntoCache         = true;
+                    /**
+                     * We do want to add this entity to the instance cache
+                     * if we re-save it within the same request this could
+                     * come in handy.
+                     */
+                    $storeIntoInstanceCache = true;
                     if (
                         !isset($this->entityCacheObjectStorage[$key]) &&
                         !empty($this->entityCacheDefaultFilters)
@@ -448,9 +490,11 @@ LockingCacheAwareInterface
                          * entity must be removed from cache for the filters
                          * to re-validate the entity.
                          */
+                        ErrorHandler::start();
                         $original          = unserialize(
                             $this->entityCacheObjectStorage[$key]
                         );
+                        ErrorHandler::stop(true);
                         $defaultFilterKeys = array_keys(
                             $this->entityCacheDefaultFilters
                         );
@@ -488,6 +532,8 @@ LockingCacheAwareInterface
                             $this->entityCacheTtl
                         );
                         $this->getLockingCache()->releaseLock($key);
+                    }
+                    if ($storeIntoInstanceCache) {
                         $this->entityCacheObjectStorage[$key] = serialize($entity);
                     }
 
@@ -499,43 +545,15 @@ LockingCacheAwareInterface
                         $var = $this->getLockingCache()->get($key);
                         $this->getLockingCache()->del($key);
                         $var = $this->getLockingCache()->get($key);
+                        $this->getLockingCache()->releaseLock($key, true);
+                    }
+                    if (false === $storeIntoInstanceCache) {
                         if (isset($this->entityCacheObjectStorage[$key])) {
                             unset($this->entityCacheObjectStorage[$key]);
                         }
-                        $this->getLockingCache()->releaseLock($key, true);
                     }
                 }
             }
-        );
-    }
-
-    /**
-     * When entity caching has been enabled on the mapper all
-     * items will be stored within cache and saved to cache when modified.
-     *
-     * {@inheritDoc}
-     */
-    public function save(
-              $entity,
-              $tablePrefix        = null,
-        array $parentRelationInfo = null,
-              $useTransaction     = true
-    ) {
-        $insert = (null === $entity->getId());
-        if ($this->entityCacheEnabled && null !== $entity->getId()) {
-            $key = $this->getEntityCacheKey($entity->getId());
-            if (isset($this->entityCacheObjectStorage[$key])) {
-                $original = unserialize($this->entityCacheObjectStorage[$key]);
-                $this->setChangesCommitted($original);
-                ObjectUtils::transferData($entity, $original);
-                $entity = &$original;
-            }
-        }
-        return parent::save(
-            $entity,
-            $tablePrefix,
-            $parentRelationInfo,
-            $useTransaction
         );
     }
 }
