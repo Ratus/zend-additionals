@@ -77,6 +77,9 @@ class ObjectUtils extends \Zend\Stdlib\ArrayUtils
         $targetData = $hydrator->extract($target);
         foreach ($sourceData as $key => $value) {
             if (is_object($value)) {
+                if (null === $targetData[$key]) {
+                    $targetData[$key] = new $sourceData[$key];
+                }
                 static::transferData($sourceData[$key], $targetData[$key]);
             } else {
                 $targetData[$key] = $sourceData[$key];
