@@ -94,6 +94,14 @@ class AttributeData extends AbstractMapper
         }
     }
 
+    /**
+     * Checks the attributaData. Sets enumration id's.
+     * Check for string lengths
+     * Check if moderation is required
+     *
+     * @param Event $event
+     * @triggers moderationRequired
+     */
     public function preSaveListener(Event $event)
     {
         $entity             = $event->getParam('entity');
@@ -166,21 +174,21 @@ class AttributeData extends AbstractMapper
             }
 
             if ($propertyFound === false) {
-                throw new \UnexpectedValueException(
+                throw new Exception\UnexpectedValueException(
                     "Property '{$value}' does not exists for attribute '{$attribute->getLabel()}'"
                 );
             }
         } else {
-            // TODO: check datetime
-            // TODO: check int
-            // TODO: improve checks
             if (strlen($value) > $attribute->getLength()) {
-                throw new \Exception(
+                throw new Exception\UnexpectedValueException(
                     'The value: ' . $value . ' is longer then ' . $attribute->getLength()
                 );
             }
+
             if ($attribute->isRequired() && empty($value)) {
-                throw new \Exception('au2');
+                throw new Exception\RuntimeException(
+                    "The attribute is required, but has no value!"
+                );
             }
 
             if ($attribute->isModerationRequired()) {
@@ -190,6 +198,11 @@ class AttributeData extends AbstractMapper
                 } else {
                     $entity->setValueTmp($value);
                     $entity->setValue(null);
+
+                    // Inform other mappers about the moderation required
+                    $this->getEventManager()->trigger('moderationRequired', $this, array(
+                        'entity' => $entity
+                    ));
                 }
             }
         }
