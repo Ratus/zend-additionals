@@ -188,7 +188,7 @@ abstract class AbstractMapper implements
     /**
      * Flag for moderation requirements
      *
-     * @var mixed
+     * @var boolean
      */
     protected static $moderationMode = false;
 
