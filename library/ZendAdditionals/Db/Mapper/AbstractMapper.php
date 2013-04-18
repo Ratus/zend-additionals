@@ -178,23 +178,35 @@ abstract class AbstractMapper implements
      */
     protected static $transactionStarted        = false;
 
-
+    /**
+     * Keeps track if the save is running
+     *
+     * @var boolean
+     */
     protected $saveRunning = false;
 
     /**
-     * Check if this mapper allows filtering be implemented.
+     * Flag for moderation requirements
      *
-     * @return boolean
+     * @var boolean
      */
-    protected function getAllowFilters() {
-        return false;
-    }
+    protected static $moderationMode = false;
 
     public function __construct()
     {
         if (static::$eventManager === null) {
             $this->setEventManager(new EventManager());
         }
+    }
+
+    /**
+     * Check if this mapper allows filtering be implemented.
+     *
+     * @return boolean
+     */
+    protected function getAllowFilters()
+    {
+        return true;
     }
 
     public function getAttributeTablePrefix()
@@ -3166,5 +3178,25 @@ abstract class AbstractMapper implements
             );
         }
         return ($prototype == $entity);
+    }
+
+    /**
+     * Enables the moderation logica
+     *
+     * @return void
+     */
+    public static function enableModerationMode()
+    {
+        self::$moderationMode = true;
+    }
+
+    /**
+     * Disables the moderation logica
+     *
+     * @return void
+     */
+    public static function disableModerationMode()
+    {
+        self::$moderationMode = false;
     }
 }
