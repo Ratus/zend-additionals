@@ -542,10 +542,8 @@ LockingCacheAwareInterface
                         $this->getLockingCache()->getLock($key)
                     ) {
                         // We must check and unset previous data from cache..
-                        $var = $this->getLockingCache()->get($key);
                         $this->getLockingCache()->del($key);
-                        $var = $this->getLockingCache()->get($key);
-                        $this->getLockingCache()->releaseLock($key, true);
+                        $this->getLockingCache()->releaseLock($key);
                     }
                     if (false === $storeIntoInstanceCache) {
                         if (isset($this->entityCacheObjectStorage[$key])) {
