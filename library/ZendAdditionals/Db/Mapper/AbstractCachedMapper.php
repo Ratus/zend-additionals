@@ -232,15 +232,15 @@ LockingCacheAwareInterface
                 $reverseKeys[$keys[$identifierValue]] = $identifierValue;
             }
             $results = $this->getLockingCache()->getMultiple($keys);
-            foreach ($results as $key => $result) {
-                if (false === $result) {
+            foreach ($keys as $key) {
+                if (!isset($results[$key]) || false === $results[$key]) {
                     $notFoundIdentifiers[] = $reverseKeys[$key];
                     continue;
                 }
-                if (is_array($result)) {
-                    $ids = array_merge($ids, $result);
+                if (is_array($results[$key])) {
+                    $ids = array_merge($ids, $results[$key]);
                 } else {
-                    $ids[] = $result;
+                    $ids[] = $results[$key];
                 }
             }
         } else {
@@ -296,8 +296,7 @@ LockingCacheAwareInterface
 
         $getIdentifier = StringUtils::underscoreToCamelCase("get_{$identifier}");
         $return        = array();
-
-        $entities = $this->fetchEntityCollectionByIds($ids);
+        $entities      = $this->fetchEntityCollectionByIds($ids);
         foreach ($entities as $entity) {
             $identifierValue = $entity->$getIdentifier();
             if (!isset($return[$identifierValue])) {
@@ -329,13 +328,14 @@ LockingCacheAwareInterface
                 $reverseKeys[$keys[$id]] = $id;
             }
             $results = $this->getLockingCache()->getMultiple($keys);
-            foreach ($results as $key => $result) {
-                if (false === $result) {
+            foreach ($keys as $key) {
+                if (!isset($results[$key]) || false === $results[$key]) {
                     $notFoundIds[] = $reverseKeys[$key];
                     continue;
                 }
-                $list[$result->getId()] = $result;
-                $this->entityCacheObjectStorage[$keys[$result->getId()]] = serialize($result);
+                $list[$results[$key]->getId()] = $results[$key];
+                $this->entityCacheObjectStorage[$keys[$results[$key]->getId()]]
+                    = serialize($results[$key]);
             }
         } else {
             $notFoundIds = $ids;
