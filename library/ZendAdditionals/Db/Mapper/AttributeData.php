@@ -185,7 +185,7 @@ class AttributeData extends AbstractMapper
 
             if ($attribute->isModerationRequired()) {
                 if (self::$moderationMode) {
-                    $entity->setValueTmp();
+                    $entity->setValueTmp(null);
                     $entity->setValue($value);
                 } else {
                     $entity->setValueTmp($value);
