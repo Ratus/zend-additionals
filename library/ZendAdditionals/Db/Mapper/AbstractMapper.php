@@ -2461,31 +2461,26 @@ abstract class AbstractMapper implements
             if ($transactionStarted === true) {
                 $this->commit();
             }
-        } catch (\Zend\Db\Exception\ExceptionInterface $e) {
-            $error = new Entity\Error();
-            $error->setCode($e->getCode());
-            $error->setMessage($e->getMessage());
-
-            // set error
-            $this->lastErrors->append($error);
-
-            // Log every error that has been occured
-            while ($e = $e->getPrevious()) {
-                $error = new Entity\Error();
-                $error->setCode($e->getCode());
-                $error->setMessage($e->getMessage());
-
-                // set error
-                $this->lastErrors->append($error);
-            }
-
+        } catch (\Zend\Db\Exception\ExceptionInterface $exception) {
             // Only rollback when transaction has been triggered by us
             if ($transactionStarted) {
                 $this->rollback();
             }
-
-            // Return false
-            return false;
+            throw new Exception\SaveFailedException(
+                'Mapper ' . get_called_class() . ' could not store entity: ' . get_class($entity),
+                0,
+                $exception
+            );
+        } catch (Exception\SaveFailedException $exception) {
+            // Only rollback when transaction has been triggered by us
+            if ($transactionStarted) {
+                $this->rollback();
+            }
+            throw new Exception\SaveFailedException(
+                'Mapper ' . get_called_class() . ' could not store entity: ' . get_class($entity),
+                0,
+                $exception
+            );
         }
 
         // Post save event for hydration purposes
