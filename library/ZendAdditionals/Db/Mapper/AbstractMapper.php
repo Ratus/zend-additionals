@@ -584,13 +584,13 @@ abstract class AbstractMapper implements
             );
 
             if (!is_array($result)) {
-                throw new \UnexpectedValueException(
+                throw new Exception\UnexpectedValueException(
                     'Did not expect anything else then array!'
                 );
             }
 
             if (sizeof($result) > 1) {
-                throw new \UnexpectedValueException(
+                throw new Exception\UnexpectedValueException(
                     'More then one result found based on current filter!'
                 );
             }
@@ -1410,19 +1410,29 @@ abstract class AbstractMapper implements
      * @param string $entityIdentifier
      *
      * @return array
+     *
+     * @throws Exception\UnexpectedValueException
      */
     public function getRelation($mapperServiceName, $entityIdentifier)
     {
         $this->initializeRelations();
 
         if (!isset($this->relationsByServiceName[$mapperServiceName][$entityIdentifier])) {
-            throw new \UnexpectedValueException(
+            throw new Exception\UnexpectedValueException(
                 'Dit not expect the requested relation not to exist.'
             );
         }
         return $this->relationsByServiceName[$mapperServiceName][$entityIdentifier];
     }
 
+    /**
+     * Generates the attribute relations
+     *
+     * @param  string $label
+     * @return void
+     *
+     * @throws Exception\UnexpectedValueException
+     */
     protected function generateAttributeRelation($label)
     {
         if (
@@ -1434,31 +1444,27 @@ abstract class AbstractMapper implements
                 )
             ) === false
         ) {
-            throw new \UnexpectedValueException(
+            throw new Exception\UnexpectedValueException(
                 'There is no attribute relation defined for label "' .
                 $label . '"!'
             );
         }
-
         $property = is_numeric($key) ? $label : $key;
-
         if (isset($this->relations[$property])) {
             return;
         }
-
         if (!isset($this->attributeRelations['table_prefix'])) {
-            throw new \UnexpectedValueException(
+            throw new Exception\UnexpectedValueException(
                 'There is no attribute table prefix defined for label "' .
                 $label . '"!'
             );
         }
         if (!isset($this->attributeRelations['relation_column'])) {
-            throw new \UnexpectedValueException(
+            throw new Exception\UnexpectedValueException(
                 'There is no attribute relation column defined for label "' .
                 $label . '"!'
             );
         }
-
         $this->relations[$property] = array(
             'mapper_service_name'  => AttributeData::SERVICE_NAME,
             'required'             => false,
@@ -1489,6 +1495,8 @@ abstract class AbstractMapper implements
     /**
      * Performs some basic initialization setup and checks before
      * running a query
+     *
+     * @throws Exception\InitializeFailedException
      */
     protected function initialize()
     {
@@ -1497,7 +1505,9 @@ abstract class AbstractMapper implements
         }
 
         if (!$this->dbAdapter instanceof Adapter) {
-            throw new \Exception('No db adapter present for ' . get_class($this));
+            throw new Exception\InitializeFailedException(
+                'No db adapter present for ' . get_class($this)
+            );
         }
 
         if (!$this->hydrator instanceof HydratorInterface) {
@@ -1505,7 +1515,9 @@ abstract class AbstractMapper implements
         }
 
         if (!is_object($this->entityPrototype)) {
-            throw new \Exception('No entity prototype set');
+            throw new Exception\InitializeFailedException(
+                'No entity prototype set'
+            );
         }
 
         $this->initializeRelations();
@@ -1751,7 +1763,8 @@ abstract class AbstractMapper implements
      *
      * @return EntityAssociation
      *
-     * @throws \UnexpectedValueException
+     * @throws Exception\UnexpectedValueException
+     * @throws Exception\RunTimeException
      */
     protected function addJoin(
         Select $select,
@@ -1769,7 +1782,7 @@ abstract class AbstractMapper implements
 
         // Check if the relation information has been defined
         if (!isset($mapper->relations[$entityIdentifier])) {
-            throw new \UnexpectedValueException(
+            throw new Exception\UnexpectedValueException(
                 'The given associated entity identifier "' .
                 $entityIdentifier . '" is not defined in the relations of ' . get_class($this) . '!'
             );
@@ -1816,7 +1829,7 @@ abstract class AbstractMapper implements
             !isset($relation['reference']) &&
             !isset($relation['back_reference'])
         ) {
-            throw new \UnexpectedValueException(
+            throw new Exception\UnexpectedValueException(
                 'When using joins either reference or back reference must be present!'
             );
         }
@@ -1838,7 +1851,7 @@ abstract class AbstractMapper implements
 
         if (isset($relation['extra_conditions'])) {
             if (!is_array($relation['extra_conditions'])) {
-                throw new \UnexpectedValueException(
+                throw new Exception\UnexpectedValueException(
                     'extra_conditions should be an array for ' .
                     $entityIdentifier
                 );
@@ -1923,10 +1936,11 @@ abstract class AbstractMapper implements
             }
         } else if ($this->getAllowFilters() === false && !empty($filters)){
             $class = get_class($this);
-
-            throw new \RuntimeException(
-                "You tried to apply filters on a join. But {$class}::getAllowFilters() returned false. ".
-                    "override {$class}::getAllowFilters() and return true to allow filtering on a join"
+            throw new Exception\RuntimeException(
+                "You tried to apply filters on a join. " .
+                "But {$class}::getAllowFilters() returned false. ".
+                "override {$class}::getAllowFilters() and return true " .
+                "to allow filtering on a join."
             );
         }
 
@@ -2053,7 +2067,7 @@ abstract class AbstractMapper implements
      *                                             controls the join
      *
      * @return void
-     * @throws \UnexpectedValueException
+     * @throws Exception\UnexpectedValueException
      */
     protected function addExtraJoin(
         $extraJoin,
@@ -2066,7 +2080,7 @@ abstract class AbstractMapper implements
             $extraJoin
         );
         if (count($diff) > 0) {
-            throw new \UnexpectedValueException(
+            throw new Exception\UnexpectedValueException(
                 'Following keys should be set for extra join: ' .
                 implode(', ', array_keys($diff))
             );
@@ -2103,7 +2117,7 @@ abstract class AbstractMapper implements
                 );
                 break;
             default:
-                throw new \UnexpectedValueException(
+                throw new Exception\UnexpectedValueException(
                     'operand `' . $extraJoin['operand'] . '` not implemented'
                 );
                 break;
@@ -2173,6 +2187,8 @@ abstract class AbstractMapper implements
      * @param mixed $foreignAlias   The alias that will be used if the
      *                              type is foreign
      * @param mixed $myAlias
+     *
+     * @throws Exception\UnexpectedValueException
      */
     protected function normalizeValueTypeForPredicate(
         $extraJoin,
@@ -2184,7 +2200,7 @@ abstract class AbstractMapper implements
             $extraJoin
         );
         if (count($diff) > 0) {
-            throw new \UnexpectedValueException(
+            throw new Exception\UnexpectedValueException(
                 'Following keys should be set for extraJoin: ' .
                 implode(', ', array_keys($diff))
             );
@@ -2212,7 +2228,7 @@ abstract class AbstractMapper implements
                 $type = Predicate\Predicate::TYPE_VALUE;
 
                 if (!is_callable($callback)) {
-                    throw new \UnexpectedValueException(
+                    throw new Exception\UnexpectedValueException(
                         $callback . ' is not callable'
                     );
                 }
@@ -2220,7 +2236,7 @@ abstract class AbstractMapper implements
                 $value = call_user_func_array($callback, $value);
                 break;
             default:
-                throw new \UnexpectedValueException(
+                throw new Exception\UnexpectedValueException(
                     $type . ' extra_condition type is not implemented'
                 );
                 break;
@@ -2387,20 +2403,28 @@ abstract class AbstractMapper implements
         array $parentRelationInfo = null,
         $useTransaction           = true
     ) {
-        if ($this->getTablePrefixRequired() && empty($tablePrefix)) {
-            throw new \UnexpectedValueException(
-                'This mapper requires a table prefix to ' .
-                'be given when calling save.'
-            );
-        }
+        try {
+            if ($this->getTablePrefixRequired() && empty($tablePrefix)) {
+                throw new Exception\UnexpectedValueException(
+                    'This mapper requires a table prefix to ' .
+                    'be given when calling save.'
+                );
+            }
 
-        $this->initialize();
+            $this->initialize();
 
-        if (get_class($entity) !== get_class($this->getEntityPrototype())) {
-            throw new \UnexpectedValueException(
-                'Dit not expect the given entity of type: ' .
-                get_class($entity) . '. The type: ' .
-                get_class($this->getEntityPrototype()) . ' should be given.'
+            if (get_class($entity) !== get_class($this->getEntityPrototype())) {
+                throw new Exception\UnexpectedValueException(
+                    'Dit not expect the given entity of type: ' .
+                    get_class($entity) . '. The type: ' .
+                    get_class($this->getEntityPrototype()) . ' should be given.'
+                );
+            }
+        } catch (\Exception $exception) {
+            throw new Exception\SaveFailedException(
+                'Mapper ' . get_called_class() . ' could not store entity: ' . get_class($entity),
+                0,
+                $exception
             );
         }
 
@@ -2537,7 +2561,7 @@ abstract class AbstractMapper implements
         if (!empty($this->autoGenerated)) {
             $autoGeneratedGet = 'get' . ucfirst($this->autoGenerated);
             if (null !== ($autoGeneratedValue = $entity->$autoGeneratedGet())) {
-                throw new \Exception(
+                throw new Exception\InsertFailedException(
                     'Can not insert data that already ' .
                     'has an auto generated value "' . $autoGeneratedValue . '"!'
                 );
@@ -2894,7 +2918,7 @@ abstract class AbstractMapper implements
             if ($this->isPrimaryKeyChanged($changedData)) {
                 $previousPrimaryData = $this->getPrimaryData($originalData);
                 if (empty($previousPrimaryData)) {
-                    throw new \LogicException(
+                    throw new Exception\UpdateFailedException(
                         'Update called for non existing entity, must be fixed!'
                     );
                 }
@@ -3062,11 +3086,6 @@ abstract class AbstractMapper implements
      */
     public function setHydrator(ObservableStrategyInterface $hydrator)
     {
-        if (!($hydrator instanceof ObservableStrategyInterface)) {
-            throw new \InvalidArgumentException(
-                'Hydrator must implement ObservableStrategyInterface'
-            );
-        }
         $this->hydrator = $hydrator;
         return $this;
     }
@@ -3153,7 +3172,7 @@ abstract class AbstractMapper implements
                     !empty($entityArray[$column]) &&
                     !$this->isSerialized($entityArray[$column])
                 ) {
-                    throw new \InvalidArgumentException(
+                    throw new Exception\InvalidArgumentException(
                         'The data for column: ' . $column . ' must be serialized ' .
                         'prior to storing the entity into the database!'
                     );
@@ -3161,7 +3180,7 @@ abstract class AbstractMapper implements
             }
             return $entityArray;
         }
-        throw new \InvalidArgumentException(
+        throw new Exception\InvalidArgumentException(
             'Entity passed to db mapper should be an array or object.'
         );
     }
@@ -3173,12 +3192,14 @@ abstract class AbstractMapper implements
      * @param object  $entity
      *
      * @return boolean
+     *
+     * @throws Exception\InvalidArgumentException
      */
     public function isEntityEmpty($entity)
     {
         $prototype = $this->getEntityPrototype();
         if (!($entity instanceof $prototype)) {
-            throw new \Exception(
+            throw new Exception\InvalidArgumentException(
                 'Only perform is entity ' . get_class($entity) .
                 ' check on it\'s own mapper ' . get_class($prototype) . '!'
             );

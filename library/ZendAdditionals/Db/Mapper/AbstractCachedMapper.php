@@ -1,18 +1,19 @@
 <?php
 namespace ZendAdditionals\Db\Mapper;
 
+use ArrayIterator;
 use ZendAdditionals\Cache\LockingCacheAwareInterface;
 use ZendAdditionals\Cache\LockingCacheAwareTrait;
-use Zend\Db\Sql\Predicate;
-use ZendAdditionals\Stdlib\ObjectUtils;
 use ZendAdditionals\Db\Mapper\Exception;
-use ZendAdditionals\Stdlib\StringUtils;
 use ZendAdditionals\Stdlib\ArrayUtils;
+use ZendAdditionals\Stdlib\ObjectUtils;
+use ZendAdditionals\Stdlib\StringUtils;
+use Zend\Db\Sql\Predicate;
 use Zend\EventManager\Event;
 use Zend\Stdlib\ErrorHandler;
 
 abstract class AbstractCachedMapper extends AbstractMapper implements
-LockingCacheAwareInterface
+    LockingCacheAwareInterface
 {
     use LockingCacheAwareTrait;
 
@@ -70,13 +71,15 @@ LockingCacheAwareInterface
      *
      * @param  integer $id
      * @return object|false
+     *
+     * @throws Exception\FetchFailedException
      */
     public function fetchEntityBy($identifier, $id)
     {
         $result = $this->fetchEntityCollectionBy($identifier, array($id));
         if (isset($result[$id]) && $result[$id] instanceof \ArrayIterator) {
             if ($result[$id]->count() > 1) {
-                throw new Exception\LogicException(
+                throw new Exception\FetchFailedException(
                     'FetchEntityBy expects only one result to be found!, ' .
                     'a collection was found!'
                 );
@@ -96,11 +99,9 @@ LockingCacheAwareInterface
      */
     public function fetchEntityById($id)
     {
-        $key       = $this->getEntityCacheKey($id);
-        $fromCache = true;
-        $result    = false;
-
-        $filters    = array(
+        $key     = $this->getEntityCacheKey($id);
+        $result  = false;
+        $filters = array(
             'id' => $id,
         );
 
@@ -111,7 +112,7 @@ LockingCacheAwareInterface
             );
         }
 
-        $getCall   = function() use ($id, $key, $filters) {
+        $getCall   = function() use ($id, $filters) {
             return $this->get(
                 $filters,
                 null,
@@ -122,18 +123,16 @@ LockingCacheAwareInterface
         if ($this->entityCacheEnabled) {
             $result = $this->getLockingCache()->get(
                 $key,
-                function() use (&$fromCache, $getCall) {
-                    $fromCache = false;
+                function() use ($getCall) {
                     return $getCall();
                 },
                 $this->entityCacheTtl
             );
         } else {
-            $fromCache = false;
             $result    = $getCall();
         }
 
-        if ($fromCache && false !== $result) {
+        if (false !== $result) {
             /**
              * Store inside entityCacheObjectStorage to be able to commit to
              * proper hydrators later on when changes need to be saved.
@@ -212,13 +211,15 @@ LockingCacheAwareInterface
      *     '12345' => <EntityCollection>,
      *     '23456' => <EntityCollection>,
      * ),
+     *
+     * @throws Exception\FetchFailedException
      */
     public function fetchEntityCollectionBy(
         $identifier,
         array $identifiers
     ) {
         if (!in_array($identifier, $this->entityCacheTrackedIdentifiers)) {
-            throw new \Exception(
+            throw new Exception\FetchFailedException(
                 'To use cached entities with differend identifiers ' .
                 'the identifier "' . $identifier . '" key must ' .
                 'be added to the tracked identifiers array!'
@@ -306,7 +307,7 @@ LockingCacheAwareInterface
         foreach ($entities as $entity) {
             $identifierValue = $entity->$getIdentifier();
             if (!isset($return[$identifierValue])) {
-                $return[$identifierValue] = new \ArrayIterator();
+                $return[$identifierValue] = new ArrayIterator();
             }
             $return[$identifierValue][] = $entity;
         }
@@ -381,10 +382,11 @@ LockingCacheAwareInterface
                         $this->getLockingCache()->releaseLock($key);
                     }
                 }
-                $list[$entity->getId()] = $entity;
+                $this->entityCacheObjectStorage[$key] = serialize($entity);
+                $list[$entity->getId()]               = $entity;
             }
         }
-        return new \ArrayIterator($list);
+        return new ArrayIterator($list);
     }
 
     /**

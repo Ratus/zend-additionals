@@ -1,6 +1,8 @@
 <?php
 namespace ZendAdditionals\Stdlib;
 
+use ArrayAccess;
+use ZendAdditionals\Stdlib\Hydrator\ClassMethods;
 use Zend\Stdlib\Hydrator\AbstractHydrator;
 
 class ObjectUtils extends \Zend\Stdlib\ArrayUtils
@@ -10,13 +12,14 @@ class ObjectUtils extends \Zend\Stdlib\ArrayUtils
      *
      * @param object|array<object> $data
      * @param array                $map provide a prototype callback map like:
-     * @param AbstractHydrator     $hydrator By default ClassMethods will be used
      * array(
      *      array(
      *          'prototype' => new \ZendAdditionals\Db\Entity\AttributeData,
      *          'callable'  => 'getValue',
+     *          'callback'  => \Closure (first parameter is instance of prototype)
      *      ),
      *  ),
+     * @param AbstractHydrator     $hydrator By default ClassMethods will be used
      *
      * @return array
      */
@@ -26,30 +29,40 @@ class ObjectUtils extends \Zend\Stdlib\ArrayUtils
         array $filters = null,
         AbstractHydrator $hydrator = null
     ) {
-        if (is_array($data) || $data instanceof \ArrayAccess) {
+        if (is_array($data) || $data instanceof ArrayAccess) {
             foreach ($data as &$element) {
                 $element = static::toArray($element, $map, $filters, $hydrator);
             }
         }
-        if ($data instanceof \ArrayAccess) {
+        if ($data instanceof ArrayAccess) {
             return (array) $data;
         }
         if (!is_object($data)) {
             return $data;
         }
-        $hydrator = $hydrator ?: new \ZendAdditionals\Stdlib\Hydrator\ClassMethods;
+        $hydrator = $hydrator ?: new ClassMethods;
         $array = $hydrator->extract($data);
         if (null !== $filters) {
             foreach ($filters as $instanceKey => $instanceFilter) {
                 if ($data instanceof $instanceKey) {
-                    $array = array_intersect_key($array, array_flip($instanceFilter));
+                    $array = array_intersect_key(
+                        $array,
+                        array_flip($instanceFilter)
+                    );
                 }
             }
         }
         foreach ($map as $objectMapping) {
             foreach ($array as $key => &$value) {
                 if ($value instanceof $objectMapping['prototype']) {
-                    $value = $value->{$objectMapping['callable']}();
+                    if (isset($objectMapping['callable'])) {
+                        $value = $value->{$objectMapping['callable']}();
+                    } else if (
+                        isset($objectMapping['callback']) &&
+                        is_callable($objectMapping['callback'])
+                    ) {
+                        $value = $objectMapping['callback']($value);
+                    }
                 } elseif (is_object($value)) {
                     $value = static::toArray($value, $map, $filters, $hydrator);
                 }
@@ -67,12 +80,19 @@ class ObjectUtils extends \Zend\Stdlib\ArrayUtils
      * @param AbstractHydrator $hydrator By default ClassMethods will be used
      *
      */
-    public static function transferData($source, $target, AbstractHydrator $hydrator = null)
-    {
-        if (!is_object($source) || !is_object($target) || !($source instanceof $target)) {
+    public static function transferData(
+        $source,
+        $target,
+        AbstractHydrator $hydrator = null
+    ) {
+        if (
+            !is_object($source) ||
+            !is_object($target) ||
+            !($source instanceof $target)
+        ) {
             return false;
         }
-        $hydrator   = $hydrator ?: new \ZendAdditionals\Stdlib\Hydrator\ClassMethods;
+        $hydrator   = $hydrator ?: new ClassMethods;
         $sourceData = $hydrator->extract($source);
         $targetData = $hydrator->extract($target);
         foreach ($sourceData as $key => $value) {
