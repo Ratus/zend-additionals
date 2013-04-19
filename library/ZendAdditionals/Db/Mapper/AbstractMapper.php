@@ -2643,7 +2643,15 @@ abstract class AbstractMapper implements
         $statement = $sql->prepareStatementForSqlObject($delete);
         /*@var $statement \Zend\Db\Adapter\Driver\Pdo\Statement*/
 
-        $result = $statement->execute();
+        try {
+            $result = $statement->execute();
+        } catch (\Zend\Db\Exception\ExceptionInterface $e) {
+            throw new Exception\DeleteFailedException(
+                "Could not delete record with entity: " . var_export($entity, true),
+                0,
+                $e
+            );
+        }
 
 /*      $hydrator->setChangesCommitted($entity);*/
 
@@ -2718,7 +2726,15 @@ abstract class AbstractMapper implements
         /** @var $statement \Zend\Db\Adapter\Driver\Pdo\Statement*/
         $statement = $sql->prepareStatementForSqlObject($delete);
 
-        $result = $statement->execute();
+        try {
+            $result = $statement->execute();
+        } catch (\Zend\Db\Exception\ExceptionInterface $e) {
+            throw new Exception\DeleteFailedException(
+                "Could not delete multiple record",
+                0,
+                $e
+            );
+        }
 
         return $result;
     }
