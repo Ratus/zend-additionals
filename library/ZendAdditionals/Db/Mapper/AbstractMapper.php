@@ -2455,7 +2455,7 @@ abstract class AbstractMapper implements
             !($this instanceof AttributeProperty)
         ) {
             $results = $this->getEventManager()->trigger(
-                get_called_class() . '::entity_pre_save',
+                static::SERVICE_NAME . '::entity_pre_save',
                 $this,
                 array(
                     'entity'   => $entity,
@@ -2525,7 +2525,7 @@ abstract class AbstractMapper implements
             !($this instanceof AttributeProperty)
         ) {
             $this->getEventManager()->trigger(
-                get_called_class() . '::entity_saved',
+                static::SERVICE_NAME . '::entity_saved',
                 $this,
                 array(
                     'entity'   => $entity,
@@ -2533,7 +2533,7 @@ abstract class AbstractMapper implements
                 )
             );
         }
-
+        
         return $result;
     }
 
@@ -2625,8 +2625,6 @@ abstract class AbstractMapper implements
         ObservableStrategyInterface $hydrator = null,
         $tablePrefix = null
     ) {
-        $this->storeRelatedEntities($entity, $tablePrefix);
-
         $this->initialize();
         $tableName = $this->getTableName();
         if (!empty($tablePrefix)) {
@@ -2647,6 +2645,15 @@ abstract class AbstractMapper implements
 
         try {
             $result = $statement->execute();
+            // Entity deleted with success, trigger event
+            // For whole entities we want to trigger the entity specific saves event
+            $this->getEventManager()->trigger(
+                static::SERVICE_NAME . '::entity_deleted',
+                $this,
+                array(
+                    'entity' => $entity,
+                )
+            );
         } catch (\Zend\Db\Exception\ExceptionInterface $e) {
             throw new Exception\DeleteFailedException(
                 "Could not delete record with entity: " . var_export($entity, true),
@@ -2654,9 +2661,6 @@ abstract class AbstractMapper implements
                 $e
             );
         }
-
-/*      $hydrator->setChangesCommitted($entity);*/
-
         return $result;
     }
 
@@ -2681,24 +2685,20 @@ abstract class AbstractMapper implements
         if (empty($entities)) {
             return true;
         }
-
         foreach ($entities as $entity) {
-            $this->storeRelatedEntities($entity, $tablePrefix);
-
-            $primaryData = $this->getPrimaryData($this->entityToArray($entity, $hydrator));
-
+            $primaryData = $this->getPrimaryData(
+                $this->entityToArray($entity, $hydrator)
+            );
             if ($primaryTypeIdentified === false) {
                 $primaryTypeIdentified  = true;
                 $useInQuery = (bool) (count($primaryData) === 1);
             }
-
             // Simple one primary tables can use the IN query
             if ($useInQuery === true) {
                 $value = each($primaryData);
                 $where[$value['key']][] = $value['value'];
                 continue;
             }
-
             // X-coss tables with n-primaries. Use full written wheres
             $predicate = new Predicate\PredicateSet();
             foreach($primaryData as $key => $value) {
@@ -2710,7 +2710,6 @@ abstract class AbstractMapper implements
                     )
                 );
             }
-
             $where[] = $predicate;
         }
 
@@ -2730,6 +2729,17 @@ abstract class AbstractMapper implements
 
         try {
             $result = $statement->execute();
+            // Entity deleted with success, trigger event
+            // For whole entities we want to trigger the entity specific saves event
+            foreach ($entities as $entity) {
+                $this->getEventManager()->trigger(
+                    static::SERVICE_NAME . '::entity_deleted',
+                    $this,
+                    array(
+                        'entity' => $entity,
+                    )
+                );
+            }
         } catch (\Zend\Db\Exception\ExceptionInterface $e) {
             throw new Exception\DeleteFailedException(
                 "Could not delete multiple record",
@@ -3217,6 +3227,8 @@ abstract class AbstractMapper implements
     {
         $prototype = $this->getEntityPrototype();
         if (!($entity instanceof $prototype)) {
+            debug_print_backtrace(0, 2);die();
+            var_dump($entity);die();
             throw new Exception\InvalidArgumentException(
                 'Only perform is entity ' . get_class($entity) .
                 ' check on it\'s own mapper ' . get_class($prototype) . '!'

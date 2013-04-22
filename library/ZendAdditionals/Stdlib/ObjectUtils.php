@@ -81,9 +81,9 @@ class ObjectUtils extends \Zend\Stdlib\ArrayUtils
      *
      */
     public static function transferData(
-        $source,
-        $target,
-        AbstractHydrator $hydrator = null
+                         $source,
+                         $target,
+        AbstractHydrator $hydrator  = null
     ) {
         if (
             !is_object($source) ||
@@ -100,7 +100,11 @@ class ObjectUtils extends \Zend\Stdlib\ArrayUtils
                 if (null === $targetData[$key]) {
                     $targetData[$key] = new $sourceData[$key];
                 }
-                static::transferData($sourceData[$key], $targetData[$key]);
+                static::transferData(
+                    $sourceData[$key],
+                    $targetData[$key],
+                    $hydrator
+                );
             } else {
                 $targetData[$key] = $sourceData[$key];
             }
