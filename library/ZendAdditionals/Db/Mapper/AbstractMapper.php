@@ -746,6 +746,7 @@ abstract class AbstractMapper implements
         $returnEntities      = true,
         $return              = true
     ) {
+        var_dump(get_called_class() . ' CALLED SEARCH');
         // Copy the filter to avoid messing with referenced objects inside
         $filter = $this->copy($filter);
         $limit = 1000;
@@ -1218,37 +1219,7 @@ abstract class AbstractMapper implements
                     $operator->setLeft($key)->setRight($value);
                 }
 
-                $operators = array(
-                    $operator,
-                );
-
-                /**
-                 * We want to set aliases on operators within predicateset's as well..
-                 * for this reason an array of operator objects gets built.
-                 */
-                if ($operator instanceof Predicate\PredicateSet) {
-                    $operatorsArray = $operator->getPredicates();
-                    // array of arrays and every 2nd item is the operator?? well documented ehh..
-                    $operators = array();
-                    foreach ($operatorsArray as $operatorArray) {
-                        $operators[] = $operatorArray[1];
-                    }
-                }
-
-                foreach ($operators as &$item) {
-                    $getIdentifier = 'getLeft';
-                    $setIdentifier = 'setLeft';
-                    if (method_exists($item, 'getIdentifier')) {
-                        $getIdentifier = 'getIdentifier';
-                        $setIdentifier = 'setIdentifier';
-                    }
-                    $currentIdentifier = $item->$getIdentifier();
-                    if (strpos($currentIdentifier, '.') === false) {
-                        $item->$setIdentifier(
-                            $this->getTableName() . '.' . $currentIdentifier
-                        );
-                    }
-                }
+                $this->applyTableAliasToOperator($operator);
 
                 $where->addPredicate($operator);
                 $applyWhereFilter = true;
@@ -1330,6 +1301,37 @@ abstract class AbstractMapper implements
         }
         if ($return) {
             return $returnData;
+        }
+    }
+
+    /**
+     * Apply table alias to operator, operator can be a simple predicate but
+     * can also be a predicate set that contains predicate set's with predicates
+     *
+     * @param mixed $operator
+     */
+    protected function applyTableAliasToOperator($operator)
+    {
+        if ($operator instanceof Predicate\PredicateSet) {
+            $operatorsArray = $operator->getPredicates();
+            // array of arrays and every 2nd item is the operator?? well documented ehh..
+            $operators = array();
+            foreach ($operatorsArray as $operatorArray) {
+                $this->applyTableAliasToOperator($operatorArray[1]);
+            }
+        } else {
+            $getIdentifier = 'getLeft';
+            $setIdentifier = 'setLeft';
+            if (method_exists($operator, 'getIdentifier')) {
+                $getIdentifier = 'getIdentifier';
+                $setIdentifier = 'setIdentifier';
+            }
+            $currentIdentifier = $operator->$getIdentifier();
+            if (strpos($currentIdentifier, '.') === false) {
+                $operator->$setIdentifier(
+                    $this->getTableName() . '.' . $currentIdentifier
+                );
+            }
         }
     }
 

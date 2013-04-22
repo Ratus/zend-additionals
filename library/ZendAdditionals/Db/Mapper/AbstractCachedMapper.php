@@ -90,25 +90,57 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
     }
 
     /**
+     * @param mixed $id
+     * @return array
+     * @throws Exception\LogicException
+     */
+    protected function checkAndConvertEntityId($id)
+    {
+        if (
+            empty($this->primaries) ||
+            empty($this->primaries[0])
+        ) {
+            throw new Exception\LogicException(
+                'No primary identifiers have been configured for mapper: ' .
+                get_called_class()
+            );
+        }
+        if (!is_array($id) && sizeof($this->primaries[0]) > 1) {
+            throw new Exception\LogicException(
+                'Mapper: ' . get_called_class() . ' has configured more then one ' .
+                'column for its primary identifier, the $id provided for fetchEntityById ' .
+                'must match all of these identifier columns!'
+            );
+        }
+        if (!is_array($id)) {
+            foreach ($this->primaries[0] as $identifier) {
+                $id = array($identifier => $id);
+                break;
+            }
+        }
+        return $id;
+    }
+
+    /**
      * Fetch a specific entity by the primary identifier. When entity caching
      * has been enabled on the mapper all items will be stored within cache
      * and saved to cache when modified.
      *
-     * @param  integer $id
+     * @param  mixed $id
      * @return object|false
      */
     public function fetchEntityById($id)
     {
+        $id      = $this->checkAndConvertEntityId($id);
         $key     = $this->getEntityCacheKey($id);
         $result  = false;
-        $filters = array(
-            'id' => $id,
-        );
+        $filters = $id;
 
-        if (!empty($this->entityCacheDefaultFilters)) {
+        $entityCacheDefaultFilters = $this->getEntityCacheDefaultFilters();
+        if (!empty($entityCacheDefaultFilters)) {
             $filters = ArrayUtils::mergeDistinct(
                 $filters,
-                $this->entityCacheDefaultFilters
+                $entityCacheDefaultFilters
             );
         }
 
@@ -151,7 +183,8 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
      */
     protected function getCacheKeyPrefix()
     {
-        $defaultFilterKeys = array_keys($this->entityCacheDefaultFilters);
+        $entityCacheDefaultFilters = $this->getEntityCacheDefaultFilters();
+        $defaultFilterKeys         = array_keys($entityCacheDefaultFilters);
         $cacheIdentificationKey = get_called_class() . '::';
         if (!empty($this->entityCacheDefaultIncludes)) {
             $cacheIdentificationKey .= 'include:' . strtolower(
@@ -190,13 +223,16 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
     /**
      * Generates a cache key for a given entity id
      *
-     * @param  string $id
+     * @param  array $id
      *
      * @return string
      */
     protected function getEntityCacheKey($id)
     {
-        return $this->getCacheKeyPrefix() . "_entity_{$id}";
+        if (!is_array($id)) {
+            debug_print_backtrace(0, 1);die();
+        }
+        return $this->getCacheKeyPrefix() . '_entity_(' . json_encode($id) . ')';
     }
 
     /**
@@ -225,12 +261,19 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
                 'be added to the tracked identifiers array!'
             );
         }
+        $toCache             = array();
         $ids                 = array();
         $notFoundIdentifiers = array();
-        if ($this->entityCacheEnabled && $identifier !== 'id') {
+        if ($this->entityCacheEnabled) {
             $keys = array();
             $reverseKeys = array();
             foreach ($identifiers as $identifierValue) {
+                $cacheKeyForEntityIds = $this->getIdentifierCacheKeyForEntityIds(
+                    $identifier,
+                    $identifierValue
+                );
+                $toCache[$cacheKeyForEntityIds] = array();
+
                 $keys[$identifierValue] = $this
                 ->getIdentifierCacheKeyForEntityIds(
                     $identifier,
@@ -258,33 +301,41 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
             $filters = array(
                 new Predicate\In($identifier, $notFoundIdentifiers)
             );
-
-            if (!empty($this->entityCacheDefaultFilters)) {
+            $entityCacheDefaultFilters = $this->getEntityCacheDefaultFilters();
+            if (!empty($entityCacheDefaultFilters)) {
                 $filters = ArrayUtils::mergeDistinct(
                     $filters,
-                    $this->entityCacheDefaultFilters
+                    $entityCacheDefaultFilters
                 );
             }
+
+            $searchFilter = ArrayUtils::mergeDistinct(
+                $this->primaries[0],
+                array($identifier)
+            );
+
             $results = $this->search(
                 null,
                 $filters,
                 null,
                 null,
                 null,
-                array('id', $identifier),
+                $searchFilter,
                 false
             );
-
-            $toCache = array();
             foreach ($results as $result) {
+                $resultToSet = array();
+                foreach ($this->primaries[0] as $primaryIdentifier) {
+                    $resultToSet[$primaryIdentifier] = $result[$primaryIdentifier];
+                }
                 if ($this->entityCacheEnabled) {
                     $key = $this->getIdentifierCacheKeyForEntityIds(
                         $identifier,
                         $result[$identifier]
                     );
-                    $toCache[$key][]  = $result['id'];
+                    $toCache[$key][]  = $resultToSet;
                 }
-                $ids[] = $result['id'];
+                $ids[] = $resultToSet;
             }
 
             if ($this->entityCacheEnabled && !empty($toCache)) {
@@ -314,6 +365,12 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
         return $return;
     }
 
+    protected function prepareIdString(array $id)
+    {
+        ksort($id);
+        return json_encode($id);
+    }
+
     /**
      * Fetch a list of entities from the database based on a list of primary
      * identifiers. When entity caching has been enabled on the mapper all
@@ -331,8 +388,9 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
             $keys        = array();
             $reverseKeys = array();
             foreach ($ids as $id) {
-                $keys[$id] = $this->getEntityCacheKey($id);
-                $reverseKeys[$keys[$id]] = $id;
+                $idString = $this->prepareIdString($id);
+                $keys[$idString] = $this->getEntityCacheKey($id);
+                $reverseKeys[$keys[$idString]] = $id;
             }
             $results = $this->getLockingCache()->getMultiple($keys);
             foreach ($keys as $key) {
@@ -340,23 +398,46 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
                     $notFoundIds[] = $reverseKeys[$key];
                     continue;
                 }
-                $list[$results[$key]->getId()] = $results[$key];
-                $this->entityCacheObjectStorage[$keys[$results[$key]->getId()]]
+                $id = $this->getIdForEntity($results[$key]);
+                $idString = $this->prepareIdString($id);
+                $list[]   = $results[$key];
+                $this->entityCacheObjectStorage[$keys[$idString]]
                     = serialize($results[$key]);
             }
         } else {
             $notFoundIds = $ids;
         }
 
-        if (!empty($notFoundIds)) {
-            $filters = array(
-                new Predicate\In('id', $notFoundIds)
-            );
 
-            if (!empty($this->entityCacheDefaultFilters)) {
+        if (!empty($notFoundIds)) {
+            $set = new Predicate\PredicateSet();
+            $notFoundIdPredicateSets = array();
+            foreach ($notFoundIds as $notFoundId) {
+                $idFilter = array();
+                foreach ($notFoundId as $key => $value) {
+                    $idFilter[] = new Predicate\Operator(
+                        $key,
+                        Predicate\Operator::OPERATOR_EQUAL_TO,
+                        $value
+                    );
+                }
+                $notFoundIdPredicateSets[] = new Predicate\PredicateSet(
+                    $idFilter,
+                    Predicate\PredicateSet::COMBINED_BY_AND
+                );
+            }
+
+            $filters = array(
+                new Predicate\PredicateSet(
+                    $notFoundIdPredicateSets,
+                    Predicate\PredicateSet::COMBINED_BY_OR
+                )
+            );
+            $entityCacheDefaultFilters = $this->getEntityCacheDefaultFilters();
+            if (!empty($entityCacheDefaultFilters)) {
                 $filters = ArrayUtils::mergeDistinct(
                     $filters,
-                    $this->entityCacheDefaultFilters
+                    $entityCacheDefaultFilters
                 );
             }
 
@@ -370,9 +451,12 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
                 null,
                 $this->entityCacheDefaultIncludes
             );
+
             foreach ($entities as $entity) {
+                $id       = $this->getIdForEntity($entity);
+                $idString = $this->prepareIdString($id);
                 if ($this->entityCacheEnabled) {
-                    $key = $this->getEntityCacheKey($entity->getId());
+                    $key = $this->getEntityCacheKey($id);
                     if ($this->getLockingCache()->getLock($key)) {
                         $this->getLockingCache()->set(
                             $key,
@@ -383,10 +467,39 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
                     }
                 }
                 $this->entityCacheObjectStorage[$key] = serialize($entity);
-                $list[$entity->getId()]               = $entity;
+                $list[]                               = $entity;
             }
         }
         return new ArrayIterator($list);
+    }
+
+    /**
+     * Get the entity cache default filters
+     *
+     * @return array
+     */
+    protected function getEntityCacheDefaultFilters()
+    {
+        return $this->entityCacheDefaultFilters;
+    }
+
+    /**
+     * Gets the array identifier for a given entity based on the configured
+     * primaries.
+     *
+     * @return array|boolean false when id is not complete
+     */
+    public function getIdForEntity($entity)
+    {
+        $id = array();
+        foreach ($this->primaries[0] as $idKey) {
+            $getId = StringUtils::underscoreToCamelCase('get_' . $idKey);
+            $id[$idKey] = $entity->$getId();
+            if (empty($id[$idKey])) {
+                return false;
+            }
+        }
+        return $id;
     }
 
     /**
@@ -400,8 +513,10 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
             get_called_class() . '::entity_pre_save',
             function(Event $event) {
                 $entity = $event->getParam('entity');
-                if ($this->entityCacheEnabled && null !== $entity->getId()) {
-                    $key = $this->getEntityCacheKey($entity->getId());
+                if (
+                    $this->entityCacheEnabled &&
+                    false !== ($id = $this->getIdForEntity($entity))) {
+                    $key = $this->getEntityCacheKey($id);
                     if (isset($this->entityCacheObjectStorage[$key])) {
                         ErrorHandler::start();
                         $original = unserialize($this->entityCacheObjectStorage[$key]);
@@ -449,19 +564,19 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
                                 is_array($trackedIds) &&
                                 $this->getLockingCache()->getLock($key)
                             ) {
-                                $trackedIds[] = $entity->getId();
+                                $trackedIds[] = $this->getIdForEntity($entity);
                                 $this->getLockingCache()->set($key, $trackedIds);
                                 $this->getLockingCache()->releaseLock($key);
                             }
                         }
                     }
                 }
-
+                $entityCacheDefaultFilters = $this->getEntityCacheDefaultFilters();
                 if (
                     $this->entityCacheEnabled &&
-                    null !== $entity->getId()
+                    false !== ($id = $this->getIdForEntity($entity))
                 ) {
-                    $key = $this->getEntityCacheKey($entity->getId());
+                    $key = $this->getEntityCacheKey($id);
                     // We always want to store into cache, this can become
                     // false depending on the following checks..
                     $storeIntoCache         = true;
@@ -473,7 +588,7 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
                     $storeIntoInstanceCache = true;
                     if (
                         !isset($this->entityCacheObjectStorage[$key]) &&
-                        !empty($this->entityCacheDefaultFilters)
+                        !empty($entityCacheDefaultFilters)
                     ) {
                         /**
                          * Don't store because we did not load this entity
@@ -483,7 +598,7 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
                         $storeIntoCache = false;
                     } elseif (
                         isset($this->entityCacheObjectStorage[$key]) &&
-                        !empty($this->entityCacheDefaultFilters)
+                        !empty($entityCacheDefaultFilters)
                     ) {
                         /**
                          * We need to verify if any of the default filtered
@@ -498,7 +613,7 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
                         );
                         ErrorHandler::stop(true);
                         $defaultFilterKeys = array_keys(
-                            $this->entityCacheDefaultFilters
+                            $entityCacheDefaultFilters
                         );
                         foreach ($defaultFilterKeys as $filterKey) {
                             $methodGet = StringUtils::underscoreToCamelCase(
