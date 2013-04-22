@@ -746,7 +746,6 @@ abstract class AbstractMapper implements
         $returnEntities      = true,
         $return              = true
     ) {
-        var_dump(get_called_class() . ' CALLED SEARCH');
         // Copy the filter to avoid messing with referenced objects inside
         $filter = $this->copy($filter);
         $limit = 1000;
