@@ -2396,7 +2396,8 @@ abstract class AbstractMapper implements
      * when there is nothing to update. FALSE on failure. Call getLastErrors() for error
      * information
      *
-     * @throws \Exception
+     * @throws \ZendAdditionals\Db\Mapper\Exception\SaveFailedException
+     * @throws \ZendAdditionals\Db\Mapper\Exception\UnexpectedValueException
      */
     public function save(
         $entity,
