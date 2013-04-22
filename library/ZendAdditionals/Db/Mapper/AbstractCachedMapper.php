@@ -735,15 +735,18 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
     {
         foreach ($this->entityCacheDefaultIncludes as $defaultInclude) {
             if (!isset($this->relations[$defaultInclude])) {
-                throw new \Exception('ugh');
+                throw new Exception\LogicException(
+                    'Cannot attach to a default include when ' .
+                    'this is not a defined relation!'
+                );
             }
             $relationInfo        = $this->relations[$defaultInclude];
             $relationServiceName = $relationInfo['mapper_service_name'];
             $this->getEventManager()->attach(
                 $relationServiceName . '::entity_saved',
                 function(Event $event) use ($relationInfo, $defaultInclude)  {
-                    $entity = $event->getParam('entity');
-                    $id     = null;
+                    $entity     = $event->getParam('entity');
+                    $id         = null;
                     $identifier = null;
                     if (isset($relationInfo['reference'])) {
                         foreach ($relationInfo['reference'] as $identifier => $getId) {

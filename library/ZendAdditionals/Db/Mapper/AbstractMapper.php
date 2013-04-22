@@ -2533,7 +2533,7 @@ abstract class AbstractMapper implements
                 )
             );
         }
-        
+
         return $result;
     }
 
@@ -3227,8 +3227,6 @@ abstract class AbstractMapper implements
     {
         $prototype = $this->getEntityPrototype();
         if (!($entity instanceof $prototype)) {
-            debug_print_backtrace(0, 2);die();
-            var_dump($entity);die();
             throw new Exception\InvalidArgumentException(
                 'Only perform is entity ' . get_class($entity) .
                 ' check on it\'s own mapper ' . get_class($prototype) . '!'
