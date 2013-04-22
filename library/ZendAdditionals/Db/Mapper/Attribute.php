@@ -23,7 +23,7 @@ class Attribute extends AbstractMapper
         ) {
             return;
         }
-        $lockingCache = $this->getServiceManager()->get('ZendAdditionals\Service\LockingCache');
+        $lockingCache = $this->getServiceManager()->get('RtsCache\Default');
         /*@var $lockingCache \ZendAdditionals\Cache\Pattern\LockingCache*/
 
         $class = $this;
