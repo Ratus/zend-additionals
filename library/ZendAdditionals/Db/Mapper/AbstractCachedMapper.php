@@ -229,9 +229,6 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
      */
     protected function getEntityCacheKey($id)
     {
-        if (!is_array($id)) {
-            debug_print_backtrace(0, 1);die();
-        }
         return $this->getCacheKeyPrefix() . '_entity_(' . json_encode($id) . ')';
     }
 
