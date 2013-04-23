@@ -67,16 +67,20 @@ class LockingCache extends AbstractPattern
      *
      * @return mixed The result
      */
-    public function get($key, $callback = null, $ttl = null)
+    public function get($key, $callback = null, $ttl = null, $reload = false)
     {
         $options = $this->getOptions();
         $enabled = $options->getEnabled();
 
         $result = null;
 
-        if ($enabled) {
+        if (!$reload && $enabled) {
             $ttl = $ttl ?: $this->storage->getOptions()->getTtl();
             $result = $this->storage->getItem($key, $success);
+        }
+
+        if ($reload) {
+            $success = false;
         }
 
         $retryCount = 0;
@@ -92,7 +96,7 @@ class LockingCache extends AbstractPattern
                 }
             } else {
                 // Raw data not available in cache
-                if (!$this->isLocked($key)) {
+                if ($reload || !$this->isLocked($key)) {
                     // If the data is not available and not locked, break the retry loop
                     break;
                 }

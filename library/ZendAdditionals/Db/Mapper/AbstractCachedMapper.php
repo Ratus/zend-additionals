@@ -78,14 +78,28 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
      * has been enabled on the mapper all items will be stored within cache
      * and saved to cache when modified.
      *
-     * @param  integer $id
+     * @param integer $id
+     * @param boolean $checkOnly When set to true and cache has no data
+     *                           results will not get loaded
+     * @param boolean $reload    When set to true reloads the entities from the
+     *                           source and re-inserts them into cache
+     *
      * @return object|false
      *
      * @throws Exception\FetchFailedException
      */
-    public function fetchEntityBy($identifier, $id)
-    {
-        $result = $this->fetchEntityCollectionBy($identifier, array($id));
+    public function fetchEntityBy(
+        $identifier,
+        $id,
+        $checkOnly = false,
+        $reload    = false
+    ) {
+        $result = $this->fetchEntityCollectionBy(
+            $identifier,
+            array($id),
+            $checkOnly,
+            $reload
+        );
         if (isset($result[$id]) && $result[$id] instanceof \ArrayIterator) {
             if ($result[$id]->count() > 1) {
                 throw new Exception\FetchFailedException(
@@ -135,16 +149,19 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
      * has been enabled on the mapper all items will be stored within cache
      * and saved to cache when modified.
      *
-     * @param  mixed $id
+     * @param  mixed   $id
+     * @param  boolean $reload When set to true reloads the entities from the
+     *                         source and re-inserts them into cache
+     *
      * @return object|false
      */
-    public function fetchEntityById($id)
+    public function fetchEntityById($id, $reload = false)
     {
         $id      = $this->checkAndConvertEntityId($id);
         $key     = $this->getEntityCacheKey($id);
 
         // Check instance cache first
-        if (isset($this->entityCacheInstanceCache[$key])) {
+        if (!$reload && isset($this->entityCacheInstanceCache[$key])) {
             return $this->entityCacheInstanceCache[$key];
         }
 
@@ -173,10 +190,11 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
                 function() use ($getCall) {
                     return $getCall();
                 },
-                $this->entityCacheTtl
+                $this->entityCacheTtl,
+                $reload
             );
         } else {
-            $result    = $getCall();
+            $result = $getCall();
         }
 
         if (false !== $result) {
@@ -257,10 +275,12 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
      * Fetch a collection of entities by a list of identifiers with the
      * given identifier type.
      *
-     * @param string $identifier
-     * @param array  $identifiers
-     * @param boolecn $checkOnly  When set to true and cache has no data
-     *                            results will not get loaded
+     * @param string  $identifier
+     * @param array   $identifiers
+     * @param boolean $checkOnly   When set to true and cache has no data
+     *                             results will not get loaded
+     * @param boolean $reload      When set to true reloads the entities from the
+     *                             source and re-inserts them into cache
      *
      * @return array<\ArrayIterator> like:
      * array(
@@ -273,7 +293,8 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
     public function fetchEntityCollectionBy(
         $identifier,
         array $identifiers,
-        $checkOnly = false
+        $checkOnly = false,
+        $reload    = false
     ) {
         if (!in_array($identifier, $this->getEntityCacheTrackedIdentifiers())) {
             throw new Exception\FetchFailedException(
@@ -377,7 +398,7 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
         $getIdentifier = StringUtils::underscoreToCamelCase("get_{$identifier}");
         $return        = array();
         if (!empty($ids)) {
-            $entities      = $this->fetchEntityCollectionByIds($ids);
+            $entities      = $this->fetchEntityCollectionByIds($ids, $reload);
             foreach ($entities as $entity) {
                 $identifierValue = $entity->$getIdentifier();
                 if (!isset($return[$identifierValue])) {
@@ -400,10 +421,13 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
      * identifiers. When entity caching has been enabled on the mapper all
      * items will be stored within cache and saved to cache when modified.
      *
-     * @param  array $ids
+     * @param array $ids
+     * @param boolean $reload When set to true reloads the entities from the
+     *                        source and re-inserts them into cache
+     *
      * @return \ArrayIterator
      */
-    public function fetchEntityCollectionByIds(array $ids)
+    public function fetchEntityCollectionByIds(array $ids, $reload = false)
     {
         $list        = array();
         $notFoundIds = array();
@@ -415,14 +439,18 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
                 $id       = $this->checkAndConvertEntityId($id);
                 $idString = $this->prepareIdString($id);
                 $key      = $this->getEntityCacheKey($id);
-                if (isset($this->entityCacheInstanceCache[$key])) {
+                if (!$reload && isset($this->entityCacheInstanceCache[$key])) {
                     $list[] = $this->entityCacheInstanceCache[$key];
                 } else {
                     $keys[$idString] = $this->getEntityCacheKey($id);
                     $reverseKeys[$keys[$idString]] = $id;
                 }
             }
-            $results = $this->getLockingCache()->getMultiple($keys);
+            $results = (
+                $reload ?
+                array() :
+                $this->getLockingCache()->getMultiple($keys)
+            );
             foreach ($keys as $key) {
                 if (!isset($results[$key]) || false === $results[$key]) {
                     $notFoundIds[] = $reverseKeys[$key];
