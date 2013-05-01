@@ -52,6 +52,7 @@ class ObjectUtils extends \Zend\Stdlib\ArrayUtils
                 }
             }
         }
+        $keysHandledByMapping = array();
         foreach ($map as $objectMapping) {
             foreach ($array as $key => &$value) {
                 if ($value instanceof $objectMapping['prototype']) {
@@ -63,11 +64,19 @@ class ObjectUtils extends \Zend\Stdlib\ArrayUtils
                     ) {
                         $value = $objectMapping['callback']($value);
                     }
-                } elseif (is_object($value)) {
-                    $value = static::toArray($value, $map, $filters, $hydrator);
+                    $keysHandledByMapping[$key] = true;
                 }
             }
         }
+        foreach ($array as $key => &$value) {
+            if (
+                !isset($keysHandledByMapping[$key]) &&
+                is_object($value)
+            ) {
+                $value = static::toArray($value, $map, $filters, $hydrator);
+            }
+        }
+
         return $array;
     }
 

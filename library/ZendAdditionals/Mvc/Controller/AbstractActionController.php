@@ -21,4 +21,3 @@ class AbstractActionController extends \Zend\Mvc\Controller\AbstractActionContro
         return parent::getRequest();
     }
 }
-

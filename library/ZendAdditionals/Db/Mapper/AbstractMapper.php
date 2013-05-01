@@ -15,6 +15,7 @@ use ZendAdditionals\Stdlib\Hydrator\Strategy\ObservableStrategyInterface;
 use ZendAdditionals\Db\Adapter\MasterSlaveAdapterInterface;
 use ZendAdditionals\Db\EntityAssociation\EntityAssociation;
 use ZendAdditionals\Db\ResultSet\JoinedHydratingResultSet;
+use Zend\Db\Adapter\Exception\InvalidQueryException;
 use Zend\Db\Adapter\AdapterAwareInterface;
 use Zend\ServiceManager\ServiceManagerAwareInterface;
 use Zend\ServiceManager\ServiceManager;
@@ -1243,7 +1244,16 @@ abstract class AbstractMapper implements
         }
 
         $returnData = array();
-        $result = $this->getResult($select);
+        try {
+            $result = $this->getResult($select);
+        }
+        catch (InvalidQueryException $exception) {
+            throw new Exception\SearchFailedException(
+                'Search query failed!',
+                0,
+                $exception
+            );
+        }
         /*@var $result \ZendAdditionals\Db\ResultSet\JoinedHydratingResultSet*/
 
         while ($entity = $result->current($returnEntities)) {
