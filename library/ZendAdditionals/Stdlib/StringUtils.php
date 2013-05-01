@@ -37,14 +37,52 @@ class StringUtils extends \Zend\Stdlib\StringUtils
     }
 
     /**
+     * Check value to find if it was Json Encoded.
+     *
+     * If $data is not a string, the returned value will always be false.
+     * Json Encoded data is always a string.
+     *
+     * @param mixed $data Value to check to see if was Json Encoded.
+     *
+     * @return boolean false if not Json Encoded and true if it was.
+     */
+    public static function isJson($data)
+    {
+        // if it isn't a string, it isn't json
+        if (!is_string($data)) {
+            return false;
+        }
+
+        $pcre_regex = '
+            /
+            (?(DEFINE)
+               (?<number>   -? (?= [1-9]|0(?!\d) ) \d+ (\.\d+)? ([eE] [+-]? \d+)? )
+               (?<boolean>   true | false | null )
+               (?<string>    " ([^"\\\\]* | \\\\ ["\\\\bfnrt\/] | \\\\ u [0-9a-f]{4} )* " )
+               (?<array>     \[  (?:  (?&json)  (?: , (?&json)  )*  )?  \s* \] )
+               (?<pair>      \s* (?&string) \s* : (?&json)  )
+               (?<object>    \{  (?:  (?&pair)  (?: , (?&pair)  )*  )?  \s* \} )
+               (?<json>   \s* (?: (?&number) | (?&boolean) | (?&string) | (?&array) | (?&object) ) \s* )
+            )
+            \A (?&json) \Z
+            /six
+        ';
+
+        return preg_match(
+            $pcre_regex,
+            $data
+        ) >= 1;
+    }
+
+    /**
      * Check value to find if it was serialized.
      *
-     * If $data is not an string, then returned value will always be false.
+     * If $data is not a string, the returned value will always be false.
      * Serialized data is always a string.
      *
      * @param mixed $data Value to check to see if was serialized.
      *
-     * @return bool false if not serialized and true if it was.
+     * @return boolean false if not serialized and true if it was.
      */
     public static function isSerialized($data)
     {
