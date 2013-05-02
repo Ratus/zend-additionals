@@ -1,7 +1,7 @@
 <?php
 namespace ZendAdditionals\Mvc\Controller;
 
-use ZendAdditionals\Mvc\Controller\AbstractActionController;
+use Zend\Mvc\Controller\AbstractActionController;
 use ZendAdditionals\Exception;
 use Zend\Json\Server\Server;
 use Zend\Json\Server\Smd;
@@ -28,7 +28,7 @@ abstract class AbstractJsonRpcController extends AbstractActionController
      * Returns what must be set in
      * {@see Zend\Json\Server\Server::setClass}
      */
-    protected function getJsonRpcClass()
+    protected function getRpcService()
     {
         throw new Exception\NotImplementedException(
             'When extending "' . __CLASS__ . '" "' . get_called_class() . '" ' .
@@ -43,7 +43,7 @@ abstract class AbstractJsonRpcController extends AbstractActionController
      */
     public function indexAction()
     {
-        $serviceClass  = $this->getJsonRpcClass();
+        $serviceClass  = $this->getRpcService();
         $jsonRpcServer = $this->jsonRpcServer;
         $jsonRpcServer->setClass($serviceClass);
         $jsonRpcServer->getRequest()->setMethod(
@@ -62,7 +62,7 @@ abstract class AbstractJsonRpcController extends AbstractActionController
             );
         }
         $jsonRpcServer->setReturnResponse(true);
-        if ('GET' == $_SERVER['REQUEST_METHOD']) {
+        if ('GET' == $this->getRequest()->getMethod()) {
             $uri        = $this->getRequest()->getUri();
             $serviceUri = $uri->getHost() . $uri->getPath();
             $serviceMap = $jsonRpcServer->getServiceMap();

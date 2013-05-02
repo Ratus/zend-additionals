@@ -689,6 +689,7 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
                             $methodGet = StringUtils::underscoreToCamelCase(
                                 "get_{$filterKey}"
                             );
+                            $methodGet = str_replace('getIs', 'is', $methodGet);
                             if ($original->$methodGet() !== $entity->$methodGet()) {
                                 $storeIntoCache = false;
                             }
