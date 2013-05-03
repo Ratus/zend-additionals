@@ -5,6 +5,7 @@ use Zend\Mvc\Controller\AbstractActionController;
 use ZendAdditionals\Exception;
 use Zend\Json\Server\Server;
 use Zend\Json\Server\Smd;
+use Zend\Mvc\MvcEvent;
 
 /**
  * @category   ZendAdditionals
@@ -34,6 +35,27 @@ abstract class AbstractJsonRpcController extends AbstractActionController
             'When extending "' . __CLASS__ . '" "' . get_called_class() . '" ' .
             'must implement method: "' . __METHOD__ . '"!'
         );
+    }
+
+    /**
+     * Set Access-Control headers
+     *
+     * @param MvcEvent $mvcEvent
+     * @return mixed
+     */
+    public function onDispatch(MvcEvent $mvcEvent)
+    {
+        /** @var \Zend\Http\PhpEnvironment\Response */
+        $response = $mvcEvent->getResponse();
+
+        if ($response instanceof \Zend\Http\PhpEnvironment\Response) {
+            $response->getHeaders()
+                ->addHeaderLine('Access-Control-Allow-Origin','*')
+                ->addHeaderLine('Access-Control-Allow-Headers','origin, content-type, accept')
+                ->addHeaderLine('Access-Control-Allow-Methods','POST GET');
+        }
+
+        return parent::onDispatch($mvcEvent);
     }
 
     /**
