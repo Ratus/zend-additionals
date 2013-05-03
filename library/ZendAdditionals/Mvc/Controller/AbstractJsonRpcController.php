@@ -46,21 +46,6 @@ abstract class AbstractJsonRpcController extends AbstractActionController
         $serviceClass  = $this->getRpcService();
         $jsonRpcServer = $this->jsonRpcServer;
         $jsonRpcServer->setClass($serviceClass);
-        $jsonRpcServer->getRequest()->setMethod(
-            $this->getRequest()->getPost('method', null)
-        );
-        $params = (array)$this->getRequest()->getPost();
-        unset($params['method']);
-        $id = '';
-        if (isset($params['id'])) {
-            $id = $params['id'];
-            unset($params['id']);
-        }
-        if (isset($params['params'])) {
-            $jsonRpcServer->getRequest()->setParams(
-                $params['params']
-            );
-        }
         $jsonRpcServer->setReturnResponse(true);
         if ('GET' == $this->getRequest()->getMethod()) {
             $uri        = $this->getRequest()->getUri();
@@ -86,7 +71,6 @@ abstract class AbstractJsonRpcController extends AbstractActionController
         } else {
             $response = $jsonRpcServer->handle();
             if ($response instanceof \Zend\Json\Server\Response\Http) {
-                $response->setId($id);
                 $responseArray = array(
                     'jsonrpc' => $response->getVersion(),
                     'id'      => $response->getId(),
