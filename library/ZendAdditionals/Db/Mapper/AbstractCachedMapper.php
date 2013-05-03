@@ -812,7 +812,7 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
                     }
 
                     if (empty($parents) && isset($parentCollection[$id])) {
-                        $parents = $parentsCollection[$id];
+                        $parents = $parentCollection[$id];
                     }
                     $getEntity = StringUtils::underscoreToCamelCase('get_' . $defaultInclude);
                     foreach ($parents as $parent) {
