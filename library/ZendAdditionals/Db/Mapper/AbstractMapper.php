@@ -1,31 +1,33 @@
 <?php
 namespace ZendAdditionals\Db\Mapper;
 
-use Zend\Db\Adapter\Adapter;
-use Zend\Db\Adapter\Driver\ResultInterface;
-use Zend\Db\Sql\Delete;
-use Zend\Db\Sql\Select;
-use Zend\Db\Sql\Update;
-use Zend\Db\Sql\Sql;
-use Zend\Db\Sql\AbstractSql;
-use Zend\Stdlib\Hydrator\HydratorInterface;
+use ZendAdditionals\Db\Adapter\MasterSlaveAdapterInterface;
+use ZendAdditionals\Db\EntityAssociation\EntityAssociation;
+use ZendAdditionals\Db\Mapper\AttributeProperty;
+use ZendAdditionals\Db\Mapper\Exception;
+use ZendAdditionals\Db\ResultSet\JoinedHydratingResultSet;
 use ZendAdditionals\Stdlib\Hydrator\ClassMethods;
 use ZendAdditionals\Stdlib\Hydrator\ObservableClassMethods;
 use ZendAdditionals\Stdlib\Hydrator\Strategy\ObservableStrategyInterface;
-use ZendAdditionals\Db\Adapter\MasterSlaveAdapterInterface;
-use ZendAdditionals\Db\EntityAssociation\EntityAssociation;
-use ZendAdditionals\Db\ResultSet\JoinedHydratingResultSet;
+
+use Zend\Db\Adapter\Adapter;
+use Zend\Db\Adapter\Driver\ResultInterface;
 use Zend\Db\Adapter\Exception\InvalidQueryException;
 use Zend\Db\Adapter\AdapterAwareInterface;
-use Zend\ServiceManager\ServiceManagerAwareInterface;
-use Zend\ServiceManager\ServiceManager;
+use Zend\Db\Sql\AbstractSql;
+use Zend\Db\Sql\Expression;
+use Zend\Db\Sql\Delete;
 use Zend\Db\Sql\Predicate;
 use Zend\Db\Sql\Predicate\Operator;
-use Zend\Db\Sql\Expression;
-use Zend\EventManager\EventManagerInterface;
+use Zend\Db\Sql\Select;
+use Zend\Db\Sql\Sql;
+use Zend\Db\Sql\Update;
 use Zend\EventManager\EventManager;
-use ZendAdditionals\Db\Mapper\AttributeProperty;
-use ZendAdditionals\Db\Mapper\Exception;
+use Zend\EventManager\EventManagerInterface;
+use Zend\ServiceManager\Exception\ServiceNotFoundException;
+use Zend\ServiceManager\ServiceManager;
+use Zend\ServiceManager\ServiceManagerAwareInterface;
+use Zend\Stdlib\Hydrator\HydratorInterface;
 
 abstract class AbstractMapper implements
     ServiceManagerAwareInterface,
@@ -2770,6 +2772,51 @@ abstract class AbstractMapper implements
             }
         }
         return $entityArray;
+    }
+
+    /**
+     * Get relation information
+     *
+     * @param  string $relationIdentifier
+     *
+     * @return array  Containing all the information about the relation
+     *
+     * @throws Exception\RelationNotFoundException
+     */
+    protected function getRelationInfo($relationIdentifier)
+    {
+        if (!isset($this->relations[$relationIdentifier])) {
+            throw new Exception\RelationNotFoundException(
+                'relation not found'
+            );
+        }
+        return $this->relations[$relationIdentifier];
+    }
+
+    /**
+     * Get the relating mapper service
+     *
+     * @param  string $relationIdentifier
+     *
+     * @return AbstractMapper
+     *
+     * @throws Exception\RelationMapperServiceNotFoundException
+     */
+    protected function getMapperForRelation($relationIdentifier)
+    {
+        $relationInfo = $this->getRelationInfo($relationIdentifier);
+        try {
+            /* @var $relationServiceMapper AbstractMapper */
+            return $this->getServiceManager()->get(
+                $relationInfo['mapper_service_name']
+            );
+        } catch (ServiceNotFoundException $exception) {
+            throw new Exception\RelationMapperServiceNotFoundException(
+                '',
+                0,
+                $exception
+            );
+        }
     }
 
     protected function storeRelatedEntities(
