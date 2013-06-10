@@ -506,7 +506,7 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
                 if ($this->entityCacheEnabled) {
                     $key = $this->getEntityCacheKey($id);
                     if ($this->getLockingCache()->getLock($key)) {
-                        $res = $this->getLockingCache()->set(
+                        $this->getLockingCache()->set(
                             $key,
                             $entity,
                             $this->entityCacheTtl
@@ -536,12 +536,17 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
     protected function addCachedEntityToInstanceCache($entity, $mapper = null)
     {
         $mapper = $mapper ?: $this;
+
+        /**
+         * Some default includes might not use the AbstractCachedMapper
+         * silently ignore them.
+         */
         if (!($mapper instanceof AbstractCachedMapper)) {
             return;
         }
-        $id  = $mapper->getIdForEntity($entity);
-        $key = $mapper->getEntityCacheKey($id);
-
+        
+        $id                 = $mapper->getIdForEntity($entity);
+        $key                = $mapper->getEntityCacheKey($id);
         $defaultIncludesSet = true;
 
         foreach ($mapper->entityCacheDefaultIncludes as $defaultInclude) {
