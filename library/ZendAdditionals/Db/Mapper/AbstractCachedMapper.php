@@ -198,15 +198,7 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
         }
 
         if (false !== $result) {
-            /**
-             * Store inside entityCacheObjectStorage to be able to commit to
-             * proper hydrators later on when changes need to be saved.
-             */
-            $this->entityCacheObjectStorage[$key] = serialize($result);
-            /**
-             * Store into instance cache for fast re-getting on the same key
-             */
-            $this->entityCacheInstanceCache[$key] = $result;
+            $this->addCachedEntityToInstanceCache($result);
         }
 
         return $result;
@@ -253,9 +245,12 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
      *
      * @return string
      */
-    protected function getIdentifierCacheKeyForEntityIds($identifier, $identifierValue)
-    {
-        return $this->getCacheKeyPrefix() . '_ids_by_' . $identifier . '_' . $identifierValue;
+    protected function getIdentifierCacheKeyForEntityIds(
+        $identifier,
+        $identifierValue
+    ) {
+        return $this->getCacheKeyPrefix() . '_ids_by_' . $identifier .
+            '_' . $identifierValue;
     }
 
     /**
@@ -456,13 +451,8 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
                     $notFoundIds[] = $reverseKeys[$key];
                     continue;
                 }
-                $id       = $this->getIdForEntity($results[$key]);
-                $idString = $this->prepareIdString($id);
+                $this->addCachedEntityToInstanceCache($results[$key]);
                 $list[]   = $results[$key];
-                $this->entityCacheObjectStorage[$keys[$idString]]
-                    = serialize($results[$key]);
-                $this->entityCacheInstanceCache[$keys[$idString]]
-                    = $results[$key];
             }
         } else {
             $notFoundIds = $ids;
@@ -513,7 +503,6 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
 
             foreach ($entities as $entity) {
                 $id       = $this->getIdForEntity($entity);
-                $idString = $this->prepareIdString($id);
                 if ($this->entityCacheEnabled) {
                     $key = $this->getEntityCacheKey($id);
                     if ($this->getLockingCache()->getLock($key)) {
@@ -525,12 +514,62 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
                         $this->getLockingCache()->releaseLock($key);
                     }
                 }
-                $this->entityCacheObjectStorage[$key] = serialize($entity);
-                $this->entityCacheInstanceCache[$key] = $entity;
+                $this->addCachedEntityToInstanceCache($entity);
                 $list[]                               = $entity;
             }
         }
         return new ArrayIterator($list);
+    }
+
+    /**
+     * Attach an entity loaded from cache to the internal instance cache,
+     * when the entity contains default includes which are not empty and
+     * their mapper is also AbstractCachedMapper their mapper will also be
+     * called to add the cached entity to the instance cache until there are no
+     * more default included entities to set.
+     *
+     * @param  object         $entity
+     * @param  AbstractMapper $mapper
+     *
+     * @return void
+     */
+    protected function addCachedEntityToInstanceCache($entity, $mapper = null)
+    {
+        $mapper = $mapper ?: $this;
+        if (!($mapper instanceof AbstractCachedMapper)) {
+            return;
+        }
+        $id  = $mapper->getIdForEntity($entity);
+        $key = $mapper->getEntityCacheKey($id);
+
+        /**
+         * Store inside entityCacheObjectStorage to be able to commit to
+         * proper hydrators later on when changes need to be saved.
+         */
+        $mapper->entityCacheObjectStorage[$key] = serialize($entity);
+
+        /**
+         * Store into instance cache for fast re-getting on the same key
+         */
+        $mapper->entityCacheInstanceCache[$key] = $entity;
+
+        foreach ($mapper->entityCacheDefaultIncludes as $defaultInclude) {
+            $defaultIncludeMapper = $mapper->getMapperForRelation($defaultInclude);
+            $getCall              = StringUtils::underscoreToCamelCase(
+                'get_' . $defaultInclude
+            );
+            $includedEntity = $entity->$getCall();
+            if (
+                !is_object($includedEntity) ||
+                $defaultIncludeMapper->isEntityEmpty($includedEntity)
+            ) {
+                continue;
+            }
+            $mapper->addCachedEntityToInstanceCache(
+                $includedEntity,
+                $defaultIncludeMapper
+            );
+        }
     }
 
     /**
@@ -744,14 +783,22 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
         $this->getEventManager()->attach(
             static::SERVICE_NAME . '::entity_deleted',
             function(Event $event) {
-                $entity   = $event->getParam('entity');
+                $entity      = $event->getParam('entity');
                 $primaryData = $this->getPrimaryData(
                     $this->entityToArray($entity)
                 );
                 $key = $this->getEntityCacheKey($primaryData);
-                if ($this->getLockingCache()->getLock($key)) {
+                if ($this->getLockingCache()->getLock($key, null, 1500)) {
                     $this->getLockingCache()->del($key);
                     $this->getLockingCache()->releaseLock($key);
+                }
+                // Also remove from object storage
+                if (isset($this->entityCacheObjectStorage[$key])) {
+                    unset($this->entityCacheObjectStorage[$key]);
+                }
+                // Also remove from instance cache
+                if (isset($this->entityCacheInstanceCache[$key])) {
+                    unset($this->entityCacheInstanceCache[$key]);
                 }
             }
         );
@@ -814,7 +861,9 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
                     if (empty($parents) && isset($parentCollection[$id])) {
                         $parents = $parentCollection[$id];
                     }
-                    $getEntity = StringUtils::underscoreToCamelCase('get_' . $defaultInclude);
+                    $getEntity = StringUtils::underscoreToCamelCase(
+                        'get_' . $defaultInclude
+                    );
                     foreach ($parents as $parent) {
                         $current   = $parent->$getEntity();
                         ObjectUtils::transferData($entity, $current);
@@ -837,9 +886,13 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
                     if (isset($relationInfo['reference'])) {
 
                     } elseif (isset($relationInfo['back_reference'])) {
-                        foreach ($relationInfo['back_reference'] as $getId => $idKey) {
+                        foreach (
+                            $relationInfo['back_reference'] as $getId => $idKey
+                        ) {
                             // Set id from entity into associated entity
-                            $getId = StringUtils::underscoreToCamelCase('get_' . $getId);
+                            $getId = StringUtils::underscoreToCamelCase(
+                                'get_' . $getId
+                            );
                             $id    = array($idKey => $entity->$getId());
                         }
                     }
@@ -849,7 +902,9 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
                     ) {
                         return;
                     }
-                    $setEntity = StringUtils::underscoreToCamelCase('set_' . $defaultInclude);
+                    $setEntity = StringUtils::underscoreToCamelCase(
+                        'set_' . $defaultInclude
+                    );
                     $parent->$setEntity(new $entity);
                     $primaryData = $this->getPrimaryData(
                         $this->entityToArray($parent)
