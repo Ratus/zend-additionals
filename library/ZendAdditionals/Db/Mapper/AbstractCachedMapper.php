@@ -515,7 +515,7 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
                     }
                 }
                 $this->addCachedEntityToInstanceCache($entity);
-                $list[]                               = $entity;
+                $list[] = $entity;
             }
         }
         return new ArrayIterator($list);
@@ -536,22 +536,18 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
     protected function addCachedEntityToInstanceCache($entity, $mapper = null)
     {
         $mapper = $mapper ?: $this;
+
+        /**
+         * Some default includes might not use the AbstractCachedMapper
+         * silently ignore them.
+         */
         if (!($mapper instanceof AbstractCachedMapper)) {
             return;
         }
-        $id  = $mapper->getIdForEntity($entity);
-        $key = $mapper->getEntityCacheKey($id);
-
-        /**
-         * Store inside entityCacheObjectStorage to be able to commit to
-         * proper hydrators later on when changes need to be saved.
-         */
-        $mapper->entityCacheObjectStorage[$key] = serialize($entity);
-
-        /**
-         * Store into instance cache for fast re-getting on the same key
-         */
-        $mapper->entityCacheInstanceCache[$key] = $entity;
+        
+        $id                 = $mapper->getIdForEntity($entity);
+        $key                = $mapper->getEntityCacheKey($id);
+        $defaultIncludesSet = true;
 
         foreach ($mapper->entityCacheDefaultIncludes as $defaultInclude) {
             $defaultIncludeMapper = $mapper->getMapperForRelation($defaultInclude);
@@ -563,6 +559,7 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
                 !is_object($includedEntity) ||
                 $defaultIncludeMapper->isEntityEmpty($includedEntity)
             ) {
+                $defaultIncludesSet = false;
                 continue;
             }
             $mapper->addCachedEntityToInstanceCache(
@@ -570,6 +567,25 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
                 $defaultIncludeMapper
             );
         }
+
+        /**
+         * When not all of the default includes are set we must
+         * return here to prevent incomplete cache entries.
+         */
+        if (false === $defaultIncludesSet) {
+            return;
+        }
+
+        /**
+         * Store inside entityCacheObjectStorage to be able to commit to
+         * proper hydrators later on when changes need to be saved.
+         */
+        $mapper->entityCacheObjectStorage[$key] = serialize($entity);
+
+        /**
+         * Store into instance cache for fast re-getting on the same key
+         */
+        $mapper->entityCacheInstanceCache[$key] = $entity;
     }
 
     /**
