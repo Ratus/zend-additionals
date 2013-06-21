@@ -50,7 +50,11 @@ class HtmlDateSelect extends \Zend\View\Helper\AbstractHtmlElement implements
         $attributes        = $attributes ?: array();
         $dateTime          = null;
         if (!empty($date)) {
-            $dateTime = \DateTime::createFromFormat($inputFormat, $date);
+            /**
+             * createFromFormat returns FALSE on failure,
+             * shorthand if enforces NULL when this happens.
+             */
+            $dateTime = \DateTime::createFromFormat($inputFormat, $date) ?: null;
         }
 
         $maximumDate = new \DateTime();

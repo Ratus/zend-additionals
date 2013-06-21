@@ -30,9 +30,11 @@ class ObjectUtils extends \Zend\Stdlib\ArrayUtils
         AbstractHydrator $hydrator = null
     ) {
         if (is_array($data) || $data instanceof ArrayAccess) {
-            foreach ($data as &$element) {
-                $element = static::toArray($element, $map, $filters, $hydrator);
+            $return = array();
+            foreach ($data as $key => $element) {
+                $return[$key] = static::toArray($element, $map, $filters, $hydrator);
             }
+            $data = $return;
         }
         if ($data instanceof ArrayAccess) {
             return (array) $data;
