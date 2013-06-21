@@ -544,7 +544,7 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
         if (!($mapper instanceof AbstractCachedMapper)) {
             return;
         }
-        
+
         $id                 = $mapper->getIdForEntity($entity);
         $key                = $mapper->getEntityCacheKey($id);
         $defaultIncludesSet = true;
@@ -555,11 +555,16 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
                 'get_' . $defaultInclude
             );
             $includedEntity = $entity->$getCall();
+            if (!is_object($includedEntity)) {
+                // Skip instance cache for current entity whe not all default
+                // includes are available
+                $defaultIncludesSet = false;
+            }
             if (
                 !is_object($includedEntity) ||
                 $defaultIncludeMapper->isEntityEmpty($includedEntity)
             ) {
-                $defaultIncludesSet = false;
+                // Do not add empty entity to instance cache
                 continue;
             }
             $mapper->addCachedEntityToInstanceCache(
