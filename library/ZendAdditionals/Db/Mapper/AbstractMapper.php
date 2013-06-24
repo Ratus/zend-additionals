@@ -1771,8 +1771,7 @@ abstract class AbstractMapper implements
      * @param EntityAssociation $parentAssociation
      * @param array $columnFilter By default all columns get selected,
      *                            use this array to minimize the selection
-     * @param array<Operator> $filters An array containing filters for this join, note
-     *                       when filters are provided this join becomes required!
+     * @param array<Operator> $filters An array containing filters for this join.
      *
      * @return EntityAssociation
      *
@@ -1893,7 +1892,6 @@ abstract class AbstractMapper implements
         }
 
         $joinPredicate = $entityAssociation->getPredicate();
-        $joinRequiredByFilter = false;
         if ($this->getAllowFilters() && !empty($filters)) {
             foreach ($filters as $key => $operator) {
                 if (is_array($operator)) {
@@ -1909,30 +1907,35 @@ abstract class AbstractMapper implements
                     $operator->setLeft($key)->setRight($value);
                 }
 
-                $operators = array(
-                    $operator,
-                );
-
                 /**
-                 * We want to set aliases on operators within predicateset's as well..
-                 * for this reason an array of operator objects gets built.
+                 * Flat operators to prepend aliases
                  */
-                if ($operator instanceof Predicate\PredicateSet) {
-                    $operatorsArray = $operator->getPredicates();
-                    // array of arrays and every 2nd item is the operator?? well documented ehh..
-                    $operators = array();
-                    foreach ($operatorsArray as $operatorArray) {
-                        $operators[] = $operatorArray[1];
+                $flattenOperators = function($operator, array &$operators, $me) {
+                    if (($operator instanceof Predicate\PredicateSet) === false) {
+                        $operators[] = $operator;
+                        return;
                     }
-                }
+
+                    $operatorsArray = $operator->getPredicates();
+
+                    foreach ($operatorsArray as $operatorArray) {
+                        $me($operatorArray[1], $operators, $me);
+                    }
+                };
+
+                // Flatten operators
+                $operators = array();
+                $flattenOperators($operator, $operators, $flattenOperators);
 
                 foreach ($operators as &$item) {
                     $getIdentifier = 'getLeft';
                     $setIdentifier = 'setLeft';
+
                     if (method_exists($item, 'getIdentifier')) {
                         $getIdentifier = 'getIdentifier';
                         $setIdentifier = 'setIdentifier';
                     }
+
                     $currentIdentifier = $item->$getIdentifier();
                     if (strpos($currentIdentifier, '.') === false) {
                         $item->$setIdentifier(
@@ -1944,7 +1947,6 @@ abstract class AbstractMapper implements
                     // Skip non predicates
                     continue;
                 }
-                $joinRequiredByFilter = true;
                 $joinPredicate->addPredicate($operator);
             }
         } else if ($this->getAllowFilters() === false && !empty($filters)){
@@ -1961,11 +1963,7 @@ abstract class AbstractMapper implements
             $entityAssociation->getJoinTable(),
             $joinPredicate,
             $joinColumns,
-            (
-                $joinRequiredByFilter ?
-                Select::JOIN_INNER :
-                $entityAssociation->getJoinType()
-            )
+            $entityAssociation->getJoinType()
         );
 
         $this->storeEntityAssociationToSelect($select, $entityAssociation);
