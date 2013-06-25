@@ -15,6 +15,11 @@ abstract class AbstractWidget extends AbstractHelper implements
     use \Zend\ServiceManager\ServiceLocatorAwareTrait;
 
     /**
+     * @var array
+     */
+    protected $requiredParameters = array();
+
+    /**
      * @var array $data
      */
     protected $data = array();
@@ -125,6 +130,22 @@ abstract class AbstractWidget extends AbstractHelper implements
 
         // Hydrate any given parameter
         $hydrator = new \Zend\Stdlib\Hydrator\ClassMethods();
+
+        if (!empty($this->requiredParameters) && null === $parameters) {
+            throw new Exception\InvalidArgumentException(
+                'Expected at least the following parameters: ' .
+                implode(',', $this->requiredParameters)
+            );
+        } elseif (!empty($this->requiredParameters)) {
+            foreach ($this->requiredParameters as $requiredParameter) {
+                if (!isset($parameters[$requiredParameter])) {
+                    throw new Exception\InvalidArgumentException(
+                        "Required parameter '{$requiredParameter}' missing!"
+                    );
+                }
+            }
+        }
+
         if (null !== $parameters) {
             $hydrator->hydrate($parameters, $this);
         }
