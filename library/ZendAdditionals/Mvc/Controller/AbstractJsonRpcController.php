@@ -46,6 +46,7 @@ abstract class AbstractJsonRpcController extends AbstractActionController
     public function onDispatch(MvcEvent $mvcEvent)
     {
         $this->setCorsHeaders();
+
         return parent::onDispatch($mvcEvent);
     }
 

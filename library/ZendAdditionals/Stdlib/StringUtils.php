@@ -10,6 +10,79 @@ class StringUtils extends \Zend\Stdlib\StringUtils
     const NL_MAC = "\r";
 
     /**
+     * @var boolean
+     */
+    protected static $uRandomChecked = false;
+
+    /**
+     * @var resource
+     */
+    protected static $uRandomResource;
+
+    /**
+     * @brief Generates a Universally Unique IDentifier, version 4.
+     *
+     * This function generates a truly random UUID.
+     *
+     * @see http://tools.ietf.org/html/rfc4122#section-4.4
+     * @see http://en.wikipedia.org/wiki/UUID
+     *
+     * @return string A UUID, made up of 32 hex digits and 4 hyphens.
+     */
+    public static function generateUuid()
+    {
+        $randomBits = false;
+        if (!static::$uRandomChecked && !is_resource(static::$uRandomResource)) {
+            if (is_readable('/dev/urandom')) {
+                static::$uRandomResource = fopen('/dev/urandom', 'rb');
+            }
+            static::$uRandomChecked = true;
+        }
+        if (is_resource(static::$uRandomResource)) {
+            $randomBits = fread(static::$uRandomResource, 16);
+        }
+        if (false === $randomBits) {
+            // If /dev/urandom isn't available (eg: in non-unix systems), use mt_rand().
+            $randomBits = "";
+            for($count = 0; $count < 16; $count++) {
+                $randomBits .= chr(mt_rand( 0, 255 ));
+            }
+        }
+        $timeLow                    = bin2hex(substr($randomBits,  0, 4));
+        $timeMid                    = bin2hex(substr($randomBits,  4, 2));
+        $timeHiAndVersion           = bin2hex(substr($randomBits,  6, 2));
+        $clockSequenseHiAndReversed = bin2hex(substr($randomBits,  8, 2));
+        $node                       = bin2hex(substr($randomBits, 10, 6));
+
+        /**
+         * Set the four most significant bits (bits 12 through 15) of the
+         * timeHighAndVersion field to the 4-bit version number from
+         * Section 4.1.3.
+         * @see http://tools.ietf.org/html/rfc4122#section-4.1.3
+         */
+        $timeHiAndVersion = hexdec($timeHiAndVersion);
+        $timeHiAndVersion = $timeHiAndVersion >> 4;
+        $timeHiAndVersion = $timeHiAndVersion | 0x4000;
+
+        /**
+         * Set the two most significant bits (bits 6 and 7) of the
+         * clock_seq_hi_and_reserved to zero and one, respectively.
+         */
+        $clockSequenseHiAndReversed = hexdec($clockSequenseHiAndReversed);
+        $clockSequenseHiAndReversed = $clockSequenseHiAndReversed >> 2;
+        $clockSequenseHiAndReversed = $clockSequenseHiAndReversed | 0x8000;
+
+        return sprintf(
+            '%08s-%04s-%04x-%04x-%012s',
+            $timeLow,
+            $timeMid,
+            $timeHiAndVersion,
+            $clockSequenseHiAndReversed,
+            $node
+        );
+    }
+
+    /**
      * Normalize the path
      *
      * @param string $path
@@ -37,14 +110,52 @@ class StringUtils extends \Zend\Stdlib\StringUtils
     }
 
     /**
+     * Check value to find if it was Json Encoded.
+     *
+     * If $data is not a string, the returned value will always be false.
+     * Json Encoded data is always a string.
+     *
+     * @param mixed $data Value to check to see if was Json Encoded.
+     *
+     * @return boolean false if not Json Encoded and true if it was.
+     */
+    public static function isJson($data)
+    {
+        // if it isn't a string, it isn't json
+        if (!is_string($data)) {
+            return false;
+        }
+
+        $pcre_regex = '
+            /
+            (?(DEFINE)
+               (?<number>   -? (?= [1-9]|0(?!\d) ) \d+ (\.\d+)? ([eE] [+-]? \d+)? )
+               (?<boolean>   true | false | null )
+               (?<string>    " ([^"\\\\]* | \\\\ ["\\\\bfnrt\/] | \\\\ u [0-9a-f]{4} )* " )
+               (?<array>     \[  (?:  (?&json)  (?: , (?&json)  )*  )?  \s* \] )
+               (?<pair>      \s* (?&string) \s* : (?&json)  )
+               (?<object>    \{  (?:  (?&pair)  (?: , (?&pair)  )*  )?  \s* \} )
+               (?<json>   \s* (?: (?&number) | (?&boolean) | (?&string) | (?&array) | (?&object) ) \s* )
+            )
+            \A (?&json) \Z
+            /six
+        ';
+
+        return preg_match(
+            $pcre_regex,
+            $data
+        ) >= 1;
+    }
+
+    /**
      * Check value to find if it was serialized.
      *
-     * If $data is not an string, then returned value will always be false.
+     * If $data is not a string, the returned value will always be false.
      * Serialized data is always a string.
      *
      * @param mixed $data Value to check to see if was serialized.
      *
-     * @return bool false if not serialized and true if it was.
+     * @return boolean false if not serialized and true if it was.
      */
     public static function isSerialized($data)
     {

@@ -1,30 +1,33 @@
 <?php
 namespace ZendAdditionals\Db\Mapper;
 
-use Zend\Db\Adapter\Adapter;
-use Zend\Db\Adapter\Driver\ResultInterface;
-use Zend\Db\Sql\Delete;
-use Zend\Db\Sql\Select;
-use Zend\Db\Sql\Update;
-use Zend\Db\Sql\Sql;
-use Zend\Db\Sql\AbstractSql;
-use Zend\Stdlib\Hydrator\HydratorInterface;
+use ZendAdditionals\Db\Adapter\MasterSlaveAdapterInterface;
+use ZendAdditionals\Db\EntityAssociation\EntityAssociation;
+use ZendAdditionals\Db\Mapper\AttributeProperty;
+use ZendAdditionals\Db\Mapper\Exception;
+use ZendAdditionals\Db\ResultSet\JoinedHydratingResultSet;
 use ZendAdditionals\Stdlib\Hydrator\ClassMethods;
 use ZendAdditionals\Stdlib\Hydrator\ObservableClassMethods;
 use ZendAdditionals\Stdlib\Hydrator\Strategy\ObservableStrategyInterface;
-use ZendAdditionals\Db\Adapter\MasterSlaveAdapterInterface;
-use ZendAdditionals\Db\EntityAssociation\EntityAssociation;
-use ZendAdditionals\Db\ResultSet\JoinedHydratingResultSet;
+
+use Zend\Db\Adapter\Adapter;
+use Zend\Db\Adapter\Driver\ResultInterface;
+use Zend\Db\Adapter\Exception\InvalidQueryException;
 use Zend\Db\Adapter\AdapterAwareInterface;
-use Zend\ServiceManager\ServiceManagerAwareInterface;
-use Zend\ServiceManager\ServiceManager;
+use Zend\Db\Sql\AbstractSql;
+use Zend\Db\Sql\Expression;
+use Zend\Db\Sql\Delete;
 use Zend\Db\Sql\Predicate;
 use Zend\Db\Sql\Predicate\Operator;
-use Zend\Db\Sql\Expression;
-use Zend\EventManager\EventManagerInterface;
+use Zend\Db\Sql\Select;
+use Zend\Db\Sql\Sql;
+use Zend\Db\Sql\Update;
 use Zend\EventManager\EventManager;
-use ZendAdditionals\Db\Mapper\AttributeProperty;
-use ZendAdditionals\Db\Mapper\Exception;
+use Zend\EventManager\EventManagerInterface;
+use Zend\ServiceManager\Exception\ServiceNotFoundException;
+use Zend\ServiceManager\ServiceManager;
+use Zend\ServiceManager\ServiceManagerAwareInterface;
+use Zend\Stdlib\Hydrator\HydratorInterface;
 
 abstract class AbstractMapper implements
     ServiceManagerAwareInterface,
@@ -1243,7 +1246,16 @@ abstract class AbstractMapper implements
         }
 
         $returnData = array();
-        $result = $this->getResult($select);
+        try {
+            $result = $this->getResult($select);
+        }
+        catch (InvalidQueryException $exception) {
+            throw new Exception\SearchFailedException(
+                'Search query failed!',
+                0,
+                $exception
+            );
+        }
         /*@var $result \ZendAdditionals\Db\ResultSet\JoinedHydratingResultSet*/
 
         while ($entity = $result->current($returnEntities)) {
@@ -1759,8 +1771,7 @@ abstract class AbstractMapper implements
      * @param EntityAssociation $parentAssociation
      * @param array $columnFilter By default all columns get selected,
      *                            use this array to minimize the selection
-     * @param array<Operator> $filters An array containing filters for this join, note
-     *                       when filters are provided this join becomes required!
+     * @param array<Operator> $filters An array containing filters for this join.
      *
      * @return EntityAssociation
      *
@@ -1881,7 +1892,6 @@ abstract class AbstractMapper implements
         }
 
         $joinPredicate = $entityAssociation->getPredicate();
-        $joinRequiredByFilter = false;
         if ($this->getAllowFilters() && !empty($filters)) {
             foreach ($filters as $key => $operator) {
                 if (is_array($operator)) {
@@ -1897,30 +1907,35 @@ abstract class AbstractMapper implements
                     $operator->setLeft($key)->setRight($value);
                 }
 
-                $operators = array(
-                    $operator,
-                );
-
                 /**
-                 * We want to set aliases on operators within predicateset's as well..
-                 * for this reason an array of operator objects gets built.
+                 * Flat operators to prepend aliases
                  */
-                if ($operator instanceof Predicate\PredicateSet) {
-                    $operatorsArray = $operator->getPredicates();
-                    // array of arrays and every 2nd item is the operator?? well documented ehh..
-                    $operators = array();
-                    foreach ($operatorsArray as $operatorArray) {
-                        $operators[] = $operatorArray[1];
+                $flattenOperators = function($operator, array &$operators, $me) {
+                    if (($operator instanceof Predicate\PredicateSet) === false) {
+                        $operators[] = $operator;
+                        return;
                     }
-                }
+
+                    $operatorsArray = $operator->getPredicates();
+
+                    foreach ($operatorsArray as $operatorArray) {
+                        $me($operatorArray[1], $operators, $me);
+                    }
+                };
+
+                // Flatten operators
+                $operators = array();
+                $flattenOperators($operator, $operators, $flattenOperators);
 
                 foreach ($operators as &$item) {
                     $getIdentifier = 'getLeft';
                     $setIdentifier = 'setLeft';
+
                     if (method_exists($item, 'getIdentifier')) {
                         $getIdentifier = 'getIdentifier';
                         $setIdentifier = 'setIdentifier';
                     }
+
                     $currentIdentifier = $item->$getIdentifier();
                     if (strpos($currentIdentifier, '.') === false) {
                         $item->$setIdentifier(
@@ -1932,7 +1947,6 @@ abstract class AbstractMapper implements
                     // Skip non predicates
                     continue;
                 }
-                $joinRequiredByFilter = true;
                 $joinPredicate->addPredicate($operator);
             }
         } else if ($this->getAllowFilters() === false && !empty($filters)){
@@ -1949,11 +1963,7 @@ abstract class AbstractMapper implements
             $entityAssociation->getJoinTable(),
             $joinPredicate,
             $joinColumns,
-            (
-                $joinRequiredByFilter ?
-                Select::JOIN_INNER :
-                $entityAssociation->getJoinType()
-            )
+            $entityAssociation->getJoinType()
         );
 
         $this->storeEntityAssociationToSelect($select, $entityAssociation);
@@ -2760,6 +2770,51 @@ abstract class AbstractMapper implements
             }
         }
         return $entityArray;
+    }
+
+    /**
+     * Get relation information
+     *
+     * @param  string $relationIdentifier
+     *
+     * @return array  Containing all the information about the relation
+     *
+     * @throws Exception\RelationNotFoundException
+     */
+    protected function getRelationInfo($relationIdentifier)
+    {
+        if (!isset($this->relations[$relationIdentifier])) {
+            throw new Exception\RelationNotFoundException(
+                'relation not found'
+            );
+        }
+        return $this->relations[$relationIdentifier];
+    }
+
+    /**
+     * Get the relating mapper service
+     *
+     * @param  string $relationIdentifier
+     *
+     * @return AbstractMapper
+     *
+     * @throws Exception\RelationMapperServiceNotFoundException
+     */
+    protected function getMapperForRelation($relationIdentifier)
+    {
+        $relationInfo = $this->getRelationInfo($relationIdentifier);
+        try {
+            /* @var $relationServiceMapper AbstractMapper */
+            return $this->getServiceManager()->get(
+                $relationInfo['mapper_service_name']
+            );
+        } catch (ServiceNotFoundException $exception) {
+            throw new Exception\RelationMapperServiceNotFoundException(
+                '',
+                0,
+                $exception
+            );
+        }
     }
 
     protected function storeRelatedEntities(

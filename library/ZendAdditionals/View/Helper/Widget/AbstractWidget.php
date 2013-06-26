@@ -1,16 +1,23 @@
 <?php
 namespace ZendAdditionals\View\Helper\Widget;
 
+use ZendAdditionals\Stdlib\StringUtils;
 use Zend\View\Exception;
 use Zend\View\Helper\AbstractHelper;
 use Zend\View\Model;
 use Zend\ServiceManager\ServiceLocatorAwareInterface;
+use Zend\ServiceManager\AbstractPluginManager;
 
 abstract class AbstractWidget extends AbstractHelper implements
     ServiceLocatorAwareInterface
 {
     use \ZendAdditionals\Config\ConfigExtensionTrait;
     use \Zend\ServiceManager\ServiceLocatorAwareTrait;
+
+    /**
+     * @var array
+     */
+    protected $requiredParameters = array();
 
     /**
      * @var array $data
@@ -123,6 +130,22 @@ abstract class AbstractWidget extends AbstractHelper implements
 
         // Hydrate any given parameter
         $hydrator = new \Zend\Stdlib\Hydrator\ClassMethods();
+
+        if (!empty($this->requiredParameters) && null === $parameters) {
+            throw new Exception\InvalidArgumentException(
+                'Expected at least the following parameters: ' .
+                implode(',', $this->requiredParameters)
+            );
+        } elseif (!empty($this->requiredParameters)) {
+            foreach ($this->requiredParameters as $requiredParameter) {
+                if (!isset($parameters[$requiredParameter])) {
+                    throw new Exception\InvalidArgumentException(
+                        "Required parameter '{$requiredParameter}' missing!"
+                    );
+                }
+            }
+        }
+
         if (null !== $parameters) {
             $hydrator->hydrate($parameters, $this);
         }
@@ -241,5 +264,66 @@ abstract class AbstractWidget extends AbstractHelper implements
         }
 
         return $this->getView()->render($this->viewModel);
+    }
+
+    /**
+     * Generates JS templates
+     *
+     * Widget config example:
+     *  'js_templates' => array(
+     *      'note'     => array(
+     *          'template'  => 'message-box/widget/js-template/note',
+     *          'variables' => array(),
+     *      ),
+     *      'no_note' => array(
+     *          'template'  => 'message-box/widget/js-template/no-note',
+     *          'variables' => array(),
+     *      ),
+     *      'new_note' => array(
+     *          'template'  => 'message-box/widget/js-template/new-note',
+     *          'variables' => array(),
+     *      ),
+     *  ),
+     *
+     * @return array(
+     *      'script_templates'    => array(#html, #html),
+     *      'script_template_ids' => array(templateId => scriptId)
+     * )
+     */
+    protected function renderJsTemplates($id)
+    {
+        $return = array(
+            'script_templates'    => array(),
+            'script_template_ids' => array(),
+        );
+
+        $helperPluginManager = $this->getServiceLocator();
+        if (!($helperPluginManager instanceof AbstractPluginManager)) {
+            $helperPluginManager = $helperPluginManager->get('viewhelpermanager');
+        }
+
+        $scriptTemplate = $helperPluginManager->get('scriptTemplate');
+        $config         = $this->getWidgetConfig();
+
+        foreach ($config['js_templates'] as $key => $template) {
+            $model          = new Model\ViewModel();
+            $model->setTemplate($template['template']);
+            $model->setVariables($template['variables']);
+
+            $html         = $this->getView()->render($model);
+            $variableName = "template_{$key}";
+            $templateId   = StringUtils::underscoreToCamelCase($variableName . '_id');
+            $scriptId     = StringUtils::underscoreToCamelCase(
+                $variableName . "_{$id}"
+            );
+
+            $return['script_template_ids'][$templateId] = $scriptId;
+            $return['script_templates'][]               = $scriptTemplate(
+                $scriptId,
+                $html
+            );
+        }
+
+        return $return;
     }
 }

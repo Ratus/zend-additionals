@@ -17,6 +17,14 @@ trait ConfigExtensionTrait
     abstract public function getServiceLocator();
 
     /**
+     * @return array
+     */
+    public function getConfig()
+    {
+        return $this->getServiceLocator()->get('Config');
+    }
+
+    /**
      * Get an item from the config file
      *
      * @param string $needle Dot separated string with the path you want
@@ -29,7 +37,7 @@ trait ConfigExtensionTrait
     {
         return ArrayUtils::arrayTarget(
             $needle,
-            $this->getServiceLocator()->get('Config'),
+            $this->getConfig(),
             $default
         );
     }
