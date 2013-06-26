@@ -47,6 +47,11 @@ abstract class AbstractJsonRpcController extends AbstractActionController
     {
         $this->setCorsHeaders();
 
+        // OPTIONS request we can return an empty body
+        if ($mvcEvent->getRequest()->getMethod() === 'OPTIONS') {
+            return null;
+        }
+
         return parent::onDispatch($mvcEvent);
     }
 
