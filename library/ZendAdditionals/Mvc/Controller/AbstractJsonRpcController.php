@@ -45,15 +45,7 @@ abstract class AbstractJsonRpcController extends AbstractActionController
      */
     public function onDispatch(MvcEvent $mvcEvent)
     {
-        /** @var \Zend\Http\PhpEnvironment\Response */
-        $response = $mvcEvent->getResponse();
-
-        if ($response instanceof \Zend\Http\PhpEnvironment\Response) {
-            $response->getHeaders()
-                ->addHeaderLine('Access-Control-Allow-Origin','*')
-                ->addHeaderLine('Access-Control-Allow-Headers','origin, content-type, accept')
-                ->addHeaderLine('Access-Control-Allow-Methods','POST GET');
-        }
+        $this->setCorsHeaders();
 
         return parent::onDispatch($mvcEvent);
     }
@@ -105,6 +97,58 @@ abstract class AbstractJsonRpcController extends AbstractActionController
                 return $responseArray;
             }
             return (string) $response;
+        }
+    }
+
+    /**
+     * Set the cors headers
+     */
+    protected function setCorsHeaders()
+    {
+        static $called = false;
+
+        if ($called) {
+            return;
+        }
+
+        $called = true;
+
+        /** @var MvcEvent */
+        $mvcEvent = $this->getEvent();
+
+         /** @var \Zend\Http\PhpEnvironment\Response */
+        $response = $mvcEvent->getResponse();
+
+        /** @var \Zend\Http\PhpEnvironment\Request */
+        $request  = $mvcEvent->getRequest();
+
+        // Get the response header
+        $headers  = $response->getHeaders();
+
+        // CORS headers should be set correctly
+        $requestHeaders = $request->getHeader('Access-Control-Request-Headers', false);
+        $requestMethod  = $request->getHeader('Access-Control-Request-Method', false);
+        $origin         = $request->getHeader('Origin', false);
+
+        if ($requestHeaders !== false) {
+            $headers->addHeaderLine(
+                'Access-Control-Allow-Headers',
+                $requestHeaders->getFieldValue()
+            );
+        }
+
+        if ($requestMethod !== false) {
+            $headers->addHeaderLine(
+                'Access-Control-Allow-Methods',
+                $requestMethod->getFieldValue()
+            );
+        }
+
+        if ($origin !== false) {
+            $headers->addHeaderLine(
+                'Access-Control-Allow-Origin',
+                $origin->getFieldValue()
+            );
         }
     }
 }
