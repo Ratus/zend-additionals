@@ -739,7 +739,7 @@ abstract class AbstractMapper implements
      *
      * @return array
      */
-    public function search(
+    protected function search(
         array $range         = null,
         array $filter        = null,
         array $orderBy       = null,
