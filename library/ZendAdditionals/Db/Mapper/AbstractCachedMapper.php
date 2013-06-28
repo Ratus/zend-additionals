@@ -306,12 +306,6 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
             $keys        = array();
             $reverseKeys = array();
             foreach ($identifiers as $identifierValue) {
-                $cacheKeyForEntityIds = $this->getIdentifierCacheKeyForEntityIds(
-                    $identifier,
-                    $identifierValue
-                );
-                $toCache[$cacheKeyForEntityIds] = array();
-
                 $keys[$identifierValue] = $this
                 ->getIdentifierCacheKeyForEntityIds(
                     $identifier,
@@ -323,6 +317,7 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
             foreach ($keys as $key) {
                 if (!isset($results[$key]) || false === $results[$key]) {
                     $notFoundIdentifiers[] = $reverseKeys[$key];
+                    $toCache[$key]         = array();
                     continue;
                 }
                 if (is_array($results[$key])) {
