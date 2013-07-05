@@ -297,9 +297,11 @@ abstract class AbstractWidget extends AbstractHelper implements
             'script_template_ids' => array(),
         );
 
-        $helperPluginManager = $this->getServiceLocator();
-        if (!($helperPluginManager instanceof AbstractPluginManager)) {
-            $helperPluginManager = $helperPluginManager->get('viewhelpermanager');
+        $serviceLocator = $this->getServiceLocator();
+        if (!($serviceLocator instanceof AbstractPluginManager)) {
+            $helperPluginManager = $serviceLocator->get('viewhelpermanager');
+        } else {
+            $helperPluginManager = $serviceLocator;
         }
 
         $scriptTemplate = $helperPluginManager->get('scriptTemplate');
