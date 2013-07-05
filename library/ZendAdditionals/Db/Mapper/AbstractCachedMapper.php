@@ -208,13 +208,18 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
      * A cache key prefix based on the lass instance, default includes
      * and tracking identifiers
      *
+     * @param string $tablePrefix
+     *
      * @return string
      */
-    protected function getCacheKeyPrefix()
+    protected function getCacheKeyPrefix($tablePrefix = null)
     {
+        $tablePrefix               = $tablePrefix ?: '';
         $entityCacheDefaultFilters = $this->getEntityCacheDefaultFilters();
         $defaultFilterKeys         = array_keys($entityCacheDefaultFilters);
-        $cacheIdentificationKey = static::SERVICE_NAME . '::';
+        $cacheIdentificationKey    = static::SERVICE_NAME . '::';
+
+        $cacheIdentificationKey   .= "({$tablePrefix}{$this->tableName})::";
         if (!empty($this->entityCacheDefaultIncludes)) {
             $cacheIdentificationKey .= 'include:' . strtolower(
                 implode('|', $this->entityCacheDefaultIncludes)
@@ -240,30 +245,33 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
     /**
      * Generates a cache key for identifiers tracked for this cache
      *
-     * @param  string $identifier
-     * @param  string $identifierValue
+     * @param string $identifier
+     * @param string $identifierValue
+     * @param string $tablePrefix
      *
      * @return string
      */
     protected function getIdentifierCacheKeyForEntityIds(
         $identifier,
-        $identifierValue
+        $identifierValue,
+        $tablePrefix = null
     ) {
-        return $this->getCacheKeyPrefix() . '_ids_by_' . $identifier .
+        return $this->getCacheKeyPrefix($tablePrefix) . '_ids_by_' . $identifier .
             '_' . $identifierValue;
     }
 
     /**
      * Generates a cache key for a given entity id
      *
-     * @param  array $id
+     * @param array $id
+     * @param string $tablePrefix
      *
      * @return string
      */
-    protected function getEntityCacheKey(array $id)
+    protected function getEntityCacheKey(array $id, $tablePrefix = null)
     {
         $idString = str_replace('=', ':', http_build_query($id));
-        return $this->getCacheKeyPrefix() . '_entity_(' . $idString . ')';
+        return $this->getCacheKeyPrefix($tablePrefix) . '_entity_(' . $idString . ')';
     }
 
     /**
@@ -637,11 +645,15 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
         $this->getEventManager()->attach(
             static::SERVICE_NAME . '::entity_pre_save',
             function(Event $event) {
-                $entity = $event->getParam('entity');
+                //echo "PRESAVE\n";
+                //echo get_class($this) . PHP_EOL;
+                $entity      = $event->getParam('entity');
+                $tablePrefix = $event->getParam('table_prefix');
+                //echo $tablePrefix . PHP_EOL;
                 if (
                     $this->entityCacheEnabled &&
                     false !== ($id = $this->getIdForEntity($entity))) {
-                    $key = $this->getEntityCacheKey($id);
+                    $key = $this->getEntityCacheKey($id, $tablePrefix);
                     if (isset($this->entityCacheObjectStorage[$key])) {
                         ErrorHandler::start();
                         $original = unserialize($this->entityCacheObjectStorage[$key]);
@@ -666,6 +678,7 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
             function(Event $event) {
                 $entity             = $event->getParam('entity');
                 $inserted           = $event->getParam('inserted');
+                $tablePrefix        = $event->getParam('table_prefix');
                 $trackedIdentifiers = $this->getEntityCacheTrackedIdentifiers();
                 if (
                     $this->entityCacheEnabled &&
@@ -683,7 +696,8 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
                         if (null !== $value) {
                             $key = $this->getIdentifierCacheKeyForEntityIds(
                                 $trackedIdentifier,
-                                $value
+                                $value,
+                                $tablePrefix
                             );
                             $trackedIds = $this->getLockingCache()->get($key);
                             if (
@@ -702,7 +716,7 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
                     $this->entityCacheEnabled &&
                     false !== ($id = $this->getIdForEntity($entity))
                 ) {
-                    $key = $this->getEntityCacheKey($id);
+                    $key = $this->getEntityCacheKey($id, $tablePrefix);
                     // We always want to store into cache, this can become
                     // false depending on the following checks..
                     $storeIntoCache         = true;
@@ -800,10 +814,11 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
             static::SERVICE_NAME . '::entity_deleted',
             function(Event $event) {
                 $entity      = $event->getParam('entity');
+                $tablePrefix = $event->getParam('table_prefix');
                 $primaryData = $this->getPrimaryData(
                     $this->entityToArray($entity)
                 );
-                $key = $this->getEntityCacheKey($primaryData);
+                $key = $this->getEntityCacheKey($primaryData, $tablePrefix);
                 if ($this->getLockingCache()->getLock($key, null, 1500)) {
                     $this->getLockingCache()->del($key);
                     $this->getLockingCache()->releaseLock($key);
