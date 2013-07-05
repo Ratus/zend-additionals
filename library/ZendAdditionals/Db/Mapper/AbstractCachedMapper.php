@@ -219,7 +219,7 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
         $defaultFilterKeys         = array_keys($entityCacheDefaultFilters);
         $cacheIdentificationKey    = static::SERVICE_NAME . '::';
 
-        $cacheIdentificationKey   .= "({$tablePrefix}{$this->tableName})::";
+        $cacheIdentificationKey   .= "--({$tablePrefix}{$this->tableName})::";
         if (!empty($this->entityCacheDefaultIncludes)) {
             $cacheIdentificationKey .= 'include:' . strtolower(
                 implode('|', $this->entityCacheDefaultIncludes)
@@ -350,10 +350,11 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
                 );
             }
 
-            $searchFilter = ArrayUtils::mergeDistinct(
+            $searchFilter = ArrayUtils::merge(
                 $this->primaries[0],
                 array($identifier)
             );
+            $searchFilter = array_unique($searchFilter);
 
             $results = $this->search(
                 null,
