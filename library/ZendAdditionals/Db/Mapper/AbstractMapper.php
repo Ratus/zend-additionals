@@ -89,6 +89,11 @@ abstract class AbstractMapper implements
     protected $tableName;
 
     /**
+     * @var string
+     */
+    protected $originalTableName;
+
+    /**
      * @var boolean
      */
     private $isInitialized = false;
@@ -1602,6 +1607,38 @@ abstract class AbstractMapper implements
     }
 
     /**
+     * Override the default table for this mapper
+     *
+     * NOTE: If attempting another override first undo by passing
+     * NULL as argument or no variable at all.
+     *
+     * @param string $tableName
+     *
+     * @return AbstractMapper
+     */
+    protected function setTableNameOverride($tableName = null)
+    {
+        if (null !== $tableName && null !== $this->originalTableName) {
+            throw new \Exception(
+                'Undo override before attempting another override!'
+            );
+        }
+        if (null === $tableName && null === $this->originalTableName) {
+            throw new \Exception(
+                'Set override before trying to undo an override!'
+            );
+        }
+        if (null === $tableName) {
+            $this->tableName         = $this->originalTableName;
+            $this->originalTableName = null;
+        } else {
+            $this->originalTableName = $this->tableName;
+            $this->tableName         = $tableName;
+        }
+        return $this;
+    }
+
+    /**
      * @param string|null $table
      * return Select
      */
@@ -2459,16 +2496,13 @@ abstract class AbstractMapper implements
         $insert             = false;
 
         // For whole entities we want to trigger the entity specific pre_save
-        if (
-            !($this instanceof AttributeData) &&
-            !($this instanceof Attribute) &&
-            !($this instanceof AttributeProperty)
-        ) {
+        if (!($this instanceof AttributeData)) {
             $results = $this->getEventManager()->trigger(
                 static::SERVICE_NAME . '::entity_pre_save',
                 $this,
                 array(
-                    'entity'   => $entity,
+                    'entity'       => $entity,
+                    'table_prefix' => $tablePrefix,
                 )
             );
             $lastResult = $results->last();
@@ -2529,17 +2563,14 @@ abstract class AbstractMapper implements
         );
 
         // For whole entities we want to trigger the entity specific saves event
-        if (
-            !($this instanceof AttributeData) &&
-            !($this instanceof Attribute) &&
-            !($this instanceof AttributeProperty)
-        ) {
+        if (!($this instanceof AttributeData)) {
             $this->getEventManager()->trigger(
                 static::SERVICE_NAME . '::entity_saved',
                 $this,
                 array(
-                    'entity'   => $entity,
-                    'inserted' => $insert,
+                    'entity'       => $entity,
+                    'inserted'     => $insert,
+                    'table_prefix' => $tablePrefix,
                 )
             );
         }
@@ -2661,7 +2692,8 @@ abstract class AbstractMapper implements
                 static::SERVICE_NAME . '::entity_deleted',
                 $this,
                 array(
-                    'entity' => $entity,
+                    'entity'       => $entity,
+                    'table_prefix' => $tablePrefix,
                 )
             );
         } catch (\Zend\Db\Exception\ExceptionInterface $e) {
