@@ -505,22 +505,25 @@ abstract class AbstractMapper implements
                     $operator->setLeft($key)->setRight($value);
                 }
 
-                $operators = array(
-                    $operator,
-                );
-
                 /**
-                 * We want to set aliases on operators within predicateset's as well..
-                 * for this reason an array of operator objects gets built.
+                 * Flat operators to prepend aliases
                  */
-                if ($operator instanceof Predicate\PredicateSet) {
-                    $operatorsArray = $operator->getPredicates();
-                    // array of arrays and every 2nd item is the operator?? well documented ehh..
-                    $operators = array();
-                    foreach ($operatorsArray as $operatorArray) {
-                        $operators[] = $operatorArray[1];
+                $flattenOperators = function($operator, array &$operators, $me) {
+                    if (($operator instanceof Predicate\PredicateSet) === false) {
+                        $operators[] = $operator;
+                        return;
                     }
-                }
+
+                    $operatorsArray = $operator->getPredicates();
+
+                    foreach ($operatorsArray as $operatorArray) {
+                        $me($operatorArray[1], $operators, $me);
+                    }
+                };
+
+                // Flatten operators
+                $operators = array();
+                $flattenOperators($operator, $operators, $flattenOperators);
 
                 foreach ($operators as &$item) {
                     $getIdentifier = 'getLeft';
@@ -2945,6 +2948,7 @@ abstract class AbstractMapper implements
         if (empty($where)) {
             if ($this->isPrimaryKeyChanged($changedData)) {
                 $previousPrimaryData = $this->getPrimaryData($originalData);
+
                 if (empty($previousPrimaryData)) {
                     throw new Exception\UpdateFailedException(
                         'Update called for non existing entity, must be fixed!'
@@ -2955,6 +2959,12 @@ abstract class AbstractMapper implements
                 $where = $this->getPrimaryData(
                     $this->entityToArray($entity, $hydrator)
                 );
+
+                if (empty($where)) {
+                    throw new Exception\UpdateFailedException(
+                        'Missing primary columns. Cannot update record!'
+                    );
+                }
             }
         }
 
