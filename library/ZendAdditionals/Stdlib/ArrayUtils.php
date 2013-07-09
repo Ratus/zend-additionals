@@ -34,6 +34,53 @@ class ArrayUtils extends \Zend\Stdlib\ArrayUtils
     }
 
     /**
+     * Merge two or more arrays together.
+     *
+     * If an integer key exists in both arrays, the value from the second array
+     * will be appended the the first array. If both values are arrays, they
+     * are merged together, else the value of the second array overwrites the
+     * one of the first array.
+     *
+     * @param  \ArrayAccess|array $array1 Initial array to merge.
+     * @param  \ArrayAccess|array $_      [optional] Variable list of arrays to recursively merge.
+     *
+     * @return \ArrayAccess|array
+     */
+    public static function mergeAll($array1, $_ = null)
+    {
+        $arrays = func_get_args();
+        array_shift($arrays);
+        if (empty($arrays)) {
+            return $array1;
+        }
+        foreach ($arrays as $b) {
+            foreach ($b as $key => $value) {
+                if (array_key_exists($key, $array1)) {
+                    if (is_int($key)) {
+                        $array1[] = $value;
+                    } elseif (
+                        (
+                            is_array($value) ||
+                            ($value instanceof \ArrayAccess)
+                        ) &&
+                        (
+                            is_array($array1[$key]) ||
+                            ($array1[$key] instanceof \ArrayAccess)
+                        )
+                    ) {
+                        $array1[$key] = static::mergeAll($array1[$key], $value);
+                    } else {
+                        $array1[$key] = $value;
+                    }
+                } else {
+                    $array1[$key] = $value;
+                }
+            }
+        }
+        return $array1;
+    }
+
+    /**
      * Merge two arrays together.
      *
      * If an integer key exists in both arrays, the value from the second array

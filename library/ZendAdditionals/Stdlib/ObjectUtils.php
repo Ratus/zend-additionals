@@ -30,9 +30,11 @@ class ObjectUtils extends \Zend\Stdlib\ArrayUtils
         AbstractHydrator $hydrator = null
     ) {
         if (is_array($data) || $data instanceof ArrayAccess) {
-            foreach ($data as &$element) {
-                $element = static::toArray($element, $map, $filters, $hydrator);
+            $return = array();
+            foreach ($data as $key => $element) {
+                $return[$key] = static::toArray($element, $map, $filters, $hydrator);
             }
+            $data = $return;
         }
         if ($data instanceof ArrayAccess) {
             return (array) $data;
@@ -52,6 +54,7 @@ class ObjectUtils extends \Zend\Stdlib\ArrayUtils
                 }
             }
         }
+        $keysHandledByMapping = array();
         foreach ($map as $objectMapping) {
             foreach ($array as $key => &$value) {
                 if ($value instanceof $objectMapping['prototype']) {
@@ -63,11 +66,19 @@ class ObjectUtils extends \Zend\Stdlib\ArrayUtils
                     ) {
                         $value = $objectMapping['callback']($value);
                     }
-                } elseif (is_object($value)) {
-                    $value = static::toArray($value, $map, $filters, $hydrator);
+                    $keysHandledByMapping[$key] = true;
                 }
             }
         }
+        foreach ($array as $key => &$value) {
+            if (
+                !isset($keysHandledByMapping[$key]) &&
+                is_object($value)
+            ) {
+                $value = static::toArray($value, $map, $filters, $hydrator);
+            }
+        }
+
         return $array;
     }
 

@@ -1,30 +1,33 @@
 <?php
 namespace ZendAdditionals\Db\Mapper;
 
-use Zend\Db\Adapter\Adapter;
-use Zend\Db\Adapter\Driver\ResultInterface;
-use Zend\Db\Sql\Delete;
-use Zend\Db\Sql\Select;
-use Zend\Db\Sql\Update;
-use Zend\Db\Sql\Sql;
-use Zend\Db\Sql\AbstractSql;
-use Zend\Stdlib\Hydrator\HydratorInterface;
+use ZendAdditionals\Db\Adapter\MasterSlaveAdapterInterface;
+use ZendAdditionals\Db\EntityAssociation\EntityAssociation;
+use ZendAdditionals\Db\Mapper\AttributeProperty;
+use ZendAdditionals\Db\Mapper\Exception;
+use ZendAdditionals\Db\ResultSet\JoinedHydratingResultSet;
 use ZendAdditionals\Stdlib\Hydrator\ClassMethods;
 use ZendAdditionals\Stdlib\Hydrator\ObservableClassMethods;
 use ZendAdditionals\Stdlib\Hydrator\Strategy\ObservableStrategyInterface;
-use ZendAdditionals\Db\Adapter\MasterSlaveAdapterInterface;
-use ZendAdditionals\Db\EntityAssociation\EntityAssociation;
-use ZendAdditionals\Db\ResultSet\JoinedHydratingResultSet;
+
+use Zend\Db\Adapter\Adapter;
+use Zend\Db\Adapter\Driver\ResultInterface;
+use Zend\Db\Adapter\Exception\InvalidQueryException;
 use Zend\Db\Adapter\AdapterAwareInterface;
-use Zend\ServiceManager\ServiceManagerAwareInterface;
-use Zend\ServiceManager\ServiceManager;
+use Zend\Db\Sql\AbstractSql;
+use Zend\Db\Sql\Expression;
+use Zend\Db\Sql\Delete;
 use Zend\Db\Sql\Predicate;
 use Zend\Db\Sql\Predicate\Operator;
-use Zend\Db\Sql\Expression;
-use Zend\EventManager\EventManagerInterface;
+use Zend\Db\Sql\Select;
+use Zend\Db\Sql\Sql;
+use Zend\Db\Sql\Update;
 use Zend\EventManager\EventManager;
-use ZendAdditionals\Db\Mapper\AttributeProperty;
-use ZendAdditionals\Db\Mapper\Exception;
+use Zend\EventManager\EventManagerInterface;
+use Zend\ServiceManager\Exception\ServiceNotFoundException;
+use Zend\ServiceManager\ServiceManager;
+use Zend\ServiceManager\ServiceManagerAwareInterface;
+use Zend\Stdlib\Hydrator\HydratorInterface;
 
 abstract class AbstractMapper implements
     ServiceManagerAwareInterface,
@@ -84,6 +87,11 @@ abstract class AbstractMapper implements
      * @var string
      */
     protected $tableName;
+
+    /**
+     * @var string
+     */
+    protected $originalTableName;
 
     /**
      * @var boolean
@@ -739,7 +747,7 @@ abstract class AbstractMapper implements
      *
      * @return array
      */
-    public function search(
+    protected function search(
         array $range         = null,
         array $filter        = null,
         array $orderBy       = null,
@@ -1246,7 +1254,16 @@ abstract class AbstractMapper implements
         }
 
         $returnData = array();
-        $result = $this->getResult($select);
+        try {
+            $result = $this->getResult($select);
+        }
+        catch (InvalidQueryException $exception) {
+            throw new Exception\SearchFailedException(
+                'Search query failed!',
+                0,
+                $exception
+            );
+        }
         /*@var $result \ZendAdditionals\Db\ResultSet\JoinedHydratingResultSet*/
 
         while ($entity = $result->current($returnEntities)) {
@@ -1593,6 +1610,38 @@ abstract class AbstractMapper implements
     }
 
     /**
+     * Override the default table for this mapper
+     *
+     * NOTE: If attempting another override first undo by passing
+     * NULL as argument or no variable at all.
+     *
+     * @param string $tableName
+     *
+     * @return AbstractMapper
+     */
+    protected function setTableNameOverride($tableName = null)
+    {
+        if (null !== $tableName && null !== $this->originalTableName) {
+            throw new \Exception(
+                'Undo override before attempting another override!'
+            );
+        }
+        if (null === $tableName && null === $this->originalTableName) {
+            throw new \Exception(
+                'Set override before trying to undo an override!'
+            );
+        }
+        if (null === $tableName) {
+            $this->tableName         = $this->originalTableName;
+            $this->originalTableName = null;
+        } else {
+            $this->originalTableName = $this->tableName;
+            $this->tableName         = $tableName;
+        }
+        return $this;
+    }
+
+    /**
      * @param string|null $table
      * return Select
      */
@@ -1762,8 +1811,7 @@ abstract class AbstractMapper implements
      * @param EntityAssociation $parentAssociation
      * @param array $columnFilter By default all columns get selected,
      *                            use this array to minimize the selection
-     * @param array<Operator> $filters An array containing filters for this join, note
-     *                       when filters are provided this join becomes required!
+     * @param array<Operator> $filters An array containing filters for this join.
      *
      * @return EntityAssociation
      *
@@ -1884,7 +1932,6 @@ abstract class AbstractMapper implements
         }
 
         $joinPredicate = $entityAssociation->getPredicate();
-        $joinRequiredByFilter = false;
         if ($this->getAllowFilters() && !empty($filters)) {
             foreach ($filters as $key => $operator) {
                 if (is_array($operator)) {
@@ -1900,30 +1947,35 @@ abstract class AbstractMapper implements
                     $operator->setLeft($key)->setRight($value);
                 }
 
-                $operators = array(
-                    $operator,
-                );
-
                 /**
-                 * We want to set aliases on operators within predicateset's as well..
-                 * for this reason an array of operator objects gets built.
+                 * Flat operators to prepend aliases
                  */
-                if ($operator instanceof Predicate\PredicateSet) {
-                    $operatorsArray = $operator->getPredicates();
-                    // array of arrays and every 2nd item is the operator?? well documented ehh..
-                    $operators = array();
-                    foreach ($operatorsArray as $operatorArray) {
-                        $operators[] = $operatorArray[1];
+                $flattenOperators = function($operator, array &$operators, $me) {
+                    if (($operator instanceof Predicate\PredicateSet) === false) {
+                        $operators[] = $operator;
+                        return;
                     }
-                }
+
+                    $operatorsArray = $operator->getPredicates();
+
+                    foreach ($operatorsArray as $operatorArray) {
+                        $me($operatorArray[1], $operators, $me);
+                    }
+                };
+
+                // Flatten operators
+                $operators = array();
+                $flattenOperators($operator, $operators, $flattenOperators);
 
                 foreach ($operators as &$item) {
                     $getIdentifier = 'getLeft';
                     $setIdentifier = 'setLeft';
+
                     if (method_exists($item, 'getIdentifier')) {
                         $getIdentifier = 'getIdentifier';
                         $setIdentifier = 'setIdentifier';
                     }
+
                     $currentIdentifier = $item->$getIdentifier();
                     if (strpos($currentIdentifier, '.') === false) {
                         $item->$setIdentifier(
@@ -1935,7 +1987,6 @@ abstract class AbstractMapper implements
                     // Skip non predicates
                     continue;
                 }
-                $joinRequiredByFilter = true;
                 $joinPredicate->addPredicate($operator);
             }
         } else if ($this->getAllowFilters() === false && !empty($filters)){
@@ -1952,11 +2003,7 @@ abstract class AbstractMapper implements
             $entityAssociation->getJoinTable(),
             $joinPredicate,
             $joinColumns,
-            (
-                $joinRequiredByFilter ?
-                Select::JOIN_INNER :
-                $entityAssociation->getJoinType()
-            )
+            $entityAssociation->getJoinType()
         );
 
         $this->storeEntityAssociationToSelect($select, $entityAssociation);
@@ -2452,16 +2499,13 @@ abstract class AbstractMapper implements
         $insert             = false;
 
         // For whole entities we want to trigger the entity specific pre_save
-        if (
-            !($this instanceof AttributeData) &&
-            !($this instanceof Attribute) &&
-            !($this instanceof AttributeProperty)
-        ) {
+        if (!($this instanceof AttributeData)) {
             $results = $this->getEventManager()->trigger(
                 static::SERVICE_NAME . '::entity_pre_save',
                 $this,
                 array(
-                    'entity'   => $entity,
+                    'entity'       => $entity,
+                    'table_prefix' => $tablePrefix,
                 )
             );
             $lastResult = $results->last();
@@ -2522,17 +2566,14 @@ abstract class AbstractMapper implements
         );
 
         // For whole entities we want to trigger the entity specific saves event
-        if (
-            !($this instanceof AttributeData) &&
-            !($this instanceof Attribute) &&
-            !($this instanceof AttributeProperty)
-        ) {
+        if (!($this instanceof AttributeData)) {
             $this->getEventManager()->trigger(
                 static::SERVICE_NAME . '::entity_saved',
                 $this,
                 array(
-                    'entity'   => $entity,
-                    'inserted' => $insert,
+                    'entity'       => $entity,
+                    'inserted'     => $insert,
+                    'table_prefix' => $tablePrefix,
                 )
             );
         }
@@ -2654,7 +2695,8 @@ abstract class AbstractMapper implements
                 static::SERVICE_NAME . '::entity_deleted',
                 $this,
                 array(
-                    'entity' => $entity,
+                    'entity'       => $entity,
+                    'table_prefix' => $tablePrefix,
                 )
             );
         } catch (\Zend\Db\Exception\ExceptionInterface $e) {
@@ -2763,6 +2805,51 @@ abstract class AbstractMapper implements
             }
         }
         return $entityArray;
+    }
+
+    /**
+     * Get relation information
+     *
+     * @param  string $relationIdentifier
+     *
+     * @return array  Containing all the information about the relation
+     *
+     * @throws Exception\RelationNotFoundException
+     */
+    protected function getRelationInfo($relationIdentifier)
+    {
+        if (!isset($this->relations[$relationIdentifier])) {
+            throw new Exception\RelationNotFoundException(
+                'relation not found'
+            );
+        }
+        return $this->relations[$relationIdentifier];
+    }
+
+    /**
+     * Get the relating mapper service
+     *
+     * @param  string $relationIdentifier
+     *
+     * @return AbstractMapper
+     *
+     * @throws Exception\RelationMapperServiceNotFoundException
+     */
+    protected function getMapperForRelation($relationIdentifier)
+    {
+        $relationInfo = $this->getRelationInfo($relationIdentifier);
+        try {
+            /* @var $relationServiceMapper AbstractMapper */
+            return $this->getServiceManager()->get(
+                $relationInfo['mapper_service_name']
+            );
+        } catch (ServiceNotFoundException $exception) {
+            throw new Exception\RelationMapperServiceNotFoundException(
+                '',
+                0,
+                $exception
+            );
+        }
     }
 
     protected function storeRelatedEntities(

@@ -1,5 +1,4 @@
 <?php
-
 namespace ZendAdditionals\Cache\Pattern;
 
 use Zend\Cache\Exception;
@@ -75,7 +74,7 @@ class LockingCache extends AbstractPattern
         $result = null;
 
         if (!$reload && $enabled) {
-            $ttl = $ttl ?: $this->storage->getOptions()->getTtl();
+            $ttl    = $ttl ?: $this->storage->getOptions()->getTtl();
             $result = $this->storage->getItem($key, $success);
         }
 
@@ -110,6 +109,7 @@ class LockingCache extends AbstractPattern
             $data = call_user_func($callback);
             if ($locked) {
                 $this->set($key, $data, $ttl);
+                $this->releaseLock($key);
             }
             return $data;
         }
@@ -119,11 +119,13 @@ class LockingCache extends AbstractPattern
     /**
      * Get a lock for a specific key
      *
-     * @param string $key
-     * @param int $ttl
+     * @param string $key     The key to lock
+     * @param int    $ttl     How long will the lock last in seconds
+     * @param int    $timeout How many ms to wait to get the lock
+     *
      * @return boolean
      */
-    public function getLock($key, $ttl = null)
+    public function getLock($key, $ttl = null, $timeout = 0)
     {
         /**
          * Ignore locking when not enabled (this prevents sleeping code)
@@ -131,21 +133,40 @@ class LockingCache extends AbstractPattern
         if (!$this->getOptions()->getEnabled()) {
             return true;
         }
-        $lockKey = $this->getPreparedLockKey($key);
-        $ttl = $ttl ?: $this->getOptions()->getLockTime();
+        $lockKey         = $this->getPreparedLockKey($key);
+        $ttl             = $ttl ?: $this->getOptions()->getLockTime();
         $currentlyLocked = $this->isLocked($key, $lockValue);
+
+        $myLock = (
+            $currentlyLocked &&
+            isset($this->locks[$lockKey]) &&
+            $this->locks[$lockKey] === $lockValue
+        );
+
+        if ($timeout > 0 && $currentlyLocked && !$myLock) {
+            $retryStartTime = microtime(true);
+            while ($currentlyLocked && !$myLock) {
+                usleep(50000); // sleep for 50 ms
+                $currentlyLocked = $this->isLocked($key, $lockValue);
+                if (!$currentlyLocked) {
+                    break;
+                }
+                $retryTime = round((microtime(true)-$retryStartTime)*1000);
+                if ($retryTime >= $timeout) {
+                    break;
+                }
+            }
+        }
+
         if (
             !$currentlyLocked ||
-            (
-                isset($this->locks[$lockKey]) &&
-                $this->locks[$lockKey] === $lockValue
-            )
+            $myLock
         ) {
             $originalTtl = $this->storage->getOptions()->getTtl();
             $this->storage->getOptions()->setTtl($ttl);
-            $lockValue = mt_rand(0, mt_getrandmax());
+            $lockValue     = mt_rand(0, mt_getrandmax());
             $preparedValue = $this->prepareValue($lockValue, $ttl);
-            $success = $this->storage->setItem($lockKey, $preparedValue);
+            $success       = $this->storage->setItem($lockKey, $preparedValue);
             $this->storage->getOptions()->setTtl($originalTtl);
             $this->locks[$lockKey] = $lockValue;
             return $success;
@@ -361,4 +382,3 @@ class LockingCache extends AbstractPattern
         return $this->getOptions()->getLockPrefix() . $key;
     }
 }
-
