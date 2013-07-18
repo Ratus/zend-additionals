@@ -47,4 +47,31 @@ class EntityRepository extends \Doctrine\ORM\EntityRepository
 
         return (int) $result;
     }
+
+    /**
+     * {@inheritdoc}
+     *
+     * @return \Doctrine\Common\Collections\ArrayCollection | array when CollectionClass cannot be found
+     */
+    public function findBy(array $criteria, array $orderBy = null, $limit = null, $offset = null)
+    {
+        $entity     = $this->getEntityName();
+        $collection = str_replace('Entity', 'Collection', $entity);
+
+        if (class_exists($collection)) {
+            return new $collection(parent::findBy($criteria, $orderBy, $limit, $offset));
+        }
+
+        return parent::findBy($criteria, $orderBy, $limit, $offset);
+    }
+
+    /**
+     * {@inheritdoc}
+     *
+     * @return \Doctrine\Common\Collections\ArrayCollection | array when CollectionClass cannot be found
+     */
+    public function findAll()
+    {
+        return parent::findAll();
+    }
 }
