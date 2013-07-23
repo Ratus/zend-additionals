@@ -202,7 +202,7 @@ class StringUtils extends \Zend\Stdlib\StringUtils
      *
      * @return string|boolean False on failure, base 62 string on success
      */
-    public function crc62($source)
+    public static function crc62($source)
     {
         if (!is_string($source)) {
             return false;
