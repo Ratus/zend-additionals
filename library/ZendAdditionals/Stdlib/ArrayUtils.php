@@ -187,7 +187,8 @@ class ArrayUtils extends \Zend\Stdlib\ArrayUtils
      *
      * @return \stdObject
      */
-    public static function toObject($data) {
+    public static function toObject($data) 
+    {
         if (is_array($data)) {
             /*
             * Return array converted to object
@@ -200,5 +201,24 @@ class ArrayUtils extends \Zend\Stdlib\ArrayUtils
             // Return object
             return $data;
         }
+    }
+    
+    /**
+     * Convert a multi dimensional array to a flat array
+     * 
+     * @param array $array
+     * 
+     * @return array
+     */
+    public static function flatten(array $array)
+    {
+        $return = array();
+        array_walk_recursive(
+            $array, 
+            function($a) use (&$return) { 
+                $return[] = $a; 
+            }
+        );
+        return $return;
     }
 }
