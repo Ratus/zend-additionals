@@ -790,8 +790,9 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
                             $this->entityCacheTtl
                         );
                         $this->getLockingCache()->releaseLock($key);
+                        $this->addCachedEntityToInstanceCache($entity);
+                        $this->entityCacheObjectStorage[$key] = serialize($entity);
                     }
-                    $this->entityCacheObjectStorage[$key] = serialize($entity);
                     if (
                         false === $storeIntoCache &&
                         $this->getLockingCache()->getLock($key)
@@ -799,6 +800,15 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
                         // We must check and unset previous data from cache..
                         $this->getLockingCache()->del($key);
                         $this->getLockingCache()->releaseLock($key);
+                        
+                        // Also remove from object storage
+                        if (isset($this->entityCacheObjectStorage[$key])) {
+                            unset($this->entityCacheObjectStorage[$key]);
+                        }
+                        // Also remove from instance cache
+                        if (isset($this->entityCacheInstanceCache[$key])) {
+                            unset($this->entityCacheInstanceCache[$key]);
+                        }
                     }
                 }
             }

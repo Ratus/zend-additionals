@@ -694,13 +694,23 @@ abstract class AbstractMapper implements
         while($timeleft) {
 
             if (!$firstSearch) {
-                $this->getEventManager()->trigger(
+                $responseCollection = $this->getEventManager()->trigger(
                     'search_and_wait_next_iteration',
                     $this,
                     array(
                         'filter' => &$filter,
                     )
                 );
+                $lastResponse = $responseCollection->last();
+                if (
+                    is_array($lastResponse) && 
+                    array_key_exists('continue', $lastResponse) && 
+                    false === $lastResponse['continue']
+                ) {
+                    // Last response told us to stop iterating!
+                    $timeleft = false;
+                    break;
+                }
             }
 
             $results = $this->search(
