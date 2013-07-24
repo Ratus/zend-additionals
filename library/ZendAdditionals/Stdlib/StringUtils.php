@@ -110,6 +110,17 @@ class StringUtils extends \Zend\Stdlib\StringUtils
     }
 
     /**
+     * Convert camelcased string to underscored string
+     *
+     * @param  string $needle
+     * @return string
+     */
+    public static function camelCaseToUnderscore($needle)
+    {
+        return preg_replace('/([A-Z])/e', "strtolower('_$1')", $needle);
+    }
+
+    /**
      * Check value to find if it was Json Encoded.
      *
      * If $data is not a string, the returned value will always be false.
