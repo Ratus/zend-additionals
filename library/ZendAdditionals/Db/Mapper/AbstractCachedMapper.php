@@ -801,7 +801,6 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
                         $this->getLockingCache()->del($key);
                         $this->getLockingCache()->releaseLock($key);
                         
-                        
                         // Also remove from object storage
                         if (isset($this->entityCacheObjectStorage[$key])) {
                             unset($this->entityCacheObjectStorage[$key]);
