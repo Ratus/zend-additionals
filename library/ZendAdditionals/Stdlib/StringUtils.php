@@ -105,8 +105,16 @@ class StringUtils extends \Zend\Stdlib\StringUtils
      */
     public static function underscoreToCamelCase($underscored)
     {
-        $underscored = strtolower($underscored);
-        return preg_replace('/_(.?)/e', "strtoupper('$1')", $underscored);
+        static $runtimeCache = array();
+
+        if (array_key_exists($underscored, $runtimeCache) === false) {
+            $runtimeCache[$underscored] = preg_replace(
+                '/_(.?)/e', "strtoupper('$1')",
+                $underscored
+            );
+        }
+
+        return $runtimeCache[$underscored];
     }
 
     /**
@@ -117,7 +125,13 @@ class StringUtils extends \Zend\Stdlib\StringUtils
      */
     public static function camelCaseToUnderscore($needle)
     {
-        return preg_replace('/([A-Z])/e', "strtolower('_$1')", $needle);
+        static $runtimeCache = array();
+
+        if (array_key_exists($needle, $runtimeCache) === false) {
+            $runtimeCache[$needle] = preg_replace('/([A-Z])/e', "strtolower('_$1')", $needle);
+        }
+
+        return $runtimeCache[$needle];
     }
 
     /**
@@ -441,6 +455,12 @@ class StringUtils extends \Zend\Stdlib\StringUtils
      */
     public static function parseHost($source)
     {
+        static $runtimeCache = array();
+
+        if (array_key_exists($source, $runtimeCache)) {
+            return $runtimeCache[$source];
+        }
+
         $return = array();
         preg_match("~^(?:(?:(?P<scheme>[a-z][0-9a-z.+-]*?)://)?(?P<authority>(?:(?P<userinfo>(?P<username>(?:[\w.\~-]|(?:%[\da-f]{2})|[!$&'()*+,;=])*)?:(?P<password>(?:[\w.\~-]|(?:%[\da-f]{2})|[!$&'()*+,;=])*)?|(?:[\w.\~-]|(?:%[\da-f]{2})|[!$&'()*+,;=]|:)*?)@)?(?P<host>(?P<domain>(?:[a-z](?:[0-9a-z-]*(?:[0-9a-z]))?\.)+(?:[a-z](?:[0-9a-z-]*(?:[0-9a-z]))?))|(?P<ip>(?:25[0-5]|2[0-4]\d|[01]\d\d|\d?\d).(?:25[0-5]|2[0-4]\d|[01]\d\d|\d?\d).(?:25[0-5]|2[0-4]\d|[01]\d\d|\d?\d).(?:25[0-5]|2[0-4]\d|[01]\d\d|\d?\d)))(?::(?P<port>\d+))?(?=/|$)))?(?P<path>/?(?:(?:[\w.\~-]|(?:%[\da-f]{2})|[!$&'()*+,;=]|:|@)+/)*(?:(?:[\w.\~-]|(?:%[\da-f]{2})|[!$&'()*+,;=]|:|@)+/?)?)(?:\?(?P<query>(?:(?:[\w.\~-]|(?:%[\da-f]{2})|[!$&'()*+,;=]|:|@)|/|\?)*?))?(?:#(?P<fragment>(?:(?:[\w.\~-]|(?:%[\da-f]{2})|[!$&'()*+,;=]|:|@)|/|\?)*))?$~i", $source, $matches);
         foreach ($matches as $key => $value) {
@@ -469,6 +489,9 @@ class StringUtils extends \Zend\Stdlib\StringUtils
                 $return['tld'] = $parts[0];
             }
         }
+
+        $runtimeCache[$source] = $return;
+
         return $return;
     }
 }
