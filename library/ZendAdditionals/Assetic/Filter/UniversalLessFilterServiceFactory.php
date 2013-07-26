@@ -10,9 +10,20 @@ class UniversalLessFilterServiceFactory implements FactoryInterface
 {
     public function createService(ServiceLocatorInterface $locator)
     {
-        $config = $locator->get('Config');
+        $config    = $locator->get('Config');
 
-        if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+        $useFallback = ArrayUtils::arrayTarget(
+            'asset_manager.settings.less.use_php_fallback',
+            $config,
+            true
+        );
+
+        if ($useFallback && strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+            error_log(
+                'Less PHP will be deprecated due to limitation. Setup your node.js environment',
+                E_USER_DEPRECATED
+            );
+
             include __DIR__ . '/lib/lessc.inc.php';
 
             $filter = new Filter\LessphpFilter();
