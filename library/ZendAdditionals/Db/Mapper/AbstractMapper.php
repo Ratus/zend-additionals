@@ -703,8 +703,8 @@ abstract class AbstractMapper implements
                 );
                 $lastResponse = $responseCollection->last();
                 if (
-                    is_array($lastResponse) && 
-                    array_key_exists('continue', $lastResponse) && 
+                    is_array($lastResponse) &&
+                    array_key_exists('continue', $lastResponse) &&
                     false === $lastResponse['continue']
                 ) {
                     // Last response told us to stop iterating!
@@ -2507,6 +2507,7 @@ abstract class AbstractMapper implements
         $transactionStarted = false;
         $this->lastErrors   = new Collection\Error();
         $insert             = false;
+        $entityModified     = true;
 
         // For whole entities we want to trigger the entity specific pre_save
         if (!($this instanceof AttributeData)) {
@@ -2534,7 +2535,17 @@ abstract class AbstractMapper implements
                 $hydrator->hasOriginal($entity) &&
                 !$this->isEntityEmpty($entity, true)
             ) {
-                $result = $this->update($entity, null, $hydrator, $tablePrefix);
+                $result = $this->update(
+                    $entity,
+                    null,
+                    $hydrator,
+                    $tablePrefix,
+                    $attributeDataModified
+                );
+                // true comes back when no columns are changed
+                if (true === $result && true !== $attributeDataModified) {
+                    $entityModified = false;
+                }
             } else {
                 $insert = true;
                 $result = $this->insert($entity, $hydrator, $tablePrefix);
@@ -2581,9 +2592,10 @@ abstract class AbstractMapper implements
                 static::SERVICE_NAME . '::entity_saved',
                 $this,
                 array(
-                    'entity'       => $entity,
-                    'inserted'     => $insert,
-                    'table_prefix' => $tablePrefix,
+                    'entity'          => $entity,
+                    'inserted'        => $insert,
+                    'table_prefix'    => $tablePrefix,
+                    'entity_modified' => $entityModified,
                 )
             );
         }
@@ -2862,10 +2874,19 @@ abstract class AbstractMapper implements
         }
     }
 
+    /**
+     * Stores the related entities for the given entity
+     *
+     * @param object  $entity
+     * @param string  $tablePrefix
+     * @param boolean $ignoreEntitiesThatRequireBase
+     * @param boolean $attributeDataModified
+     */
     protected function storeRelatedEntities(
-        $entity,
-        $tablePrefix = null,
-        $ignoreEntitiesThatRequireBase = false
+         $entity,
+         $tablePrefix                   = null,
+         $ignoreEntitiesThatRequireBase = false,
+        &$attributeDataModified         = false
     ) {
         $this->initialize();
         foreach ($this->relations as $entityIdentifier => $relationInfo) {
@@ -2935,12 +2956,18 @@ abstract class AbstractMapper implements
             }
 
             // Save the associated entity
-            $relationServiceMapper->save(
+            $result = $relationServiceMapper->save(
                 $associatedEntity,
                 $tablePrefix,
                 $relationInfo,
                 false
             );
+
+            if ($associatedEntity instanceof \ZendAdditionals\Db\Entity\AttributeData &&
+                $result instanceof ResultInterface
+            ) {
+                $attributeDataModified = true;
+            }
 
             // Set id from associated entity into entity (if applicable)
             if ($entityHasReferenceToAssociation) {
@@ -3013,15 +3040,25 @@ abstract class AbstractMapper implements
      * @param object|array $entity
      * @param string|array|closure $where
      * @param ObservableStrategyInterface|null $hydrator
-     * @return ResultInterface
+     * @param string  $tablePrefix
+     * @param boolean $attributeDataModified Becomes true when related attribute data
+     * is changed, use of this variable is by reference.
+     *
+     * @return ResultInterface|boolean true when there are no changes mage
      */
     protected function update(
-        $entity,
-        $where = null,
-        ObservableStrategyInterface $hydrator = null,
-        $tablePrefix = null
+                                    $entity,
+                                    $where                 = null,
+        ObservableStrategyInterface $hydrator              = null,
+                                    $tablePrefix           = null,
+                                   &$attributeDataModified = false
     ) {
-        $this->storeRelatedEntities($entity, $tablePrefix);
+        $this->storeRelatedEntities(
+            $entity,
+            $tablePrefix,
+            false,
+            $attributeDataModified
+        );
 
         $this->initialize();
         $tableName = $this->getTableName();

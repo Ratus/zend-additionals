@@ -646,11 +646,8 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
         $this->getEventManager()->attach(
             static::SERVICE_NAME . '::entity_pre_save',
             function(Event $event) {
-                //echo "PRESAVE\n";
-                //echo get_class($this) . PHP_EOL;
                 $entity      = $event->getParam('entity');
                 $tablePrefix = $event->getParam('table_prefix');
-                //echo $tablePrefix . PHP_EOL;
                 if (
                     $this->entityCacheEnabled &&
                     false !== ($id = $this->getIdForEntity($entity))) {
@@ -680,7 +677,14 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
                 $entity             = $event->getParam('entity');
                 $inserted           = $event->getParam('inserted');
                 $tablePrefix        = $event->getParam('table_prefix');
+                $entityModified     = $event->getParam('entity_modified');
                 $trackedIdentifiers = $this->getEntityCacheTrackedIdentifiers();
+
+                // No need to do stuff when there is no real change
+                if (false === $entityModified) {
+                    return;
+                }
+
                 if (
                     $this->entityCacheEnabled &&
                     $inserted &&
@@ -690,28 +694,14 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
                     foreach (
                         $trackedIdentifiers as $trackedIdentifier
                     ) {
-                        $get = StringUtils::underscoreToCamelCase(
-                            "get_{$trackedIdentifier}"
+                        $this->addTrackedIdentifier(
+                            $entity,
+                            $trackedIdentifier,
+                            $tablePrefix
                         );
-                        $value = $entity->$get();
-                        if (null !== $value) {
-                            $key = $this->getIdentifierCacheKeyForEntityIds(
-                                $trackedIdentifier,
-                                $value,
-                                $tablePrefix
-                            );
-                            $trackedIds = $this->getLockingCache()->get($key);
-                            if (
-                                is_array($trackedIds) &&
-                                $this->getLockingCache()->getLock($key)
-                            ) {
-                                $trackedIds[] = $this->getIdForEntity($entity);
-                                $this->getLockingCache()->set($key, $trackedIds);
-                                $this->getLockingCache()->releaseLock($key);
-                            }
-                        }
                     }
                 }
+
                 $entityCacheDefaultFilters = $this->getEntityCacheDefaultFilters();
                 if (
                     $this->entityCacheEnabled &&
@@ -721,6 +711,15 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
                     // We always want to store into cache, this can become
                     // false depending on the following checks..
                     $storeIntoCache         = true;
+                    // Set original to false
+                    $original = false;
+                    if (isset($this->entityCacheObjectStorage[$key])) {
+                        ErrorHandler::start();
+                        $original = unserialize(
+                            $this->entityCacheObjectStorage[$key]
+                        );
+                        ErrorHandler::stop(true);
+                    }
                     /**
                      * We do want to add this entity to the instance cache
                      * if we re-save it within the same request this could
@@ -747,11 +746,6 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
                          * entity must be removed from cache for the filters
                          * to re-validate the entity.
                          */
-                        ErrorHandler::start();
-                        $original          = unserialize(
-                            $this->entityCacheObjectStorage[$key]
-                        );
-                        ErrorHandler::stop(true);
                         $defaultFilterKeys = array_keys(
                             $entityCacheDefaultFilters
                         );
@@ -792,27 +786,220 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
                         $this->getLockingCache()->releaseLock($key);
                         $this->addCachedEntityToInstanceCache($entity);
                         $this->entityCacheObjectStorage[$key] = serialize($entity);
+
+                        // Update the entity cache tracked identifiers
+                        if (false !== $original) {
+                            $this->updateTrackedIdentifiers(
+                                $original,
+                                $entity,
+                                $tablePrefix
+                            );
+                        } else {
+                            foreach (
+                                $trackedIdentifiers as $trackedIdentifier
+                            ) {
+                                $this->addTrackedIdentifier(
+                                    $entity,
+                                    $trackedIdentifier,
+                                    $tablePrefix
+                                );
+                            }
+                        }
                     }
                     if (
                         false === $storeIntoCache &&
-                        $this->getLockingCache()->getLock($key)
+                        false !== $original
                     ) {
-                        // We must check and unset previous data from cache..
-                        $this->getLockingCache()->del($key);
-                        $this->getLockingCache()->releaseLock($key);
-                        
-                        // Also remove from object storage
-                        if (isset($this->entityCacheObjectStorage[$key])) {
-                            unset($this->entityCacheObjectStorage[$key]);
-                        }
-                        // Also remove from instance cache
-                        if (isset($this->entityCacheInstanceCache[$key])) {
-                            unset($this->entityCacheInstanceCache[$key]);
-                        }
+                        // Remove original entity from cache
+                        $this->removeEntityFromCache($original, $tablePrefix);
                     }
                 }
             }
         );
+    }
+
+    /**
+     * Updates all changed tracked identifiers
+     *
+     * @param object $originalEntity
+     * @param object $newEntity
+     * @param string $tablePrefix
+     *
+     * @return void
+     */
+    protected function updateTrackedIdentifiers(
+        $originalEntity,
+        $newEntity,
+        $tablePrefix
+    ) {
+        $trackedIdentifiers = $this->getEntityCacheTrackedIdentifiers();
+        if (
+            $this->entityCacheEnabled &&
+            !empty($trackedIdentifiers)
+        ) {
+            foreach (
+                $trackedIdentifiers as $trackedIdentifier
+            ) {
+                $get = StringUtils::underscoreToCamelCase(
+                    "get_{$trackedIdentifier}"
+                );
+                $originalValue = $originalEntity->$get();
+                $newValue      = $newEntity->$get();
+                if ($originalValue !== $newValue) {
+                    // remove original tracking
+                    $this->removeTrackedIdentifier(
+                        $originalEntity,
+                        $trackedIdentifier,
+                        $tablePrefix
+                    );
+                    // create new tracking
+                    $this->addTrackedIdentifier(
+                        $newEntity,
+                        $trackedIdentifier,
+                        $tablePrefix
+                    );
+                }
+            }
+        }
+    }
+
+    /**
+     * Adds a tracked identifier
+     *
+     * @param object $entity
+     * @param string $identifier
+     * @param string $tablePrefix
+     *
+     * @return void
+     */
+    protected function addTrackedIdentifier(
+        $entity,
+        $identifier,
+        $tablePrefix
+    ) {
+        if (false === $this->entityCacheEnabled) {
+            return;
+        }
+
+        $get = StringUtils::underscoreToCamelCase(
+            "get_{$identifier}"
+        );
+
+        $value = $entity->$get();
+
+        if (null === $value) {
+            return;
+        }
+
+        $key = $this->getIdentifierCacheKeyForEntityIds(
+            $identifier,
+            $value,
+            $tablePrefix
+        );
+        $trackedIds = $this->getLockingCache()->get($key);
+        $idToAdd    = $this->getIdForEntity($entity);
+        if (
+            is_array($trackedIds) &&
+            !in_array($idToAdd, $trackedIds) &&
+            $this->getLockingCache()->getLock($key)
+        ) {
+            $trackedIds[] = $this->getIdForEntity($entity);
+            $this->getLockingCache()->set($key, $trackedIds);
+            $this->getLockingCache()->releaseLock($key);
+        }
+    }
+
+    /**
+     * Removes a tracked identifier
+     *
+     * @param object $entity
+     * @param string $identifier
+     * @param string $tablePrefix
+     *
+     * @return void
+     */
+    protected function removeTrackedIdentifier(
+        $entity,
+        $identifier,
+        $tablePrefix
+    ) {
+        if (false === $this->entityCacheEnabled) {
+            return;
+        }
+
+        $get = StringUtils::underscoreToCamelCase(
+            "get_{$identifier}"
+        );
+
+        $value = $entity->$get();
+
+        if (null === $value) {
+            return;
+        }
+
+        $key = $this->getIdentifierCacheKeyForEntityIds(
+            $identifier,
+            $value,
+            $tablePrefix
+        );
+        $trackedIds = $this->getLockingCache()->get($key);
+        $entityId   = $this->getIdForEntity($entity);
+        if (
+            is_array($trackedIds) &&
+            false !== (
+                $trackedIdIndex = array_search($entityId, $trackedIds)
+            ) &&
+            $this->getLockingCache()->getLock($key)
+        ) {
+            unset($trackedIds[$trackedIdIndex]);
+            $trackedIds = array_values($trackedIds);
+            $this->getLockingCache()->set($key, empty($trackedIds) ? false : $trackedIds);
+            $this->getLockingCache()->releaseLock($key);
+        }
+    }
+
+    /**
+     * Remove an entity from cache including all its references by
+     * tracked identifiers
+     *
+     * @param object $entity
+     * @param string $tablePrefix
+     */
+    protected function removeEntityFromCache($entity, $tablePrefix)
+    {
+        $primaryData = $this->getPrimaryData(
+            $this->entityToArray($entity)
+        );
+        $key = $this->getEntityCacheKey($primaryData, $tablePrefix);
+        if ($this->getLockingCache()->getLock($key, null, 1500)) {
+            $this->getLockingCache()->del($key);
+            $this->getLockingCache()->releaseLock($key);
+        }
+        // Also remove from object storage
+        if (isset($this->entityCacheObjectStorage[$key])) {
+            unset($this->entityCacheObjectStorage[$key]);
+        }
+        // Also remove from instance cache
+        if (isset($this->entityCacheInstanceCache[$key])) {
+            unset($this->entityCacheInstanceCache[$key]);
+        }
+        // Also remove all references from all tracked identifiers
+        $trackedIdentifiers = $this->getEntityCacheTrackedIdentifiers();
+        if (
+            $this->entityCacheEnabled &&
+            !empty($trackedIdentifiers)
+        ) {
+            // Track new id's to known identifiers
+            foreach (
+                $trackedIdentifiers as $trackedIdentifier
+            ) {
+                $this->removeTrackedIdentifier(
+                    $entity,
+                    $trackedIdentifier,
+                    $tablePrefix
+                );
+            }
+        }
     }
 
     /**
@@ -826,22 +1013,9 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
             function(Event $event) {
                 $entity      = $event->getParam('entity');
                 $tablePrefix = $event->getParam('table_prefix');
-                $primaryData = $this->getPrimaryData(
-                    $this->entityToArray($entity)
-                );
-                $key = $this->getEntityCacheKey($primaryData, $tablePrefix);
-                if ($this->getLockingCache()->getLock($key, null, 1500)) {
-                    $this->getLockingCache()->del($key);
-                    $this->getLockingCache()->releaseLock($key);
-                }
-                // Also remove from object storage
-                if (isset($this->entityCacheObjectStorage[$key])) {
-                    unset($this->entityCacheObjectStorage[$key]);
-                }
-                // Also remove from instance cache
-                if (isset($this->entityCacheInstanceCache[$key])) {
-                    unset($this->entityCacheInstanceCache[$key]);
-                }
+
+                // Remove entity from cache
+                $this->removeEntityFromCache($entity, $tablePrefix);
             }
         );
     }
