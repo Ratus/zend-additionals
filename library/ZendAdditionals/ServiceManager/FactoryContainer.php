@@ -67,7 +67,8 @@ class FactoryContainer
                 'username'       => $slaveInfo['user'],
                 'password'       => $slaveInfo['pass'],
                 'driver_options' => array(
-                    PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES 'UTF8', time_zone = 'UTC'"
+                    PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES 'UTF8', time_zone = 'UTC'",
+                    PDO::ATTR_PERSISTENT         => true,
                 ),
             )
         );
@@ -80,7 +81,8 @@ class FactoryContainer
                 'username'       => $masterInfo['user'],
                 'password'       => $masterInfo['pass'],
                 'driver_options' => array(
-                    PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES 'UTF8', time_zone = 'UTC'"
+                    PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES 'UTF8', time_zone = 'UTC'",
+                    PDO::ATTR_PERSISTENT         => true,
                 ),
             )
         );
