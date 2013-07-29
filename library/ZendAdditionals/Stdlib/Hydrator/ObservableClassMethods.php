@@ -94,6 +94,14 @@ class ObservableClassMethods extends ClassMethods implements
      */
     public function resetObjectStorage()
     {
+
+        $this->objectStorage->rewind();
+
+        foreach ($this->objectStorage as $item) {
+            $this->objectStorage->detach($item);
+            unset($item);
+        }
+
         $this->objectStorage = null;
         $this->initializeEntityStorage();
 
