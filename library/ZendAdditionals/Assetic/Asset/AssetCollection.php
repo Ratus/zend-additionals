@@ -51,6 +51,19 @@ class AssetCollection implements \IteratorAggregate, AssetCollectionInterface
         return $this->assets;
     }
 
+    /**
+     * Sets all assets
+     *
+     * @param array<AssetInterface> $assets
+     *
+     * @return AssetCollection
+     */
+    public function setAll(array $assets)
+    {
+        $this->assets = $assets;
+        return $this;
+    }
+
     public function add(AssetInterface $asset)
     {
         $this->assets[] = $asset;
