@@ -94,6 +94,9 @@ class ObservableClassMethods extends ClassMethods implements
      */
     public function resetObjectStorage()
     {
+        if (($this->objectStorage instanceof \SplObjectStorage) === false) {
+            return $this;
+        }
 
         $this->objectStorage->rewind();
 

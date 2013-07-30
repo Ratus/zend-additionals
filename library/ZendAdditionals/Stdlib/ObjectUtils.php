@@ -122,4 +122,12 @@ class ObjectUtils extends \Zend\Stdlib\ArrayUtils
         }
         $hydrator->hydrate($targetData, $target);
     }
+
+    /**
+     * {@inheritdoc}
+     */
+    public static function deepClone($data)
+    {
+        return ArrayUtils::deepClone($data);
+    }
 }

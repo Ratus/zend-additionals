@@ -6,7 +6,7 @@ namespace ZendAdditionals\Db\Entity;
  * @package     Db
  * @subpackage  Entity
  */
-class Attribute
+class Attribute extends \ZendAdditionals\Db\Entity\AbstractDbEntity
 {
     /**
      * @var integer

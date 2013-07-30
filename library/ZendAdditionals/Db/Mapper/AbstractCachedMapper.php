@@ -67,10 +67,16 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
     public function __construct()
     {
         parent::__construct();
+
         $this->attachToEntityPreSave();
         $this->attachToEntitySaved();
         $this->attachToEntityDeleted();
         $this->attachToIncluded();
+
+        $this->getEventManager()->attach(self::EVENT_FLUSH_RUNTIME_RESULT_CACHE, function() {
+            $this->entityCacheObjectStorage = array();
+            $this->entityCacheInstanceCache = array();
+        });
     }
 
     /**
@@ -107,7 +113,7 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
                     'a collection was found!'
                 );
             }
-            return $result[$id][0];
+            return $result[$id]->offsetGet(0);
         }
         return false;
     }
@@ -658,6 +664,9 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
                         ErrorHandler::stop(true);
                         $this->setChangesCommitted($original);
                         ObjectUtils::transferData($entity, $original);
+
+                        unset($entity);
+
                         return $original;
                     }
                 }
@@ -1040,6 +1049,7 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
                     $entity     = $event->getParam('entity');
                     $id         = null;
                     $identifier = null;
+
                     if (isset($relationInfo['reference'])) {
                         foreach ($relationInfo['reference'] as $identifier => $getId) {
                             // Set id from entity into associated entity
@@ -1053,6 +1063,7 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
                             $id    = array($idKey => $entity->$getId());
                         }
                     }
+
                     $parents = array();
                     if (
                         null  === $id ||
@@ -1080,6 +1091,7 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
                     $getEntity = StringUtils::underscoreToCamelCase(
                         'get_' . $defaultInclude
                     );
+
                     foreach ($parents as $parent) {
                         $current   = $parent->$getEntity();
                         ObjectUtils::transferData($entity, $current);
