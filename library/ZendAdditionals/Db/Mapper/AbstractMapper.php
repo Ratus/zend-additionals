@@ -2,6 +2,7 @@
 namespace ZendAdditionals\Db\Mapper;
 
 use ZendAdditionals\Db\Adapter\MasterSlaveAdapterInterface;
+use ZendAdditionals\Db\Entity\AbstractDbEntity;
 use ZendAdditionals\Db\EntityAssociation\EntityAssociation;
 use ZendAdditionals\Db\Mapper\AttributeProperty;
 use ZendAdditionals\Db\Mapper\Exception;
@@ -9,6 +10,8 @@ use ZendAdditionals\Db\ResultSet\JoinedHydratingResultSet;
 use ZendAdditionals\Stdlib\Hydrator\ClassMethods;
 use ZendAdditionals\Stdlib\Hydrator\ObservableClassMethods;
 use ZendAdditionals\Stdlib\Hydrator\Strategy\ObservableStrategyInterface;
+use ZendAdditionals\Stdlib\StringUtils;
+use ZendAdditionals\Stdlib\ArrayUtils;
 
 use Zend\Db\Adapter\Adapter;
 use Zend\Db\Adapter\Driver\ResultInterface;
@@ -29,6 +32,11 @@ use Zend\ServiceManager\ServiceManager;
 use Zend\ServiceManager\ServiceManagerAwareInterface;
 use Zend\Stdlib\Hydrator\HydratorInterface;
 
+/**
+ * @category    ZendAdditionals
+ * @package     Db
+ * @subpackage  Mapper
+ */
 abstract class AbstractMapper implements
     ServiceManagerAwareInterface,
     AdapterAwareInterface
@@ -47,6 +55,8 @@ abstract class AbstractMapper implements
     const OPERAND_LESS_OR_EQUALS = Operator::OPERATOR_LESS_THAN_OR_EQUAL_TO;
     const OPERAND_MORE           = Operator::OPERATOR_GREATER_THAN;
     const OPERAND_MORE_OR_EQUALS = Operator::OPERATOR_GREATER_THAN_OR_EQUAL_TO;
+
+    const EVENT_FLUSH_RUNTIME_RESULT_CACHE = 'abstractmapper.flush.runtime.result.cache';
 
     /**
      * @var Adapter
@@ -127,13 +137,19 @@ abstract class AbstractMapper implements
      */
     protected $entityAssociationStorage;
 
-    /** @var array */
+    /**
+     * @var array
+     */
     protected $extraJoinRequiredKeys        = array('operand', 'left', 'right');
 
-    /** @var array */
+    /**
+     * @var array
+     */
     protected $extraJoinColumnRequiredKeys  = array('value', 'type');
 
-    /** @var EventManagerInterface */
+    /**
+     * @var EventManagerInterface
+     */
     protected static $eventManager;
 
     /**
@@ -141,10 +157,19 @@ abstract class AbstractMapper implements
      */
     protected $tablePrefixRequired = false;
 
+    /**
+     * @var array
+     */
     protected $relationsByServiceName = array();
 
+    /**
+     * @var array
+     */
     protected $attributeRelations = array();
 
+    /**
+     * @var array
+     */
     protected $attributeRelationsGenerated = false;
 
     /**
@@ -200,11 +225,33 @@ abstract class AbstractMapper implements
      */
     protected static $moderationMode = false;
 
+    /**
+     * Constructor
+     */
     public function __construct()
     {
         if (static::$eventManager === null) {
             $this->setEventManager(new EventManager());
         }
+
+        // Attach to his own event
+        $this->getEventManager()->attach(
+            self::EVENT_FLUSH_RUNTIME_RESULT_CACHE,
+            function() {
+                $this->getHydrator()->resetObjectStorage();
+            }
+        );
+    }
+
+    /**
+     * Flush all the mappers
+     */
+    public function flushRuntimeCache()
+    {
+       $this->getEventManager()->trigger(
+            self::EVENT_FLUSH_RUNTIME_RESULT_CACHE,
+            $this
+       );
     }
 
     /**
@@ -304,50 +351,11 @@ abstract class AbstractMapper implements
         return static::$eventManager;
     }
 
-    protected function applyFilter(Select $select, array $filter)
-    {
-        $where = array();
-        if (isset($filter['profile_id'])) {
-            $id = (int) $filter['profile_id'];
-            $where['profile_id'] = $id;
-        }
-        if (!empty($where)) {
-            $select->where($where);
-        }
-    }
-
-    /**
-     * Copy an array or object, using this method all objects inside will
-     * be cloned instead of referenced.
-     *
-     * @param  array $data
-     * @return array
-     */
-    protected function copy($data) {
-        if (is_object($data)) {
-            return clone $data;
-        }
-        if (!is_array($data)) {
-            return $data;
-        }
-        $copy = array();
-        foreach ($data as $key => $value) {
-            if (is_array($value)) {
-                $copy[$key] = $this->copy($value);
-            } elseif (is_object($value)) {
-                $copy[$key] = clone $value;
-            } else {
-                $copy[$key] = $value;
-            }
-        }
-        return $copy;
-    }
-
     public function count(array $filter = null, array $joins = null)
     {
         // Copy the filter to avoid messing with referenced objects inside
-        $filter = $this->copy($filter);
-        // @TODO: CACHE!!!
+        $filter = ArrayUtils::deepClone($filter);
+
         $select = $this->getSelect();
 
         // Filter attribute joins when filter requires it
@@ -692,7 +700,6 @@ abstract class AbstractMapper implements
         $firstSearch = true;
 
         while($timeleft) {
-
             if (!$firstSearch) {
                 $responseCollection = $this->getEventManager()->trigger(
                     'search_and_wait_next_iteration',
@@ -768,12 +775,14 @@ abstract class AbstractMapper implements
         $return              = true
     ) {
         // Copy the filter to avoid messing with referenced objects inside
-        $filter = $this->copy($filter);
-        $limit = 1000;
+        $filter = ArrayUtils::deepClone($filter);
+        $limit  = 1000;
         $offset = 0;
+
         if (isset($range['begin']) && $range['begin'] >= 0) {
             $offset = (int)$range['begin'];
         }
+
         if (isset($range['end']) && $range['end'] > $offset) {
             $limit = ((int)$range['end'] - $offset);
         }
@@ -2447,7 +2456,7 @@ abstract class AbstractMapper implements
     /**
      * Save the given entity
      *
-     * @param object $entity
+     * @param AbstractDbEntity $entity
      * @param string $tablePrefix
      * @param array  $parentRelationInfo When this save is called from a parent antity
      * the relational info from the parent is passed thru.
@@ -2460,7 +2469,7 @@ abstract class AbstractMapper implements
      * @throws \ZendAdditionals\Db\Mapper\Exception\UnexpectedValueException
      */
     public function save(
-        $entity,
+        AbstractDbEntity $entity,
         $tablePrefix              = null,
         array $parentRelationInfo = null,
         $useTransaction           = true
@@ -2475,13 +2484,10 @@ abstract class AbstractMapper implements
 
             $this->initialize();
 
-            if (get_class($entity) !== get_class($this->getEntityPrototype())) {
-                throw new Exception\UnexpectedValueException(
-                    'Dit not expect the given entity of type: ' .
-                    get_class($entity) . '. The type: ' .
-                    get_class($this->getEntityPrototype()) . ' should be given.'
-                );
-            }
+            $className = get_class($entity);
+
+            // Validate if the entity belongs to the mapper
+            $this->validateEntity($entity);
         } catch (\Exception $exception) {
             throw new Exception\SaveFailedException(
                 'Mapper ' . get_called_class() . ' could not store entity: ' . get_class($entity),
@@ -2490,7 +2496,6 @@ abstract class AbstractMapper implements
             );
         }
 
-        // Presave event for hydrator purposes
         $this->getEventManager()->trigger(
             'preSave',
             $this,
@@ -2511,6 +2516,7 @@ abstract class AbstractMapper implements
 
         // For whole entities we want to trigger the entity specific pre_save
         if (!($this instanceof AttributeData)) {
+            // Post save event for hydration purposes
             $results = $this->getEventManager()->trigger(
                 static::SERVICE_NAME . '::entity_pre_save',
                 $this,
@@ -2519,9 +2525,10 @@ abstract class AbstractMapper implements
                     'table_prefix' => $tablePrefix,
                 )
             );
+
             $lastResult = $results->last();
             if (null !== $lastResult) {
-                $entity = &$lastResult;
+                $entity = $lastResult;
             }
         }
 
@@ -2581,9 +2588,7 @@ abstract class AbstractMapper implements
         $this->getEventManager()->trigger(
             'postSave',
             $this,
-            array(
-                'entity' => $entity,
-            )
+            array('entity' => $entity)
         );
 
         // For whole entities we want to trigger the entity specific saves event
@@ -2604,13 +2609,13 @@ abstract class AbstractMapper implements
     }
 
     /**
-     * @param object|array $entity
+     * @param AbstractDbEntity $entity
      * @param ObservableStrategyInterface|null $hydrator
      *
      * @return ResultInterface
      */
     protected function insert(
-        $entity,
+        AbstractDbEntity $entity,
         ObservableStrategyInterface $hydrator = null,
         $tablePrefix = null
     ) {
@@ -2686,12 +2691,24 @@ abstract class AbstractMapper implements
         return $this->save($entity, $tablePrefix, null, false);
     }
 
+    /**
+     * Delete a single entity from the database
+     *
+     * @param AbstractDbEntity $entity
+     * @param ObservableStrategyInterface $hydrator
+     * @param mixed $tablePrefix
+     * @return \Zend\Db\Adapter\Driver\ResultInterface
+     */
     public function delete(
-        $entity,
+        AbstractDbEntity $entity,
         ObservableStrategyInterface $hydrator = null,
         $tablePrefix = null
     ) {
         $this->initialize();
+
+        // Validate if the entity belongs to the mapper
+        $this->validateEntity($entity);
+
         $tableName = $this->getTableName();
         if (!empty($tablePrefix)) {
             $tableName = $tablePrefix . $tableName;
@@ -2728,6 +2745,10 @@ abstract class AbstractMapper implements
                 $e
             );
         }
+
+        // Destruct the entity
+        $entity->__destruct();
+
         return $result;
     }
 
@@ -2753,6 +2774,9 @@ abstract class AbstractMapper implements
             return true;
         }
         foreach ($entities as $entity) {
+            // Validate if the entity belongs to the mapper
+            $this->validateEntity($entity);
+
             $primaryData = $this->getPrimaryData(
                 $this->entityToArray($entity, $hydrator)
             );
@@ -2815,10 +2839,15 @@ abstract class AbstractMapper implements
             );
         }
 
+        // Memory optimalization
+        foreach ($entities as $entity) {
+            $entity->__destruct();
+        }
+
         return $result;
     }
 
-    protected function unsetRelatedEntityColumns(& $entityArray)
+    protected function unsetRelatedEntityColumns($entityArray)
     {
         $columns = $this->getEntityAssociationColumns();
         foreach ($columns as $column) {
@@ -2877,13 +2906,13 @@ abstract class AbstractMapper implements
     /**
      * Stores the related entities for the given entity
      *
-     * @param object  $entity
+     * @param AbstractDbEntity  $entity
      * @param string  $tablePrefix
      * @param boolean $ignoreEntitiesThatRequireBase
      * @param boolean $attributeDataModified
      */
     protected function storeRelatedEntities(
-         $entity,
+         AbstractDbEntity $entity,
          $tablePrefix                   = null,
          $ignoreEntitiesThatRequireBase = false,
         &$attributeDataModified         = false
@@ -2984,7 +3013,7 @@ abstract class AbstractMapper implements
         }
     }
 
-    protected function setChangesCommittedOnRelatedEntities($entity)
+    protected function setChangesCommittedOnRelatedEntities(AbstractDbEntity $entity)
     {
         $this->initialize();
         foreach ($this->relations as $entityIdentifier => $relationInfo) {
@@ -3016,7 +3045,7 @@ abstract class AbstractMapper implements
         }
     }
 
-    protected function setChangesCommitted($entity)
+    protected function setChangesCommitted(AbstractDbEntity $entity)
     {
         $this->setChangesCommittedOnRelatedEntities($entity);
         if (
@@ -3047,7 +3076,7 @@ abstract class AbstractMapper implements
      * @return ResultInterface|boolean true when there are no changes mage
      */
     protected function update(
-                                    $entity,
+        AbstractDbEntity            $entity,
                                     $where                 = null,
         ObservableStrategyInterface $hydrator              = null,
                                     $tablePrefix           = null,
@@ -3321,7 +3350,7 @@ abstract class AbstractMapper implements
      * @throws Exception\InvalidArgumentException
      */
     public function entityToArray(
-        $entity,
+        AbstractDbEntity $entity,
         ObservableStrategyInterface $hydrator = null,
         $changesOnly = false,
         & $originalData = null
@@ -3367,7 +3396,7 @@ abstract class AbstractMapper implements
      *
      * @throws Exception\InvalidArgumentException
      */
-    public function isEntityEmpty($entity)
+    public function isEntityEmpty(AbstractDbEntity $entity)
     {
         $prototype = $this->getEntityPrototype();
         if (!($entity instanceof $prototype)) {
@@ -3397,5 +3426,26 @@ abstract class AbstractMapper implements
     public static function disableModerationMode()
     {
         self::$moderationMode = false;
+    }
+
+    /**
+     * Validate if the entity belongs to this mapper
+     *
+     * @param AbstractDbEntity $entity
+     * @return boolean
+     * @throws Exception\UnexpectedValueException
+     */
+    protected function validateEntity(AbstractDbEntity $entity)
+    {
+
+        if (get_class($entity) !== get_class($this->getEntityPrototype())) {
+            throw new Exception\UnexpectedValueException(
+                'Dit not expect the given entity of type: ' .
+                get_class($entity) . '. The type: ' .
+                get_class($this->getEntityPrototype()) . ' should be given.'
+            );
+        }
+
+        return true;
     }
 }

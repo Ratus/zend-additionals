@@ -16,6 +16,18 @@ class Attribute extends AbstractCachedMapper
     );
 
     /**
+     * {@inheritdoc}
+     */
+    public function __construct()
+    {
+        parent::__construct();
+
+        $this->getEventManager()->attach(self::EVENT_FLUSH_RUNTIME_RESULT_CACHE, function() {
+            $this->cachedAttributeData = array();
+        });
+    }
+
+    /**
      * Initialize the allCachedAttributeData array
      *
      * @param string $tablePrefix

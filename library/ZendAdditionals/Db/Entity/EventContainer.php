@@ -1,6 +1,11 @@
 <?php
 namespace ZendAdditionals\Db\Entity;
 
+/**
+ * @category    ZendAdditionals
+ * @package     Db
+ * @subpackage  Entity
+ */
 class EventContainer
 {
     const HYDRATE_TYPE_OBJECT = 'object',
