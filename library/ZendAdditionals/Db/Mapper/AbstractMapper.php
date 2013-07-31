@@ -3099,10 +3099,8 @@ abstract class AbstractMapper implements
         $update = $sql->update();
 
         $originalData = array();
-
-        $changedData = $this->entityToArray($entity, $hydrator, true, $originalData);
-
-        $this->unsetRelatedEntityColumns($changedData);
+        $changedData  = $this->entityToArray($entity, $hydrator, true, $originalData);
+        $changedData  = $this->unsetRelatedEntityColumns($changedData);
 
         if (empty($changedData)) {
             return true;
