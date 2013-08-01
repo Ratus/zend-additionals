@@ -2425,7 +2425,7 @@ abstract class AbstractMapper implements
      * @throws Excception\LogicException
      */
     public function commit()
-    {
+    {    
         if ($this->getTransactionStarted() === false) {
             throw new Exception\LogicException('Transaction has not been started');
         }
@@ -2474,6 +2474,15 @@ abstract class AbstractMapper implements
         array $parentRelationInfo = null,
         $useTransaction           = true
     ) {
+        static $parentSave = true;
+        $parentSaveSet     = false;
+        
+        // This is the intitial call. Set identifier variable for this method
+        if ($parentSave === true) {
+            $parentSave    = false;
+            $parentSaveSet = true;
+        }
+        
         try {
             if ($this->getTablePrefixRequired() && empty($tablePrefix)) {
                 throw new Exception\UnexpectedValueException(
@@ -2505,6 +2514,18 @@ abstract class AbstractMapper implements
                 'parent_relation_info'  => $parentRelationInfo,
             )
         );
+        
+        if ($parentSaveSet === true) {
+            $this->getEventManager()->trigger(
+                'preParentSave',
+                $this,
+                array(
+                    'entity'                => $entity,
+                    'table_prefix'          => $tablePrefix,
+                    'parent_relation_info'  => $parentRelationInfo,
+                )
+            );    
+        }
 
         $hydrator = $this->getHydrator();
 
@@ -2590,6 +2611,18 @@ abstract class AbstractMapper implements
             $this,
             array('entity' => $entity)
         );
+        
+        if ($parentSaveSet === true) {
+            $this->getEventManager()->trigger(
+                'postParentSave',
+                $this,
+                array(
+                    'entity'                => $entity,
+                    'table_prefix'          => $tablePrefix,
+                    'parent_relation_info'  => $parentRelationInfo,
+                )
+            );    
+        }
 
         // For whole entities we want to trigger the entity specific saves event
         if (!($this instanceof AttributeData)) {
@@ -2603,6 +2636,11 @@ abstract class AbstractMapper implements
                     'entity_modified' => $entityModified,
                 )
             );
+        }
+        
+        // If this is the intitial call. We reset the $parentSave variable
+        if ($parentSaveSet === true) {
+            $parentSave = true;
         }
 
         return $result;
@@ -3435,7 +3473,6 @@ abstract class AbstractMapper implements
      */
     protected function validateEntity(AbstractDbEntity $entity)
     {
-
         if (get_class($entity) !== get_class($this->getEntityPrototype())) {
             throw new Exception\UnexpectedValueException(
                 'Dit not expect the given entity of type: ' .
