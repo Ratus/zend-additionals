@@ -2425,7 +2425,7 @@ abstract class AbstractMapper implements
      * @throws Excception\LogicException
      */
     public function commit()
-    {    
+    {
         if ($this->getTransactionStarted() === false) {
             throw new Exception\LogicException('Transaction has not been started');
         }
@@ -2476,13 +2476,13 @@ abstract class AbstractMapper implements
     ) {
         static $parentSave = true;
         $parentSaveSet     = false;
-        
+
         // This is the intitial call. Set identifier variable for this method
         if ($parentSave === true) {
             $parentSave    = false;
             $parentSaveSet = true;
         }
-        
+
         try {
             if ($this->getTablePrefixRequired() && empty($tablePrefix)) {
                 throw new Exception\UnexpectedValueException(
@@ -2504,7 +2504,6 @@ abstract class AbstractMapper implements
                 $exception
             );
         }
-
         $this->getEventManager()->trigger(
             'preSave',
             $this,
@@ -2514,7 +2513,7 @@ abstract class AbstractMapper implements
                 'parent_relation_info'  => $parentRelationInfo,
             )
         );
-        
+
         if ($parentSaveSet === true) {
             $this->getEventManager()->trigger(
                 'preParentSave',
@@ -2524,16 +2523,16 @@ abstract class AbstractMapper implements
                     'table_prefix'          => $tablePrefix,
                     'parent_relation_info'  => $parentRelationInfo,
                 )
-            );    
+            );
         }
 
         $hydrator = $this->getHydrator();
 
-        $result             = false;
-        $transactionStarted = false;
-        $this->lastErrors   = new Collection\Error();
-        $insert             = false;
-        $entityModified     = true;
+        $result                  = false;
+        $transactionStarted      = false;
+        $this->lastErrors        = new Collection\Error();
+        $insert                  = false;
+        $entityModified          = true;
 
         // For whole entities we want to trigger the entity specific pre_save
         if (!($this instanceof AttributeData)) {
@@ -2568,10 +2567,15 @@ abstract class AbstractMapper implements
                     null,
                     $hydrator,
                     $tablePrefix,
-                    $attributeDataModified
+                    $attributeDataModified,
+                    $relatedEntitiesModified
                 );
                 // true comes back when no columns are changed
-                if (true === $result && true !== $attributeDataModified) {
+                if (
+                    true === $result &&
+                    true !== $attributeDataModified &&
+                    true !== $relatedEntitiesModified
+                ) {
                     $entityModified = false;
                 }
             } else {
@@ -2611,7 +2615,7 @@ abstract class AbstractMapper implements
             $this,
             array('entity' => $entity)
         );
-        
+
         if ($parentSaveSet === true) {
             $this->getEventManager()->trigger(
                 'postParentSave',
@@ -2621,7 +2625,7 @@ abstract class AbstractMapper implements
                     'table_prefix'          => $tablePrefix,
                     'parent_relation_info'  => $parentRelationInfo,
                 )
-            );    
+            );
         }
 
         // For whole entities we want to trigger the entity specific saves event
@@ -2637,7 +2641,7 @@ abstract class AbstractMapper implements
                 )
             );
         }
-        
+
         // If this is the intitial call. We reset the $parentSave variable
         if ($parentSaveSet === true) {
             $parentSave = true;
@@ -2948,12 +2952,14 @@ abstract class AbstractMapper implements
      * @param string  $tablePrefix
      * @param boolean $ignoreEntitiesThatRequireBase
      * @param boolean $attributeDataModified
+     * @param boolean $relatedEntitiesModified
      */
     protected function storeRelatedEntities(
          AbstractDbEntity $entity,
          $tablePrefix                   = null,
          $ignoreEntitiesThatRequireBase = false,
-        &$attributeDataModified         = false
+        &$attributeDataModified         = false,
+        &$relatedEntitiesModified       = false
     ) {
         $this->initialize();
         foreach ($this->relations as $entityIdentifier => $relationInfo) {
@@ -3033,7 +3039,9 @@ abstract class AbstractMapper implements
             if ($associatedEntity instanceof \ZendAdditionals\Db\Entity\AttributeData &&
                 $result instanceof ResultInterface
             ) {
-                $attributeDataModified = true;
+                $attributeDataModified   = true;
+            } elseif ($result instanceof ResultInterface) {
+                $relatedEntitiesModified = true;
             }
 
             // Set id from associated entity into entity (if applicable)
@@ -3110,21 +3118,25 @@ abstract class AbstractMapper implements
      * @param string  $tablePrefix
      * @param boolean $attributeDataModified Becomes true when related attribute data
      * is changed, use of this variable is by reference.
+     * @param boolean $relatedEntitiesModified Becomes true when related
+     * entities are changed, use of this variable is by reference.
      *
      * @return ResultInterface|boolean true when there are no changes mage
      */
     protected function update(
         AbstractDbEntity            $entity,
-                                    $where                 = null,
-        ObservableStrategyInterface $hydrator              = null,
-                                    $tablePrefix           = null,
-                                   &$attributeDataModified = false
+                                    $where                   = null,
+        ObservableStrategyInterface $hydrator                = null,
+                                    $tablePrefix             = null,
+                                   &$attributeDataModified   = false,
+                                   &$relatedEntitiesModified = false
     ) {
         $this->storeRelatedEntities(
             $entity,
             $tablePrefix,
             false,
-            $attributeDataModified
+            $attributeDataModified,
+            $relatedEntitiesModified
         );
 
         $this->initialize();
