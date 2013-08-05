@@ -683,19 +683,28 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
         $this->getEventManager()->attach(
             static::SERVICE_NAME . '::entity_saved',
             function(Event $event) {
-                $entity             = $event->getParam('entity');
-                $inserted           = $event->getParam('inserted');
-                $tablePrefix        = $event->getParam('table_prefix');
-                $entityModified     = $event->getParam('entity_modified');
-                $trackedIdentifiers = $this->getEntityCacheTrackedIdentifiers();
+                $entity                = $event->getParam('entity');
+                $inserted              = $event->getParam('inserted');
+                $tablePrefix           = $event->getParam('table_prefix');
+                $entityModified        = $event->getParam('entity_modified');
+                $attributeDataModified = $event->getParam('attributedata_modified');
+                $trackedIdentifiers    = $this->getEntityCacheTrackedIdentifiers();
 
                 // No need to do stuff when there is no real change
-                if (false === $entityModified) {
+                if (
+                    false === $this->entityCacheEnabled ||
+                    false === $entityModified ||
+                    false === ($id = $this->getIdForEntity($entity))
+                ) {
                     return;
                 }
 
+                // When this entity is new, do not add
+                /*if ($inserted) {
+                    return;
+                }*/
+
                 if (
-                    $this->entityCacheEnabled &&
                     $inserted &&
                     !empty($trackedIdentifiers)
                 ) {
@@ -710,64 +719,64 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
                         );
                     }
                 }
-
                 $entityCacheDefaultFilters = $this->getEntityCacheDefaultFilters();
-                if (
-                    $this->entityCacheEnabled &&
-                    false !== ($id = $this->getIdForEntity($entity))
+                $key                       = $this->getEntityCacheKey($id, $tablePrefix);
+                // We always want to store into cache, this can become
+                // false depending on the following checks..
+                $storeIntoCache = true;
+                // Set original to false
+                $original = false;
+                if (isset($this->entityCacheObjectStorage[$key])) {
+                    ErrorHandler::start();
+                    $original = unserialize(
+                        $this->entityCacheObjectStorage[$key]
+                    );
+                    ErrorHandler::stop(true);
+                }
+                if ($attributeDataModified) {
+                    // We want the cache to be reloaded when attributedata has been modified
+                    $storeIntoCache = false;
+                }
+                /**
+                 * We do want to add this entity to the instance cache
+                 * if we re-save it within the same request this could
+                 * come in handy.
+                 */
+                else if (
+                    !isset($this->entityCacheObjectStorage[$key]) &&
+                    !empty($entityCacheDefaultFilters)
                 ) {
-                    $key = $this->getEntityCacheKey($id, $tablePrefix);
-                    // We always want to store into cache, this can become
-                    // false depending on the following checks..
-                    $storeIntoCache         = true;
-                    // Set original to false
-                    $original = false;
-                    if (isset($this->entityCacheObjectStorage[$key])) {
-                        ErrorHandler::start();
-                        $original = unserialize(
-                            $this->entityCacheObjectStorage[$key]
-                        );
-                        ErrorHandler::stop(true);
-                    }
                     /**
-                     * We do want to add this entity to the instance cache
-                     * if we re-save it within the same request this could
-                     * come in handy.
+                     * Don't store because we did not load this entity
+                     * yet using the entity cache.. we don't know if this
+                     * entity matches our default entity cache filters
                      */
-                    if (
-                        !isset($this->entityCacheObjectStorage[$key]) &&
-                        !empty($entityCacheDefaultFilters)
-                    ) {
-                        /**
-                         * Don't store because we did not load this entity
-                         * yet using the entity cache.. we don't know if this
-                         * entity matches our default entity cache filters
-                         */
-                        $storeIntoCache = false;
-                    } elseif (
-                        isset($this->entityCacheObjectStorage[$key]) &&
-                        !empty($entityCacheDefaultFilters)
-                    ) {
-                        /**
-                         * We need to verify if any of the default filtered
-                         * columns has been modified in comparison with the
-                         * data already available within cache. If so the
-                         * entity must be removed from cache for the filters
-                         * to re-validate the entity.
-                         */
-                        $defaultFilterKeys = array_keys(
-                            $entityCacheDefaultFilters
+                    $storeIntoCache = false;
+                } elseif (
+                    isset($this->entityCacheObjectStorage[$key]) &&
+                    !empty($entityCacheDefaultFilters)
+                ) {
+                    /**
+                     * We need to verify if any of the default filtered
+                     * columns has been modified in comparison with the
+                     * data already available within cache. If so the
+                     * entity must be removed from cache for the filters
+                     * to re-validate the entity.
+                     */
+                    $defaultFilterKeys = array_keys(
+                        $entityCacheDefaultFilters
+                    );
+                    foreach ($defaultFilterKeys as $filterKey) {
+                        $methodGet = StringUtils::underscoreToCamelCase(
+                            "get_{$filterKey}"
                         );
-                        foreach ($defaultFilterKeys as $filterKey) {
-                            $methodGet = StringUtils::underscoreToCamelCase(
-                                "get_{$filterKey}"
-                            );
-                            $methodGet = str_replace('getIs', 'is', $methodGet);
-                            if ($original->$methodGet() !== $entity->$methodGet()) {
-                                $storeIntoCache = false;
-                            }
+                        $methodGet = str_replace('getIs', 'is', $methodGet);
+                        if ($original->$methodGet() !== $entity->$methodGet()) {
+                            $storeIntoCache = false;
                         }
                     }
+                }
+                if ($storeIntoCache) {
                     /**
                      * When default entity includes have been configured
                      * the entity should only be stored within cache when all of
@@ -776,52 +785,53 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
                      * get added this is not always true.
                      */
                     foreach ($this->entityCacheDefaultIncludes as $defaultInclude) {
-                        $getInclude = StringUtils::underscoreToCamelCase(
-                            "get_{$defaultInclude}"
-                        );
-                        if (null === $entity->$getInclude()) {
-                            $storeIntoCache = false;
-                        }
+                       $getInclude = StringUtils::underscoreToCamelCase(
+                           "get_{$defaultInclude}"
+                       );
+                       if (null === $entity->$getInclude()) {
+                           $storeIntoCache = false;
+                           break;
+                       }
                     }
-                    if (
-                        $storeIntoCache &&
-                        $this->getLockingCache()->getLock($key)
-                    ) {
-                        $this->getLockingCache()->set(
-                            $key,
-                            $entity,
-                            $this->entityCacheTtl
-                        );
-                        $this->getLockingCache()->releaseLock($key);
-                        $this->addCachedEntityToInstanceCache($entity);
-                        $this->entityCacheObjectStorage[$key] = serialize($entity);
+                }
+                if (
+                    $storeIntoCache &&
+                    $this->getLockingCache()->getLock($key)
+                ) {
+                    $this->getLockingCache()->set(
+                        $key,
+                        $entity,
+                        $this->entityCacheTtl
+                    );
+                    $this->getLockingCache()->releaseLock($key);
+                    $this->addCachedEntityToInstanceCache($entity);
+                    $this->entityCacheObjectStorage[$key] = serialize($entity);
 
-                        // Update the entity cache tracked identifiers
-                        if (false !== $original) {
-                            $this->updateTrackedIdentifiers(
-                                $original,
+                    // Update the entity cache tracked identifiers
+                    if (false !== $original) {
+                        $this->updateTrackedIdentifiers(
+                            $original,
+                            $entity,
+                            $tablePrefix
+                        );
+                    } else {
+                        foreach (
+                            $trackedIdentifiers as $trackedIdentifier
+                        ) {
+                            $this->addTrackedIdentifier(
                                 $entity,
+                                $trackedIdentifier,
                                 $tablePrefix
                             );
-                        } else {
-                            foreach (
-                                $trackedIdentifiers as $trackedIdentifier
-                            ) {
-                                $this->addTrackedIdentifier(
-                                    $entity,
-                                    $trackedIdentifier,
-                                    $tablePrefix
-                                );
-                            }
                         }
                     }
-                    if (
-                        false === $storeIntoCache &&
-                        false !== $original
-                    ) {
-                        // Remove original entity from cache
-                        $this->removeEntityFromCache($original, $tablePrefix);
-                    }
+                }
+                if (
+                    false === $storeIntoCache &&
+                    false !== $original
+                ) {
+                    // Remove original entity from cache
+                    $this->removeEntityFromCache($original, $tablePrefix);
                 }
             }
         );

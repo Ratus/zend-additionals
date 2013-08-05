@@ -2552,6 +2552,8 @@ abstract class AbstractMapper implements
             }
         }
 
+        $attributeDataModified = false;
+
         try {
             if ($useTransaction && $this->getTransactionStarted() === false) {
                 $this->startTransaction();
@@ -2580,7 +2582,12 @@ abstract class AbstractMapper implements
                 }
             } else {
                 $insert = true;
-                $result = $this->insert($entity, $hydrator, $tablePrefix);
+                $result = $this->insert(
+                    $entity,
+                    $hydrator,
+                    $tablePrefix,
+                    $attributeDataModified
+                );
             }
 
             // Only commit when transaction has been triggered by us
@@ -2634,10 +2641,11 @@ abstract class AbstractMapper implements
                 static::SERVICE_NAME . '::entity_saved',
                 $this,
                 array(
-                    'entity'          => $entity,
-                    'inserted'        => $insert,
-                    'table_prefix'    => $tablePrefix,
-                    'entity_modified' => $entityModified,
+                    'entity'                 => $entity,
+                    'inserted'               => $insert,
+                    'table_prefix'           => $tablePrefix,
+                    'entity_modified'        => $entityModified,
+                    'attributedata_modified' => $attributeDataModified
                 )
             );
         }
@@ -2653,15 +2661,23 @@ abstract class AbstractMapper implements
     /**
      * @param AbstractDbEntity $entity
      * @param ObservableStrategyInterface|null $hydrator
+     * @param string  $tablePrefix
+     * @param boolean $attributeDataModified Becomes true when related attribute data
      *
      * @return ResultInterface
      */
     protected function insert(
-        AbstractDbEntity $entity,
-        ObservableStrategyInterface $hydrator = null,
-        $tablePrefix = null
+        AbstractDbEntity             $entity,
+        ObservableStrategyInterface  $hydrator              = null,
+                                     $tablePrefix           = null,
+                                    &$attributeDataModified = false
     ) {
-        $this->storeRelatedEntities($entity, $tablePrefix, true);
+        $this->storeRelatedEntities(
+            $entity,
+            $tablePrefix,
+            true,
+            $attributeDataModified
+        );
 
         $this->initialize();
         $tableName = $this->getTableName();
@@ -2730,7 +2746,9 @@ abstract class AbstractMapper implements
 
         $this->storeRelatedEntities($entity, $tablePrefix);
 
-        return $this->save($entity, $tablePrefix, null, false);
+        $this->save($entity, $tablePrefix, null, false);
+
+        return $result;
     }
 
     /**
