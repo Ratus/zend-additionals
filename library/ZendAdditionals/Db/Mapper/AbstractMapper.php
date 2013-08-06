@@ -12,6 +12,7 @@ use ZendAdditionals\Stdlib\Hydrator\ObservableClassMethods;
 use ZendAdditionals\Stdlib\Hydrator\Strategy\ObservableStrategyInterface;
 use ZendAdditionals\Stdlib\StringUtils;
 use ZendAdditionals\Stdlib\ArrayUtils;
+use ZendAdditionals\Stdlib\ObjectUtils;
 
 use Zend\Db\Adapter\Adapter;
 use Zend\Db\Adapter\Driver\ResultInterface;
@@ -2477,6 +2478,8 @@ abstract class AbstractMapper implements
         static $parentSave = true;
         $parentSaveSet     = false;
 
+        $entityToSave = $entity;
+
         // This is the intitial call. Set identifier variable for this method
         if ($parentSave === true) {
             $parentSave    = false;
@@ -2493,13 +2496,13 @@ abstract class AbstractMapper implements
 
             $this->initialize();
 
-            $className = get_class($entity);
+            $className = get_class($entityToSave);
 
             // Validate if the entity belongs to the mapper
-            $this->validateEntity($entity);
+            $this->validateEntity($entityToSave);
         } catch (\Exception $exception) {
             throw new Exception\SaveFailedException(
-                'Mapper ' . get_called_class() . ' could not store entity: ' . get_class($entity),
+                'Mapper ' . get_called_class() . ' could not store entity: ' . get_class($entityToSave),
                 0,
                 $exception
             );
@@ -2508,7 +2511,7 @@ abstract class AbstractMapper implements
             'preSave',
             $this,
             array(
-                'entity'                => $entity,
+                'entity'                => $entityToSave,
                 'table_prefix'          => $tablePrefix,
                 'parent_relation_info'  => $parentRelationInfo,
             )
@@ -2519,7 +2522,7 @@ abstract class AbstractMapper implements
                 'preParentSave',
                 $this,
                 array(
-                    'entity'                => $entity,
+                    'entity'                => $entityToSave,
                     'table_prefix'          => $tablePrefix,
                     'parent_relation_info'  => $parentRelationInfo,
                 )
@@ -2541,14 +2544,14 @@ abstract class AbstractMapper implements
                 static::SERVICE_NAME . '::entity_pre_save',
                 $this,
                 array(
-                    'entity'       => $entity,
+                    'entity'       => $entityToSave,
                     'table_prefix' => $tablePrefix,
                 )
             );
 
             $lastResult = $results->last();
             if (null !== $lastResult) {
-                $entity = $lastResult;
+                $entityToSave = $lastResult;
             }
         }
 
@@ -2561,11 +2564,11 @@ abstract class AbstractMapper implements
             }
 
             if (
-                $hydrator->hasOriginal($entity) &&
-                !$this->isEntityEmpty($entity, true)
+                $hydrator->hasOriginal($entityToSave) &&
+                !$this->isEntityEmpty($entityToSave, true)
             ) {
                 $result = $this->update(
-                    $entity,
+                    $entityToSave,
                     null,
                     $hydrator,
                     $tablePrefix,
@@ -2580,10 +2583,15 @@ abstract class AbstractMapper implements
                 ) {
                     $entityModified = false;
                 }
+            } elseif (
+                ($entityToSave instanceof \ZendAdditionals\Db\Entity\AttributeData) &&
+                $this->isAttributeDataEmpty($entityToSave)
+            ) {
+                $result = true;
             } else {
                 $insert = true;
                 $result = $this->insert(
-                    $entity,
+                    $entityToSave,
                     $hydrator,
                     $tablePrefix,
                     $attributeDataModified
@@ -2600,7 +2608,7 @@ abstract class AbstractMapper implements
                 $this->rollback();
             }
             throw new Exception\SaveFailedException(
-                'Mapper ' . get_called_class() . ' could not store entity: ' . get_class($entity),
+                'Mapper ' . get_called_class() . ' could not store entity: ' . get_class($entityToSave),
                 0,
                 $exception
             );
@@ -2610,7 +2618,7 @@ abstract class AbstractMapper implements
                 $this->rollback();
             }
             throw new Exception\SaveFailedException(
-                'Mapper ' . get_called_class() . ' could not store entity: ' . get_class($entity),
+                'Mapper ' . get_called_class() . ' could not store entity: ' . get_class($entityToSave),
                 0,
                 $exception
             );
@@ -2620,7 +2628,7 @@ abstract class AbstractMapper implements
         $this->getEventManager()->trigger(
             'postSave',
             $this,
-            array('entity' => $entity)
+            array('entity' => $entityToSave)
         );
 
         if ($parentSaveSet === true) {
@@ -2628,11 +2636,13 @@ abstract class AbstractMapper implements
                 'postParentSave',
                 $this,
                 array(
-                    'entity'                => $entity,
+                    'entity'                => $entityToSave,
                     'table_prefix'          => $tablePrefix,
                     'parent_relation_info'  => $parentRelationInfo,
                 )
             );
+
+            ObjectUtils::transferData($entityToSave, $entity);
         }
 
         // For whole entities we want to trigger the entity specific saves event
@@ -2641,7 +2651,7 @@ abstract class AbstractMapper implements
                 static::SERVICE_NAME . '::entity_saved',
                 $this,
                 array(
-                    'entity'                 => $entity,
+                    'entity'                 => $entityToSave,
                     'inserted'               => $insert,
                     'table_prefix'           => $tablePrefix,
                     'entity_modified'        => $entityModified,
@@ -2693,7 +2703,7 @@ abstract class AbstractMapper implements
             $autoGeneratedGet = 'get' . ucfirst($this->autoGenerated);
             if (null !== ($autoGeneratedValue = $entity->$autoGeneratedGet())) {
                 throw new Exception\InsertFailedException(
-                    'Can not insert data that already ' .
+                    'Can not insert data for entity "' . get_class($entity) . '" that already ' .
                     'has an auto generated value "' . $autoGeneratedValue . '"!'
                 );
             }
@@ -3118,7 +3128,8 @@ abstract class AbstractMapper implements
                 $entity instanceof \ZendAdditionals\Db\Entity\AttributeData &&
                 (
                     null == $entity->getEntityId() ||
-                    null == $entity->getAttributeId()
+                    null == $entity->getAttributeId() ||
+                    $this->isAttributeDataEmpty($entity)
                 )
             )
         ) {
@@ -3472,6 +3483,31 @@ abstract class AbstractMapper implements
             );
         }
         return ($prototype == $entity);
+    }
+
+    /**
+     * Check if the given AttributeData is empty
+     *
+     * @param \ZendAdditionals\Db\Entity\AttributeData $entity
+     *
+     * @return boolean
+     */
+    public function isAttributeDataEmpty(
+        \ZendAdditionals\Db\Entity\AttributeData $entity
+    ) {
+        $return = (
+            (
+                'enum' === $entity->getAttribute()->getType() &&
+                null   === $entity->getAttributeProperty() &&
+                null   === $entity->getAttributePropertyId()
+            ) ||
+            (
+                'enum' !== $entity->getAttribute()->getType() &&
+                null   === $entity->getValue() &&
+                null   === $entity->getValueTmp()
+            )
+        );
+        return $return;
     }
 
     /**
