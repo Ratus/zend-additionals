@@ -833,6 +833,11 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
                     // Remove original entity from cache
                     $this->removeEntityFromCache($original, $tablePrefix);
                 }
+
+                if (false === $storeIntoCache) {
+                    $this->setChangesCommitted($entity);
+                    return $entity;
+                }
             }
         );
     }
