@@ -12,6 +12,7 @@ use ZendAdditionals\Stdlib\Hydrator\ObservableClassMethods;
 use ZendAdditionals\Stdlib\Hydrator\Strategy\ObservableStrategyInterface;
 use ZendAdditionals\Stdlib\StringUtils;
 use ZendAdditionals\Stdlib\ArrayUtils;
+use ZendAdditionals\Stdlib\ObjectUtils;
 
 use Zend\Db\Adapter\Adapter;
 use Zend\Db\Adapter\Driver\ResultInterface;
@@ -2641,7 +2642,7 @@ abstract class AbstractMapper implements
                 )
             );
 
-            \ZendAdditionals\Stdlib\ObjectUtils::transferData($entityToSave, $entity);
+            ObjectUtils::transferData($entityToSave, $entity);
         }
 
         // For whole entities we want to trigger the entity specific saves event
