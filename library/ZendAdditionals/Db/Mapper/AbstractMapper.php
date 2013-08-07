@@ -227,6 +227,12 @@ abstract class AbstractMapper implements
     protected static $moderationMode = false;
 
     /**
+     *
+     * @var boolean
+     */
+    protected static $parentSave = true;
+
+    /**
      * Constructor
      */
     public function __construct()
@@ -2475,14 +2481,13 @@ abstract class AbstractMapper implements
         array $parentRelationInfo = null,
         $useTransaction           = true
     ) {
-        static $parentSave = true;
-        $parentSaveSet     = false;
+        $parentSaveSet = false;
 
         $entityToSave = $entity;
 
         // This is the intitial call. Set identifier variable for this method
-        if ($parentSave === true) {
-            $parentSave    = false;
+        if (self::$parentSave === true) {
+            self::$parentSave    = false;
             $parentSaveSet = true;
         }
 
@@ -2641,8 +2646,6 @@ abstract class AbstractMapper implements
                     'parent_relation_info'  => $parentRelationInfo,
                 )
             );
-
-            ObjectUtils::transferData($entityToSave, $entity);
         }
 
         // For whole entities we want to trigger the entity specific saves event
@@ -2662,7 +2665,9 @@ abstract class AbstractMapper implements
 
         // If this is the intitial call. We reset the $parentSave variable
         if ($parentSaveSet === true) {
-            $parentSave = true;
+            self::$parentSave = true;
+            ObjectUtils::transferData($entityToSave, $entity);
+            $this->setChangesCommitted($entity);
         }
 
         return $result;
