@@ -19,7 +19,7 @@ class JoinedHydratingResultSet extends \Zend\Db\ResultSet\HydratingResultSet imp
      * statement.
      *
      * @param array<object> $protoTypes
-     * @return \DatingProfile\JoinedHydratingResultSet
+     * @return JoinedHydratingResultSet
      */
     public function setAssociations(array $associations)
     {
