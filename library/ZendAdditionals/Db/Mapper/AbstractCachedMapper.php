@@ -577,10 +577,11 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
                 // Do not add empty entity to instance cache
                 continue;
             }
-            $mapper->addCachedEntityToInstanceCache(
+            // @TODO: Fix some day
+            /*$mapper->addCachedEntityToInstanceCache(
                 $includedEntity,
                 $defaultIncludeMapper
-            );
+            );*/
         }
 
         /**
