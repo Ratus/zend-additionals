@@ -427,8 +427,12 @@ class StringUtils extends \Zend\Stdlib\StringUtils
      * Parse a domain or host or full url to get all necessary information
      *
      * @param string $source uri or host/domain
+     * @param string $needle When provided only the matching key from the
+     *                       full result will be returned.
      *
-     * @return array sample: (Only info found will get returned)
+     * @return string|array sample: (Only info found will get returned)
+     * When a $needle is provided the matched item in the array gets
+     * returned (string|array) or null when not available
      * array(11) {
      *   ["scheme"]        => "http"
      *   ["authority"]     => "user:pass@sub.level.nested.domain.com"
@@ -453,7 +457,7 @@ class StringUtils extends \Zend\Stdlib\StringUtils
      *   ["tld"]           => "com"
      * }
      */
-    public static function parseHost($source)
+    public static function parseHost($source, $needle = null)
     {
         static $runtimeCache = array();
 
@@ -491,7 +495,10 @@ class StringUtils extends \Zend\Stdlib\StringUtils
         }
 
         $runtimeCache[$source] = $return;
-
+        if (null !== $needle) {
+            return ArrayUtils::arrayTarget($needle, $return);
+        }
+        
         return $return;
     }
 }
