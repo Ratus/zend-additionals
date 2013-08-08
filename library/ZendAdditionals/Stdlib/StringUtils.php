@@ -462,6 +462,9 @@ class StringUtils extends \Zend\Stdlib\StringUtils
         static $runtimeCache = array();
 
         if (array_key_exists($source, $runtimeCache)) {
+            if (null !== $needle) {
+                return ArrayUtils::arrayTarget($needle, $runtimeCache[$source]);
+            }
             return $runtimeCache[$source];
         }
 
@@ -498,7 +501,7 @@ class StringUtils extends \Zend\Stdlib\StringUtils
         if (null !== $needle) {
             return ArrayUtils::arrayTarget($needle, $return);
         }
-        
+
         return $return;
     }
 }
