@@ -71,9 +71,10 @@ class SphinxXMLWriter extends \XMLWriter
                 $value = strtotime($value);
             }
             // Skip the id key since that is an element attribute
-            if ($key == 'id') {
+            if ($key == 'id' || is_scalar($value) === false) {
                 continue;
             }
+
             $this->startElement($key);
             $this->text($value);
             $this->endElement();
