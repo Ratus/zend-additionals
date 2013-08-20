@@ -978,9 +978,9 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
             ) &&
             $this->getLockingCache()->getLock($key)
         ) {
-            unset($trackedIds[$trackedIdIndex]);
-            $trackedIds = array_values($trackedIds);
-            $this->getLockingCache()->set($key, empty($trackedIds) ? false : $trackedIds);
+            // When one of the tracked ids has to be reset unset all
+            // from cache so they get reloaded on the next request
+            $this->getLockingCache()->del($key);
             $this->getLockingCache()->releaseLock($key);
         }
     }
