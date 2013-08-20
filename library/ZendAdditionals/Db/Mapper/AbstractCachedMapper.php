@@ -445,9 +445,10 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
                 $idString = $this->prepareIdString($id);
                 $key      = $this->getEntityCacheKey($id);
                 if (!$reload && isset($this->entityCacheInstanceCache[$key])) {
-                    $list[] = $this->entityCacheInstanceCache[$key];
+                    $list[$key] = $this->entityCacheInstanceCache[$key];
                 } else {
-                    $keys[$idString] = $this->getEntityCacheKey($id);
+                    $list[$key] = null;
+                    $keys[$idString] = $key;
                     $reverseKeys[$keys[$idString]] = $id;
                 }
             }
@@ -462,7 +463,7 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
                     continue;
                 }
                 $this->addCachedEntityToInstanceCache($results[$key]);
-                $list[]   = $results[$key];
+                $list[$key]   = $results[$key];
             }
         } else {
             $notFoundIds = $ids;
@@ -512,9 +513,9 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
             );
 
             foreach ($entities as $entity) {
-                $id       = $this->getIdForEntity($entity);
+                $id  = $this->getIdForEntity($entity);
+                $key = $this->getEntityCacheKey($id);
                 if ($this->entityCacheEnabled) {
-                    $key = $this->getEntityCacheKey($id);
                     if ($this->getLockingCache()->getLock($key)) {
                         $this->getLockingCache()->set(
                             $key,
@@ -525,10 +526,11 @@ abstract class AbstractCachedMapper extends AbstractMapper implements
                     }
                 }
                 $this->addCachedEntityToInstanceCache($entity);
-                $list[] = $entity;
+                $list[$key] = $entity;
             }
         }
-        return new ArrayIterator($list);
+
+        return new ArrayIterator(array_values($list));
     }
 
     /**
