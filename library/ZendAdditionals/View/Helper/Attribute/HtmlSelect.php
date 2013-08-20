@@ -56,7 +56,8 @@ class HtmlSelect extends AbstractHelper implements ServiceLocatorAwareInterface
         $translationPrefix = null,
         $labelSuffix       = null,
         $divWrapClass      = 'select',
-        $escape            = true
+        $escape            = true,
+        $reverse           = false
     ) {
         $mapperServiceName = $this->getConfigItem(
             'view_helpers.htmlselect.attribute.' .
@@ -80,6 +81,9 @@ class HtmlSelect extends AbstractHelper implements ServiceLocatorAwareInterface
         }
 
         $enumAttributes = $mapper->getEnumAttributes($label);
+        if($reverse === true) {
+            $enumAttributes = array_reverse($enumAttributes);
+        }
 
         $select         = array();
         $translator     = $this->pluginManager->get('translate');
