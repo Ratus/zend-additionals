@@ -135,6 +135,38 @@ class StringUtils extends \Zend\Stdlib\StringUtils
     }
 
     /**
+     * Convert a date string to the number of days
+     *
+     * @param string $date
+     *
+     * @return integer
+     */
+    public static function dateToDays($date)
+    {
+        $dateOne = new \DateTime();
+        $dateOne->setDate(0, 0, 0);
+        $dateTwo = new \DateTime($date);
+        $diff    = $dateTwo->diff($dateOne);
+        return $diff->days;
+    }
+
+    /**
+     * Get the age in years from a date
+     *
+     * @param string $date
+     *
+     * @return int|boolean false on failure
+     */
+    public static function ageFromDate($date)
+    {
+        $dateTime = \DateTime::createFromFormat('Y-m-d', $date);
+        if (!($dateTime instanceof \DateTime)) {
+            return FALSE;
+        }
+        return $dateTime->diff(new \DateTime('now'))->y;
+    }
+
+    /**
      * Check value to find if it was Json Encoded.
      *
      * If $data is not a string, the returned value will always be false.
