@@ -7,9 +7,9 @@ use Zend\ServiceManager\ServiceLocatorInterface;
 
 
 /**
- * Helper for guardian config
+ * Helper for application config
  */
-class GuardianConfig extends AbstractHelper implements ServiceLocatorAwareInterface
+class ApplicationConfig extends AbstractHelper implements ServiceLocatorAwareInterface
 {
     use \ZendAdditionals\Config\ConfigExtensionTrait;
     use \Zend\ServiceManager\ServiceLocatorAwareTrait;
@@ -32,12 +32,11 @@ class GuardianConfig extends AbstractHelper implements ServiceLocatorAwareInterf
     }
 
     /**
-     * Get guardian config
+     * Get application config
      *
-     * @return guardian config
+     * @return application config
     */
     public function __invoke() {
-        $config = $this->getServiceLocator()->get('config');
-        return $config['guardian'];
+        return $this->getServiceLocator()->get('config');
     }
 }
