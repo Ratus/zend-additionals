@@ -161,7 +161,7 @@ class StringUtils extends \Zend\Stdlib\StringUtils
     {
         $dateTime = \DateTime::createFromFormat('Y-m-d', $date);
         if (!($dateTime instanceof \DateTime)) {
-            return FALSE;
+            return false;
         }
         return $dateTime->diff(new \DateTime('now'))->y;
     }
