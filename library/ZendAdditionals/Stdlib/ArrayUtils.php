@@ -22,6 +22,10 @@ class ArrayUtils extends \Zend\Stdlib\ArrayUtils
 
         // Loop through the target
         foreach ($parts as $part) {
+            if (is_array($haystack) === false) {
+                return $default;
+            }
+
             // When not exists return default value
             if (array_key_exists($part, $haystack) === false) {
                 return $default;
