@@ -22,6 +22,10 @@ class ArrayUtils extends \Zend\Stdlib\ArrayUtils
 
         // Loop through the target
         foreach ($parts as $part) {
+            if (is_array($haystack) === false) {
+                return $default;
+            }
+
             // When not exists return default value
             if (array_key_exists($part, $haystack) === false) {
                 return $default;
@@ -31,6 +35,35 @@ class ArrayUtils extends \Zend\Stdlib\ArrayUtils
         }
 
         return $haystack;
+    }
+
+    /**
+     * This will insert items into an array on a specified position
+     *
+     * @param  array   $items  array(array(key => value), array(key => value))
+     * @param  array   $haystack
+     * @param  integer $position
+     * @param  boolean $preserveKeys
+     * @return array
+     */
+    public static function arrayInsert(array $items, $haystack, $position, $preserveKeys = true)
+    {
+        $first = array_slice($haystack, 0, $position, $preserveKeys);
+        $last  = array_slice($haystack, $position, null, $preserveKeys);
+
+        return array_merge_recursive($first, $items, $last);
+    }
+
+    /**
+     * Find the numeric position of a key in an assoc. array
+     *
+     * @param  string $needle
+     * @param  array $haystack
+     * @return integer|boolean FALSE on not found
+     */
+    public static function arrayKeyPosition($needle, $haystack)
+    {
+        return array_search($needle, array_keys($haystack));
     }
 
     /**
