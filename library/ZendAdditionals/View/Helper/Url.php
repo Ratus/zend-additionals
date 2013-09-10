@@ -61,7 +61,7 @@ class Url extends \Zend\View\Helper\Url
      *
      * @see    Zend\Mvc\Router\RouteInterface::assemble()
      */
-    public function __invoke($name = null, array $params = array(), $options = array(), $reuseMatchedParams = false)
+    public function __invoke($name = null, $params = array(), $options = array(), $reuseMatchedParams = false)
     {
         if (!isset($options['uri']) && $this->uri instanceof HttpUri) {
             $options['uri'] = $this->uri;
