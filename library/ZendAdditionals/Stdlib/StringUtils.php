@@ -536,4 +536,26 @@ class StringUtils extends \Zend\Stdlib\StringUtils
 
         return $return;
     }
+
+    /**
+     * Converts an xml string to an array in a very basic way
+     *
+     * @param string $xml
+     *
+     * @return array
+     */
+    public static function basicXMLToArray($xml) {
+        $array = json_decode(
+            json_encode(
+                (array)@simplexml_load_string($xml)
+            ),
+            true
+        );
+        foreach ($array as $key => &$value) {
+            if (is_array($value) && empty($value)) {
+                $value = 0;
+            }
+        }
+        return $array;
+    }
 }
