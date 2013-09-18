@@ -108,8 +108,11 @@ class StringUtils extends \Zend\Stdlib\StringUtils
         static $runtimeCache = array();
 
         if (array_key_exists($underscored, $runtimeCache) === false) {
-            $runtimeCache[$underscored] = preg_replace(
-                '/_(.?)/e', "strtoupper('$1')",
+            $runtimeCache[$underscored] = preg_replace_callback(
+                '/_(.?)/',
+                function ($matches) {
+                    return strtoupper($matches[1]);
+                },
                 $underscored
             );
         }
@@ -128,7 +131,12 @@ class StringUtils extends \Zend\Stdlib\StringUtils
         static $runtimeCache = array();
 
         if (array_key_exists($needle, $runtimeCache) === false) {
-            $runtimeCache[$needle] = preg_replace('/([A-Z])/e', "strtolower('_$1')", $needle);
+            $runtimeCache[$needle] = preg_replace_callback(
+                '/[A-Z]/', function ($matches) {
+                    return '_' . strtolower($matches[0]);
+                },
+                $needle
+            );
         }
 
         return $runtimeCache[$needle];
