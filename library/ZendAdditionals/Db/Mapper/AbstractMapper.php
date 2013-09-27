@@ -3486,7 +3486,18 @@ abstract class AbstractMapper implements
                 ' check on it\'s own mapper ' . get_class($prototype) . '!'
             );
         }
-        return ($prototype == $entity);
+
+        // Prototypes doesn't have entities. So remove them before checking
+        $entityToCheck = clone $entity;
+        foreach ($this->relations as $entityIdentifier => $relationInfo) {
+            $setMethod = $this->underscoreToCamelCase(
+                'set_' . $entityIdentifier
+            );
+
+            $entityToCheck->{$setMethod}(null);
+        }
+
+        return ($prototype == $entityToCheck);
     }
 
     /**
