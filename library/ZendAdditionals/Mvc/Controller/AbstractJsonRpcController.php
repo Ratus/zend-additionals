@@ -45,6 +45,8 @@ abstract class AbstractJsonRpcController extends AbstractActionController
      */
     public function onDispatch(MvcEvent $mvcEvent)
     {
+        header_remove('Set-Cookie');
+
         $this->setCorsHeaders();
 
         // OPTIONS request we can return an empty body
