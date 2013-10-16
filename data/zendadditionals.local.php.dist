@@ -7,6 +7,9 @@ return array(
         'filters' => array(
             'uglifyjs2' => array(
                 'bin'      => __DIR__ . '/../../data/nodejs/node_modules/uglify-js2/bin/uglifyjs2',
+                'compress' => true,
+                'mangle'   => true,
+                'screwIe8' => true,
             ),
             'uglifycss' => array(
                 'bin'      => __DIR__ . '/../../data/nodejs/node_modules/uglifycss/uglifycss',

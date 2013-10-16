@@ -1,5 +1,11 @@
 <?php
+$dirHost = isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : 'default';
 return array(
+    'assets_combine' => array(
+        'head_script' => false,
+        'head_link'   => false,
+        'dir'         => __DIR__ . '/../../docs/cache/' . $dirHost . '/',
+    ),
     'assetic' => array(
         'config' => array(
             'node_bin' => '/usr/bin/node',
@@ -26,6 +32,12 @@ return array(
         'factories' => array(
             'UglifyJs2' => '\ZendAdditionals\Assetic\Filter\UglifyJs2ServiceFactory',
             'UglifyCss' => '\ZendAdditionals\Assetic\Filter\UglifyCssServiceFactory',
+        ),
+    ),
+    'view_helpers' => array(
+        'invokables' => array(
+            'headScript' => '\ZendAdditionals\View\Helper\HeadScript',
+            'headLink'   => '\ZendAdditionals\View\Helper\HeadLink',
         ),
     ),
 );
