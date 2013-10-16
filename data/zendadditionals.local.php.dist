@@ -1,0 +1,27 @@
+<?php
+return array(
+    'assetic' => array(
+        'config' => array(
+            'node_bin' => 'C:\Program Files\nodejs\node.exe',
+        ),
+        'filters' => array(
+            'uglifyjs2' => array(
+                'bin'      => __DIR__ . '/../../data/nodejs/node_modules/uglify-js2/bin/uglifyjs2',
+            ),
+            'uglifycss' => array(
+                'bin'      => __DIR__ . '/../../data/nodejs/node_modules/uglifycss/uglifycss',
+            ),
+        ),
+    ),
+    'asset_manager' => array(
+        'filters' => array(
+            'application/javascript' => array(
+                array('service' => 'UglifyJs2'),
+            ),
+            'text/css' => array(
+                array('service' => 'UglifyCss'),
+            ),
+        ),
+    ),
+
+);
