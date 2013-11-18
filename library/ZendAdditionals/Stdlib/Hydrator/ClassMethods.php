@@ -21,6 +21,9 @@ class ClassMethods extends \Zend\Stdlib\Hydrator\ClassMethods
                 '%s expects the provided $object to be a PHP object)', __METHOD__
             ));
         }
+        if ($object instanceof \DateTime) {
+            return (array) $object;
+        }
         $attributes = array();
 
         // Extraction only requires the get methods
