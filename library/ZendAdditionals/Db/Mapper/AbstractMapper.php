@@ -3013,6 +3013,7 @@ abstract class AbstractMapper implements
              */
             if (
                 is_null($associatedEntity) ||
+                !($associatedEntity instanceof AbstractDbEntity) ||
                 $relationServiceMapper->isEntityEmpty($associatedEntity)
             ) {
                 continue;
@@ -3113,6 +3114,7 @@ abstract class AbstractMapper implements
              */
             if (
                 is_null($associatedEntity) ||
+                !($associatedEntity instanceof AbstractDbEntity) ||
                 $relationServiceMapper->isEntityEmpty($associatedEntity)
             ) {
                 continue;
