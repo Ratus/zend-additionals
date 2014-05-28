@@ -2554,7 +2554,7 @@ abstract class AbstractMapper implements
             );
 
             $lastResult = $results->last();
-            if (null !== $lastResult) {
+            if (null !== $lastResult && !is_bool($lastResult)) {
                 $entityToSave = $lastResult;
             }
         }
