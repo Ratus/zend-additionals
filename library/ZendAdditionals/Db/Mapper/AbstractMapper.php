@@ -10,9 +10,9 @@ use ZendAdditionals\Db\ResultSet\JoinedHydratingResultSet;
 use ZendAdditionals\Stdlib\Hydrator\ClassMethods;
 use ZendAdditionals\Stdlib\Hydrator\ObservableClassMethods;
 use ZendAdditionals\Stdlib\Hydrator\Strategy\ObservableStrategyInterface;
-use ZendAdditionals\Stdlib\StringUtils;
 use ZendAdditionals\Stdlib\ArrayUtils;
 use ZendAdditionals\Stdlib\ObjectUtils;
+use ZendAdditionals\Stdlib\StringUtils;
 
 use Zend\Db\Adapter\Adapter;
 use Zend\Db\Adapter\Driver\ResultInterface;
@@ -2361,8 +2361,7 @@ abstract class AbstractMapper implements
 
     public function underscoreToCamelCase($underscored)
     {
-        $underscored = strtolower($underscored);
-        return preg_replace('/_(.?)/e',"strtoupper('$1')",$underscored);
+        return StringUtils::underscoreToCamelCase(strtolower($underscored));
     }
 
     /**
@@ -3014,6 +3013,7 @@ abstract class AbstractMapper implements
              */
             if (
                 is_null($associatedEntity) ||
+                !($associatedEntity instanceof AbstractDbEntity) ||
                 $relationServiceMapper->isEntityEmpty($associatedEntity)
             ) {
                 continue;
@@ -3114,6 +3114,7 @@ abstract class AbstractMapper implements
              */
             if (
                 is_null($associatedEntity) ||
+                !($associatedEntity instanceof AbstractDbEntity) ||
                 $relationServiceMapper->isEntityEmpty($associatedEntity)
             ) {
                 continue;
@@ -3487,7 +3488,18 @@ abstract class AbstractMapper implements
                 ' check on it\'s own mapper ' . get_class($prototype) . '!'
             );
         }
-        return ($prototype == $entity);
+
+        // Prototypes doesn't have entities. So remove them before checking
+        $entityToCheck = clone $entity;
+        foreach ($this->relations as $entityIdentifier => $relationInfo) {
+            $setMethod = $this->underscoreToCamelCase(
+                'set_' . $entityIdentifier
+            );
+
+            $entityToCheck->{$setMethod}(null);
+        }
+
+        return ($prototype == $entityToCheck);
     }
 
     /**

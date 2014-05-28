@@ -91,7 +91,7 @@ class AttributeData extends \ZendAdditionals\Db\Entity\AbstractDbEntity
      * @param Attribute $attribute
      * @return AttributeData
      */
-    public function setAttribute(Attribute $attribute)
+    public function setAttribute(Attribute $attribute = null)
     {
         $this->attribute = $attribute;
         return $this;

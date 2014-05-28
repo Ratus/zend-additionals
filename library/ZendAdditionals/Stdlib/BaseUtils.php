@@ -51,4 +51,73 @@ class BaseUtils
 
         return str_pad($base62, $length, "0", STR_PAD_LEFT);
     }
+
+    /**
+     * Returns the formatted size
+     *
+     * @param  integer $size
+     * 
+     * @return string
+     */
+    public static function toByteString($size)
+    {
+        $sizes = array('B', 'kB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB');
+        for ($i=0; $size >= 1024 && $i < 9; $i++) {
+            $size /= 1024;
+        }
+
+        return round($size, 2) . $sizes[$i];
+    }
+
+    /**
+     * Returns the unformatted size
+     *
+     * @param  string $size
+     * 
+     * @return integer
+     */
+    public static function fromByteString($size)
+    {
+        if (is_numeric($size)) {
+            return (int) $size;
+        }
+
+        $type  = trim(substr($size, -2, 1));
+
+        $value = substr($size, 0, -1);
+        if (!is_numeric($value)) {
+            $value = substr($value, 0, -1);
+        }
+
+        switch (strtoupper($type)) {
+            case 'Y':
+                $value *= (1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024);
+                break;
+            case 'Z':
+                $value *= (1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024);
+                break;
+            case 'E':
+                $value *= (1024 * 1024 * 1024 * 1024 * 1024 * 1024);
+                break;
+            case 'P':
+                $value *= (1024 * 1024 * 1024 * 1024 * 1024);
+                break;
+            case 'T':
+                $value *= (1024 * 1024 * 1024 * 1024);
+                break;
+            case 'G':
+                $value *= (1024 * 1024 * 1024);
+                break;
+            case 'M':
+                $value *= (1024 * 1024);
+                break;
+            case 'K':
+                $value *= 1024;
+                break;
+            default:
+                break;
+        }
+
+        return $value;
+    }
 }
