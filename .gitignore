@@ -3,4 +3,4 @@ composer.lock
 vendor/*
 tests/phpunit.xml
 *.*~
-
+/.idea
