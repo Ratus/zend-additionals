@@ -18,7 +18,7 @@
     },
     "autoload": {
         "psr-4": {
-            "ZendAdditionals\\": "library/ZendAdditionals"
+            "ZendAdditionals\\": "library"
         }
     },
     "replace": {
