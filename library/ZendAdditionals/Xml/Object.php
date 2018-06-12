@@ -3,9 +3,9 @@ namespace ZendAdditionals\Xml;
 
 class Object
 {
-    protected $parsed = false;
-    protected $xml = null;
-    protected $xmlValues = null;
+    protected $parsed     = false;
+    protected $xml        = null;
+    protected $xmlValues  = null;
     protected $xmlIndexes = null;
     
     public function __construct($xml)
