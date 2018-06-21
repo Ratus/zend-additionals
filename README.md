@@ -1,6 +1,8 @@
 Ratus Zend (ZF2) Additionals
 ============================
 
+[![Codetree](https://codetree.com/images/managed-with-codetree.svg)](https://codetree.com/projects/gX1r)
+
 Introduction
 ------------
 The Ratus Zend Additionals will only contain packages that add functionality to zf2 packages.
